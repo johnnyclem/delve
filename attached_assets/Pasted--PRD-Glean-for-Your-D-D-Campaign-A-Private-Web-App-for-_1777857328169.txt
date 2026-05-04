@@ -1,0 +1,490 @@
+# PRD: “Glean for Your D&D Campaign”
+
+### A Private Web App for a 6-Person Long-Running Campaign
+
+## TL;DR
+
+- **Build the smallest possible thing first.** Phase 0 is just: phone/social auth, a campaign page with a DM-only notes textarea, six static character sheets stored as JSON, and a one-tap dice roller. No GraphQL, no RAG, no auto-wiki — those are Phase 2. You can have this end-to-end useful in two weekends.
+- **Recommended stack: Next.js 16 (App Router) on Vercel + Supabase (Postgres + Auth + Storage + Realtime + pgvector) + Twilio Verify for SMS + Resend for email + Vercel AI SDK with Anthropic Claude as the default LLM.** This stack maximizes your TypeScript leverage, minimizes operational surface area, costs roughly $0–$25/month for six users, and gives you GraphQL-shaped semantic search later via a thin GraphQL Yoga layer over the same Postgres — without committing to Hasura or a separate vector DB.
+- **The two features most likely to eat your life are the auto-updating wiki and the rules engine. Defer both.** Phase 1 ships a manual “Session Log → narrative recap” generator and a free-text DM notebook with simple keyword search. The full RAG-powered self-updating wiki is Phase 2 and should not start until you have at least four real session logs in the database to test against.
+
+-----
+
+## A. Executive Summary
+
+You are building a private, cloud-hosted web app for a single ongoing D&D 5e campaign run by you for ~5 friends. It is not a product, has no marketing surface, and will never have more than ~10 simultaneous users. The “north star” experience is **“I open the app two minutes before a session, I instantly see where we left off, my character sheet is one tap away, and rolling a d20 takes one tap. As DM, I can dump messy session notes after the game and a week later ask ‘who was that bartender in Tessringale?’ and get a sourced answer.”**
+
+The product is best framed as **a campaign memory system with a thin layer of player-facing utilities**, not as a virtual tabletop. You are explicitly not rebuilding Roll20, Foundry VTT, or D&D Beyond — those tools are mature and your group can keep using whatever they use for maps and combat tokens. The white space is the **organizational continuity layer**: scheduling, narrative recap, gated lore, and a glanceable character reference. That is what existing tools (Kanka, World Anvil, LegendKeeper, D&D Beyond) consistently fail to combine in one place for a small private group, and that is what an LLM-native app in 2026 can finally make trivial.
+
+-----
+
+## B. User Personas
+
+### Persona 1: “Mark” — The DM (1 user, the user himself)
+
+- **Time budget:** 2–4 hours of prep per session, scattered across the week. Maybe 30 minutes of post-session reflection if anything at all.
+- **Jobs to be done (in priority order):**
+1. Capture session events fast enough to not feel like homework (5 minutes of typing or a paste of a transcript).
+1. Find that one NPC’s name from session 7 in under 10 seconds.
+1. Generate a “previously on…” recap to read aloud at the start of the next session.
+1. Schedule the next session and get RSVPs without a Discord thread devolving into chaos.
+1. Keep secrets secret (story arc, boss reveals, NPC betrayals).
+- **Pain points today:** Scattered notes in Apple Notes / Google Docs / Discord. Forgets which NPC said what. Spends 20 minutes prepping a recap that the players half-listen to. Players forget when sessions are.
+
+### Persona 2: “The Players” — 5 users, casual
+
+- **Time budget at the table:** They want to roll dice and look at their character sheet. They do **not** want to navigate the app. Total acceptable interaction during play: ~30 seconds per turn.
+- **Time budget out of session:** Near zero. Maybe 2 minutes the night before to confirm an RSVP and re-read the recap.
+- **Jobs to be done:**
+1. Roll dice fast (one tap for d20 + modifier).
+1. See HP, AC, spell slots, and prepared spells without scrolling.
+1. Read the recap of the last session.
+1. Confirm “yes I’m coming Saturday.”
+1. Eventually: level up without a Google search.
+- **Pain points today:** Phone screen tires the eyes; D&D Beyond is overkill; paper sheets get coffee on them; nobody remembers what happened last session.
+
+The asymmetry is critical: **the DM is a power user with high tolerance for complexity and back-office tools; the players need a near-zero-friction reference surface.** Design accordingly.
+
+-----
+
+## C. Phased Feature Roadmap
+
+Complexity legend: **S** ≈ <4 hrs, **M** ≈ a weekend, **L** ≈ 2–3 weekends, **XL** ≈ 1+ month.
+
+### Phase 0 / MVP — “The Two-Weekend Build”
+
+Goal: replace the Discord-thread-and-shared-doc workflow with something that works on a phone at the table.
+
+|#  |Feature                                            |User Story                                                                                            |Acceptance Criteria                                                                                                                                                                        |Complexity|
+|---|---------------------------------------------------|------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------|
+|0.1|**Auth (social + email magic link)**               |As a player, I sign in with Google or an emailed link in <30 seconds.                                 |Supabase Auth with Google OAuth + email magic link wired into Next.js middleware; protected routes redirect unauthenticated users.                                                         |S         |
+|0.2|**DM/Player roles**                                |As DM, only I can see/edit campaign-private content.                                                  |A `role` column on `campaign_members` (`dm` or `player`); RLS policies enforce it; UI hides DM-only nav.                                                                                   |S         |
+|0.3|**Single-campaign data model**                     |As the group, we share one campaign.                                                                  |Hardcoded single-campaign assumption (skip multi-tenancy entirely in v1).                                                                                                                  |S         |
+|0.4|**Character sheet (static, JSON-backed)**          |As a player, I see my stats, HP, AC, spell slots, prepared spells, inventory on a phone-friendly page.|Each character is a single JSON blob in Postgres edited via a structured form; renders cleanly on iPhone Safari at 390px width; loads in <500ms.                                           |M         |
+|0.5|**Quick dice roller**                              |As a player, one tap on “Attack” rolls my +7 d20 and shows it in a shared feed.                       |Common rolls precomputed from the character sheet (attacks, saves, common skills); a custom dice expression input (`2d6+3`); rolls broadcast over Supabase Realtime to all signed-in users.|M         |
+|0.6|**DM notebook**                                    |As DM, I dump messy notes per session into a free-text editor.                                        |Markdown editor (Tiptap or MDX-Editor); saves to a `session_logs` table with `session_id`, `body_md`, `is_dm_only` flag.                                                                   |S         |
+|0.7|**Session list + “where we left off”**             |As anyone, I land on a homepage that shows the last session’s player-visible recap.                   |A `/sessions` route showing card list; each session has a player-visible `recap_md` field the DM writes manually for v1.                                                                   |S         |
+|0.8|**Manual session recap generator (LLM, one-click)**|As DM, I click a button and get a narrative recap of session N from my notes.                         |Button in DM notebook calls a server action that posts notes + character names to Claude with the locked-down recap prompt (see §G); editable result saved to `recap_md`.                  |M         |
+|0.9|**Schedule a session + RSVPs**                     |As DM, I propose a date/time; players click yes/no/maybe.                                             |A `calendar_events` table; email notification via Resend on creation and on RSVP changes; an `.ics` link for calendar apps.                                                                |M         |
+
+**Phase 0 total estimate: ~4 weekends of focused work, realistically 6–8 weekends with day-job interruptions.** Ship this and *use it for two real sessions* before starting Phase 1.
+
+### Phase 1 — “The Useful Extensions”
+
+Goal: features that earn their keep once the foundation is in real use.
+
+|#  |Feature                                                |User Story                                                                                                                            |Acceptance Criteria                                                                                                        |Complexity|
+|---|-------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|----------|
+|1.1|**SMS auth + SMS invites**                             |As DM, I text Robin a join link; she taps it and is in.                                                                               |Supabase phone OTP via Twilio Verify;  `/invite/[token]` route with single-use tokens; Twilio sends SMS containing the URL.|M         |
+|1.2|**Printable character sheet**                          |As a player, I print a clean one-pager.                                                                                               |A `/characters/[id]/print` route with a print stylesheet; PDF export via `react-pdf` or browser print.                     |S         |
+|1.3|**DM-private content surfaces**                        |As DM, I have proper pages for NPCs, quests, locations, story beats — each editable, each with a `dm_only` flag.                      |CRUD pages for entities listed in §E; gated by RLS; player views show only entities with `revealed=true`.                  |L         |
+|1.4|**Keyword search across DM content**                   |As DM, I type “Tessringale” and find every note mentioning it.                                                                        |Postgres `tsvector` full-text search over session logs, NPCs, quests; results grouped by entity type; <300ms response.     |M         |
+|1.5|**SRD-backed rules lookup**                            |As DM or player, I type “fireball” and get the spell text inline.                                                                     |Open5e API (or local SRD JSON) seeded into a `srd_content` table; a `/rules/[slug]` route; spotlight-style typeahead.      |M         |
+|1.6|**Session note → structured entities (manual confirm)**|As DM, after writing notes I click “extract” and the app proposes new NPCs/locations/items found in the text; I tick the ones to keep.|Server-side LLM call returns JSON with confidence scores; UI is a checkbox list before persisting.                         |L         |
+|1.7|**Map upload + handouts**                              |As DM, I drop a PNG and share it with players.                                                                                        |R2 or Supabase Storage; a `handouts` table with visibility flag; player view gallery.                                      |S         |
+|1.8|**Improved recap with prior-recap context**            |As DM, generated recaps remember last session’s hooks.                                                                                |Recap prompt now includes `previous_recap_md` plus `session_log` plus character roster; quality noticeably higher.         |S         |
+
+### Phase 2+ — “The Ambitious Vision”
+
+Only start when Phase 1 is in active weekly use and a real itch exists.
+
+|#  |Feature                                              |User Story                                                                                            |Acceptance Criteria                                                                                                                    |Complexity|
+|---|-----------------------------------------------------|------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|----------|
+|2.1|**Semantic search (RAG over campaign content)**      |As DM, “the bartender who hated dwarves” returns the right NPC even if I never used those exact words.|pgvector index on `embedding` columns of `wiki_chunks`; retrieval combined with full-text BM25; cited answers via Claude.              |L         |
+|2.2|**GraphQL gateway for semantic + structured queries**|A unified GraphQL endpoint exposes `search`, `entity`, `campaign` with role-based field-level auth.   |GraphQL Yoga server in a Next.js route handler; schema generated from Drizzle ORM types via Pothos; auth via Supabase JWT.             |L         |
+|2.3|**Auto-updating wiki**                               |After every session, the app proposes wiki page updates derived from notes; DM approves with one tap. |Background job (Vercel Cron or Inngest) runs entity extraction → diff against existing wiki pages → DM review queue.                   |XL        |
+|2.4|**Character creation wizard**                        |A new player can roll a level-1 character without leaving the app.                                    |Step-by-step flow: race → class → background → ability scores (point buy or roll) → starting equipment; outputs a valid character JSON.|L         |
+|2.5|**Level-up wizard**                                  |One-tap level up applies HP gain, new spells, ASI/feat choices.                                       |State machine driven by SRD class progression data; dry-run preview before commit.                                                     |L         |
+|2.6|**Battle outcome resolution / encounter calculator** |DM runs an encounter through structured combat tracking with initiative, HP, conditions.              |Initiative tracker; status effect timer; doesn’t try to fully automate rules — a “DM override” button is always present.               |XL        |
+|2.7|**Voice transcript ingest**                          |DM uploads a Whisper transcript; app extracts events, rolls, NPC mentions.                            |File upload → background Whisper or external transcript → LLM extraction pipeline; latency tolerance up to 10 minutes.                 |XL        |
+|2.8|**Push notifications**                               |“Session is in 24h — confirm RSVP.”                                                                   |Web Push via VAPID, or just keep using email/SMS. Probably keep using email/SMS.                                                       |M         |
+
+-----
+
+## D. Technical Architecture
+
+These are picks, not menus. Justifications follow each.
+
+### Frontend: **Next.js 16 (App Router) + TypeScript + Tailwind + shadcn/ui**
+
+You already write TypeScript daily. Next.js 16 (Turbopack stable as of 2026) is the boring, correct choice — App Router gives you React Server Components for cheap server-side data loading, server actions remove a whole category of API boilerplate, and shadcn/ui gives you accessible, copy-paste components without dragging in a heavyweight design system. **TanStack Start is tempting** for its explicitness and Vite speed, but its ecosystem and auth integrations are still maturing in 2026  — pick it for a greenfield iOS engineer’s *next* project, not this one. SvelteKit is great but a tax on your existing TypeScript/React mental model. **Pick Next.js, move on.**
+
+### Backend / API layer: **Next.js Server Actions + Route Handlers; add GraphQL Yoga only in Phase 2**
+
+The user explicitly wants GraphQL for the RAG layer. Fine — but **don’t pay for GraphQL infrastructure in Phase 0/1**. For 6 users, server actions and a small set of route handlers are dramatically less code than a full GraphQL server. When you reach Phase 2 and actually want one query API for both pgvector semantic search and structured entity lookups, mount **GraphQL Yoga** in a single `app/api/graphql/route.ts` handler. Reasoning:
+
+- **Yoga** is the modern winner over Apollo Server: smaller, faster, fully spec-compliant, works everywhere (Edge, Node, Cloudflare Workers), and has built-in SSE subscriptions. Apollo Server v4 broke its own framework adapters and offloaded maintenance to the community. 
+- **Hasura** is overkill for 6 users and adds an ops surface (a separate service to run); its value proposition (auto-CRUD from your DB) doesn’t outweigh that cost at this scale.
+- **PostGraphile** is fine but locks you into a CLI/runtime separate from your main app.
+- Use **Pothos** for the schema-builder DSL so GraphQL types stay in lockstep with your Drizzle schema.
+
+### Database: **Supabase (managed Postgres) + pgvector**
+
+Single decision, not two. Supabase gives you Postgres, Auth (with phone/SMS/social/magic-link first-class), Realtime (Postgres replication → WebSocket), Storage (S3-compatible), edge functions, and pgvector enabled by default — all in one $0–$25/mo bill.
+
+- **Why pgvector over Pinecone/Qdrant/Chroma:** Your campaign corpus is small (hundreds to low-thousands of chunks, never millions). At that scale pgvector with HNSW returns in <10ms and costs you nothing extra. Specialized vector DBs are an answer to a problem you do not have. They also force you to keep two systems in sync.
+- **Why managed Supabase over self-hosted Postgres:** You have limited time. Don’t spend it on backups and Postgres upgrades.
+
+### Auth: **Supabase Auth + Twilio Verify for SMS**
+
+Recommended over Clerk for two reasons: (a) it bundles into the database stack you’ve already chosen, so RLS policies key on `auth.uid()` directly with no JWT plumbing; (b) Clerk’s MAU pricing is irrelevant at six users, but its phone-auth flow charges per verification and is harder to integrate with row-level security. Supabase Auth supports Google, Apple, GitHub, Discord OAuth out of the box, plus email magic links and SMS OTP via Twilio Verify,  plus invitation links via the admin API. **The one weakness — Supabase’s pre-built UI components are basic — doesn’t matter for a 6-person app.** You’ll write your own login form anyway.
+
+If you want pretty pre-built sign-in widgets, Clerk + Supabase data is a known pattern, but it’s two providers, two bills, two failure modes. Don’t.
+
+### SMS: **Twilio Verify** (not raw Twilio Messaging)
+
+Twilio Verify handles  A2P 10DLC registration, fraud guard,  OTP code generation, and rate limiting for you, and Supabase’s phone auth supports it as a first-class provider. Cheaper alternatives (Plivo, Telnyx,  Bandwidth) save pennies and cost you a weekend of integration work. For invitation links (not OTPs), use Twilio Programmable Messaging from a server action — same SDK.
+
+### Email: **Resend**
+
+Best DX of any 2026 email API. React Email lets you write transactional emails as JSX components, which is exactly your skill set. Free tier is 3,000 emails/month  — you will use ~30. Postmark is the deliverability champion but a 6-person private app doesn’t need that, and Postmark’s free tier (100/mo) is functionally a trial. **Pick Resend.**
+
+### Hosting: **Vercel (frontend + server) + Supabase (database, storage, auth, realtime)**
+
+Vercel Hobby is free for personal projects (just don’t run ads or charge money — fine here). Cold starts are not a meaningful concern at 6 users. The competing options:
+
+- **Fly.io** is better for Docker-native, persistent-process apps. Adds operational overhead you don’t want.
+- **Railway** is the closest competitor and would also work; pick it if you want managed Redis or a VM-shaped mental model. For Next.js on Vercel you save more setup time than you give up.
+- **Self-hosting on a $5 Hetzner box with Coolify** is cheaper at scale but at this scale your time is the cost.
+
+### LLM provider strategy: **Vercel AI SDK with Anthropic Claude (Sonnet 4.6) as default, OpenAI as fallback**
+
+The Vercel AI SDK gives you a one-line provider swap (`anthropic('claude-sonnet-4-6')` ↔ `openai('gpt-5.2')`) and excellent streaming React hooks (`useChat`, `streamText`, `streamObject`). It is the right level of abstraction — strictly less than LangChain, strictly more than calling provider SDKs directly. Use Claude as default for narrative recap quality (it writes warmer prose) and OpenAI’s `text-embedding-3-small` for embeddings (universal compatibility, $0.02/1M tokens,  good enough). **Do not use LangChain or LangGraph in v1.** They solve problems you don’t have and are notorious for breaking changes. Revisit only if Phase 2’s auto-wiki grows multi-step agent logic that becomes painful in plain TypeScript.
+
+### Embeddings strategy
+
+**Use `openai/text-embedding-3-small`, 1536 dimensions, stored in pgvector with HNSW index.** Cheapest tier from a major provider, universally supported, good-enough MTEB performance. Re-embedding the entire corpus when you switch models is trivial at this scale (<1000 chunks). Don’t optimize.
+
+### File storage: **Supabase Storage (Phase 0–1), R2 if egress becomes an issue (it won’t)**
+
+Supabase Storage is integrated with your auth (RLS-style policies on buckets), free 1GB on the Pro plan, S3-compatible API. Cloudflare R2’s zero-egress  pitch is irrelevant for 6 people downloading a handful of map PNGs.
+
+### Realtime: **Supabase Realtime (Postgres broadcast)**
+
+You already have Supabase. The dice roll feature wants synchronized visibility — implement it as an `INSERT` to a `dice_rolls` table that all connected clients subscribe to via Supabase Realtime. Don’t add Pusher or Ably; you do not need their SLA guarantees. Latency is fine for visible dice rolls (sub-second).
+
+### Background jobs: **Vercel Cron + Inngest (Phase 2 only)**
+
+For the auto-wiki you’ll want durable background jobs. Inngest’s free tier is generous and has excellent TypeScript ergonomics. **In Phase 0/1 you don’t need any of this** — recap generation runs synchronously in a server action with a loading spinner.
+
+### Observability: **Vercel Analytics + Logflare via Supabase + Sentry (free tier)**
+
+Mention only because you’ll want it once real data is flowing. Skip in Phase 0.
+
+-----
+
+## E. Data Model Sketch
+
+Single campaign for v1. All tables have `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`, `created_at`, `updated_at`. **DM-gated** entities marked with 🔒. RLS policies key on `auth.uid()` and `campaign_members.role`.
+
+```
+users                     (managed by supabase auth.users)
+  ├─ id, phone, email, full_name, avatar_url
+
+campaigns
+  ├─ id, name, world_name, dm_user_id, created_at
+
+campaign_members
+  ├─ id, campaign_id → campaigns
+  ├─ user_id → users
+  ├─ role: 'dm' | 'player'
+  ├─ display_name
+
+characters                (one per player; the player's view)
+  ├─ id, campaign_id, owner_user_id
+  ├─ name, race, class, level
+  ├─ sheet_json JSONB     -- stats, AC, HP, spells, inventory, etc.
+  ├─ portrait_url
+  ├─ is_active boolean
+
+session_logs              (one row per real-life game session)
+  ├─ id, campaign_id, session_number
+  ├─ played_at timestamptz
+  ├─ raw_notes_md         🔒 DM raw notes
+  ├─ recap_md              public-facing recap (player-visible)
+  ├─ generated_at, generator_model
+
+calendar_events           (proposed/scheduled sessions)
+  ├─ id, campaign_id
+  ├─ proposed_at, status: 'proposed' | 'confirmed' | 'cancelled'
+  ├─ ics_uid
+
+rsvps
+  ├─ id, calendar_event_id, user_id
+  ├─ status: 'yes' | 'no' | 'maybe'
+  ├─ note
+
+npcs                      🔒 (DM only by default; flip 'revealed' to expose)
+  ├─ id, campaign_id, name
+  ├─ description_md, secrets_md (always DM-only)
+  ├─ first_seen_session_id → session_logs
+  ├─ revealed boolean default false
+
+mobs / bosses             🔒 (treat as one table 'creatures' with a 'tier' enum)
+  ├─ id, campaign_id, name, tier: 'mob' | 'elite' | 'boss'
+  ├─ stat_block_json        copy of SRD or homebrew
+  ├─ notes_md
+
+quests                    🔒
+  ├─ id, campaign_id, title
+  ├─ status: 'hook' | 'active' | 'completed' | 'failed'
+  ├─ summary_md
+  ├─ secret_md             always DM-only
+  ├─ revealed boolean
+
+story_beats               🔒 (the breadcrumbs; arc-level)
+  ├─ id, campaign_id, arc_name, order_idx
+  ├─ title, plan_md (DM-only), public_md (revealed-after)
+  ├─ resolved_at
+
+maps / handouts
+  ├─ id, campaign_id, title, file_url (Supabase Storage)
+  ├─ visibility: 'dm' | 'players' | 'public'
+  ├─ kind: 'map' | 'handout' | 'image'
+
+wiki_pages                (Phase 2; not v1)
+  ├─ id, campaign_id, slug, title
+  ├─ body_md
+  ├─ source_session_ids[]    provenance
+  ├─ visibility, last_updated_by_llm boolean
+  ├─ embedding vector(1536)
+
+wiki_chunks                (Phase 2; for RAG)
+  ├─ id, wiki_page_id (or null), source_table, source_id
+  ├─ chunk_text, embedding vector(1536), token_count
+
+dice_rolls                (ephemeral but logged)
+  ├─ id, campaign_id, character_id (nullable), user_id
+  ├─ expression text  e.g., '1d20+7'
+  ├─ result int, breakdown jsonb, label text
+  ├─ rolled_at
+
+chat_log / session_chat
+  (skip in v1 — Discord covers this)
+```
+
+**Key relationships:** every gated entity has `campaign_id` and is filtered by RLS via `campaign_members`. Phase-2 `wiki_chunks.embedding` is the pgvector column the GraphQL `search` field will query.
+
+-----
+
+## F. Auto-Updating Wiki — Concrete Recommendations
+
+This is the most architecturally seductive feature in the brief and the one most likely to swallow months of nights and weekends. Treat the recommendations below as a **deferred-by-default Phase 2 plan**, with a tiny Phase 1 stub.
+
+### Content flow IN
+
+**Three input channels, in order of value-per-effort:**
+
+1. **DM post-session notes (the primary channel).** The DM types a markdown brain-dump in the notebook (Phase 0.6). One paragraph or one page, doesn’t matter.
+1. **Inline event capture during play (Phase 1+).** A “quick note” floating button on the DM screen that timestamps a one-liner: “Garin lied about the ledger.” These accumulate into the session log.
+1. **Whisper transcript ingest (Phase 2 stretch).** Drop in a `.mp3` or `.txt`, the app transcribes and ingests. **Skip this until everything else works** — the literature is full of DMs running cleanup scripts because raw transcripts are >80% noise.
+
+Do **not** rely on a “post-session reflection prompt” as the primary capture mechanism — the user said he has limited time, and that’s the path most likely to silently break.
+
+### Entity extraction & linking
+
+Two-stage approach, **with a human-in-the-loop checkbox** (this is non-negotiable):
+
+1. **Extraction:** server action passes session notes + a known-entities list (existing NPCs, locations, items) to Claude with a structured-output schema (JSON: `{npcs_mentioned: [{name, confidence, evidence_quote}], new_npcs: [...], new_locations: [...], new_items: [...]}`). Use `streamObject` from the Vercel AI SDK with a Zod schema.
+1. **Linking & dedup:** for each mentioned entity, fuzzy-match (trigram on name) against existing entities in Postgres. If high confidence, link; if medium, queue for DM review; if a brand-new candidate, propose creation.
+1. **DM approval UI:** a checkbox list. DM ticks what to keep. Nothing persists without approval. **This is what separates a wiki from a hallucination machine.**
+
+### Keeping the wiki consistent and not hallucinatory
+
+Borrow heavily from the Karpathy “LLM Wiki” pattern (April 2026) and its production extensions:
+
+- **Quality gate before storage.** Not every mention belongs in the wiki. The extraction step must filter — only entities mentioned in narrative-meaningful contexts get pages. Implement as a “narrative weight” score the LLM assigns and a threshold.
+- **Provenance is mandatory.** Every wiki claim carries `source_session_ids[]`. The render layer shows a “first mentioned in session 7” footer. If an LLM generates a paragraph, the prompt requires it cite which session log it came from. Refuse to render unsourced claims.
+- **Contradiction detection.** When new content claims something that contradicts an existing wiki page, surface both in the DM review UI as a diff. Let the DM decide which version is canon.
+- **No retroactive rewrites.** The LLM proposes additions, never silently overwrites. Versioned via Postgres row history (use `pgaudit` or just append-only `wiki_page_revisions`).
+- **Pre-load SRD as canonical reference.** Spells, monsters, rules go in a separate `srd_content` table marked read-only. The wiki distinguishes campaign-specific lore from rule references.
+
+### Minimum viable version for Phase 0/1
+
+**Phase 0:** none. The DM notebook is a single markdown blob per session. Search is `ILIKE` or full-text via tsvector. Done.
+
+**Phase 1:** the entity-extraction-on-demand button (feature 1.6). DM clicks “Extract entities from notes.” App proposes NPCs/locations/items found in the text. DM approves what to persist as proper rows. **No automatic background processing. No embeddings yet.** This is a 1-weekend feature that delivers 80% of the wiki value.
+
+**Phase 2:** the full RAG-backed semantic wiki, GraphQL gateway, background reconciliation jobs.
+
+### Licensing note (brief, as requested)
+
+The safest preload is **SRD 5.1 / SRD 5.2 under CC-BY-4.0** (released by WotC in January 2023 / April 2025 respectively).  The Open5e API and the `5e-bits/5e-srd-api` repo are both convenient mirrors. The SRD covers core rules, common spells, common monsters, common magic items — about 80% of what your players will actually look up. PHB/DMG/MM full text is *not* in the SRD; do not host it. For private use, treat any non-SRD reference as “DM enters by hand or copy-pastes from their owned books.”
+
+-----
+
+## G. Session Recap Generator — Concrete Recommendations
+
+### Source material (priority order)
+
+1. **DM raw notes for the session being recapped** (mandatory, primary)
+1. **The previous session’s recap** (mandatory after session 2 — narrative continuity)
+1. **The current character roster** (mandatory — their names must appear correctly, and unlikely to appear in your raw notes)
+1. **Active quest summaries** (mandatory — the recap should remind players of dangling threads)
+1. **Recent dice-roll log highlights** (Phase 2 nice-to-have — “Lorki’s nat 20 on persuasion saved them from the gate guards”)
+
+### Prompt strategy
+
+Lock down a single system prompt and version it in code. Starter:
+
+```
+You are the narrator for a long-running D&D campaign. Write a recap of the
+most recent session in the warm, slightly playful narrator voice of "Last
+time, on our adventure...". 
+
+Constraints:
+- 150–250 words. ONE paragraph.
+- Open with: "Last time, our adventurers <NAME_LIST> ..." 
+- Use character names exactly as provided. Never invent characters.
+- Reference the previous recap's open threads if they advanced.
+- End with a hook or unresolved tension to set up the next session.
+- Do not invent rules content, monster stats, or events not present in the
+  notes. If unclear, omit rather than guess.
+- Tone: novelistic, not bullet-pointed. Past tense. Third person.
+```
+
+Provide the prompt as a Zod-typed input to `generateText` in the Vercel AI SDK with `model: anthropic('claude-sonnet-4-6')`, `temperature: 0.7`, `maxTokens: 600`. Stream to a textarea the DM can edit before saving — **never auto-publish.**
+
+### When does it run?
+
+**One-click only, in v1.** A “Generate recap” button in the session log editor. The DM reviews and edits before publishing. Scheduled / automatic post-session generation is a Phase 2 nice-to-have and only makes sense once you trust the prompt.
+
+### Acceptance criteria for “good enough”
+
+- Character names always correct (zero tolerance).
+- Length 150–250 words.
+- Reads naturally aloud at a table (test by reading it aloud).
+- Mentions at least one element from the previous recap when applicable.
+- Does not invent events not in the notes (spot-check the first 3 generations).
+- Generates in <8 seconds end-to-end on Claude Sonnet.
+
+-----
+
+## H. UX Principles for Player-Facing Surface
+
+The brief is unambiguous: **players should not stare at screens during play.** Translated into design rules:
+
+1. **Mobile-first, single column, no nav drawer needed.** The character sheet is the home screen for players. Everything else is one tap from there.
+1. **Three thumb zones, max.** Top: character name + HP/AC big numbers. Middle: actions/rolls grid (8–12 large tap targets). Bottom: a tab bar with `Sheet` / `Spells` / `Roll` / `Recap`. That’s it.
+1. **One-tap common rolls.** The character sheet pre-renders attack rolls, saving throws, perception, stealth, initiative as 1-tap buttons that pre-include the modifier. Result animates briefly, broadcasts to the party feed, disappears. No modal.
+1. **Custom dice expression as fallback.** A small text input accepts `2d6+3`, `4d8`, `1d100`. Don’t build a “dice picker UI.”
+1. **HP and spell-slot adjustments are also one-tap.** `–1`, `–5`, `+1` buttons on HP. A tap-to-toggle row for spell slots per level.
+1. **Glanceable layout — no scrolling for core stats.** AC, HP, speed, prof bonus, and the four most-used skills must fit above the fold on a 390px-wide phone in portrait.
+1. **No real-time character sheet editing during play.** Edits live in a separate “Edit sheet” view to prevent accidental taps mid-combat.
+1. **Recap and session info live elsewhere.** Players read the recap before a session starts, on the home screen, in big readable typography (16–18px body, line-height 1.7). They do not navigate to it during play.
+1. **Dark mode default.** Game tables are dim.
+1. **No notifications during a session.** Phase 2 should respect a “session in progress” mode set by the DM that suppresses calendar reminders and other pings.
+
+The DM-side UI is the inverse: keyboard-first, dense, multi-pane is fine, desktop-primary.
+
+-----
+
+## I. Risks and Open Questions
+
+### Where the user is most likely to **over-build**
+
+- **GraphQL infrastructure too early.** The brief explicitly mentions GraphQL-powered RAG. That’s correct — for Phase 2. In Phase 0/1 a few server actions and a `pg_trgm` index do the job. Resist the urge.
+- **The auto-updating wiki.** This is the seductive feature and the one most likely to consume 80% of your build time for 20% of the user value. **Ship Phase 0/1 first; verify the foundation works in real sessions; only then start Phase 2.**
+- **Multi-tenancy / multiple campaigns.** You have one campaign. Hardcode it. Stripping multi-tenant assumptions later is easy if it ever becomes relevant; building them now wastes weeks.
+- **Battle outcome resolution / rules engine.** D&D 5e rules have ~10,000 edge cases. Players self-adjudicate at the table. Skip it forever, or do the lightest possible initiative tracker.
+- **Character creation wizard in v1.** Each player makes ~1 character per year. JSON edits + a manual sheet is enough; a full wizard is Phase 2.
+- **Custom design system.** Use shadcn/ui untouched. You are not a designer for this product.
+- **Self-hosting Postgres or running your own LLM.** No.
+
+### Where the user is most likely to **under-build**
+
+- **Character sheet print/export.** Players will at some point want a paper copy. Phase 1 should include this. It’s a one-evening feature that pays dividends.
+- **Backups.** Supabase has automatic daily backups on Pro. Confirm before relying on it. Add a one-click “export campaign as JSON” in Phase 1 for paranoia.
+- **Recap quality testing.** The first three recaps will be hit-or-miss. Plan to iterate the prompt across at least 5 real sessions before declaring it stable.
+- **Onboarding for the players.** The DM is technical; the players probably aren’t. The first run experience for a player must be: tap SMS link → land on character sheet. Anything more is a leak.
+- **Mobile testing.** You’re an iOS engineer — test on the *players’* devices, including Android, including the cheap one. Safari + iOS Add-to-Home-Screen as PWA gives you a native-feeling player experience for free.
+
+### Hidden complexity in the auto-wiki feature
+
+- **Entity disambiguation.** “Garin the bartender” and “Garin Stoneblood the dwarf” might be the same person or different people. Fuzzy matching alone is wrong; the LLM context window helps but adds tokens; a human-in-the-loop is the only correct answer.
+- **Pronoun resolution and coreference.** “She told him” — across sessions — is genuinely hard. Don’t try in v1. Just extract entity mentions; skip relations.
+- **Memory rot.** Wiki pages updated 12 times by an LLM eventually drift from canon. Without versioning + provenance + a DM-readable diff queue, you’ll silently corrupt your own campaign history. The Karpathy “LLM Wiki v2” gist’s “lifecycle” notes apply directly.
+- **Cost.** Embedding ~50 chunks per session × 50 sessions = ~$0.05 lifetime. Generation costs are the real budget. Set per-month spend caps in your provider dashboard.
+
+### Realistic time budget
+
+- **Phase 0:** 4 focused weekends. With evenings and a full-time job, 6–10 calendar weeks is realistic. **Plan for 8 weeks before first real-session use.**
+- **Phase 1:** 4–6 weekends spread over 2–3 months.
+- **Phase 2:** Open-ended. The auto-wiki alone could be 4 weekends if you scope tightly, 6 months if you don’t.
+
+-----
+
+## J. The First Weekend Plan (THE most important section)
+
+**Saturday morning — 4 hours: Setup**
+
+1. `npx create-next-app@latest dnd-app --ts --tailwind --app` (15 min)
+1. Create Supabase project. Enable Google OAuth, enable Email magic link. Get keys into `.env.local`. (30 min)
+1. Install: `@supabase/ssr`, `@supabase/supabase-js`, `drizzle-orm`, `drizzle-kit`, `@radix-ui/*` via shadcn, `zod`, `ai`, `@ai-sdk/anthropic`. (15 min)
+1. Wire Supabase auth middleware (the canonical Next.js + `@supabase/ssr` pattern). Build a `/login` page with Google + magic link buttons. Confirm you can sign in. (1 hour)
+1. Drizzle schema for `campaigns`, `campaign_members`, `characters`, `session_logs`. Push to Supabase. (1 hour)
+1. Insert one campaign row, one DM `campaign_members` row for yourself. Manually. (15 min)
+1. Build a `/` home page that requires auth and shows “Hello {user.email}, role: {dm|player}”. (45 min)
+
+**Saturday afternoon — 4 hours: The character sheet**
+8. Define a Zod schema for a character sheet (`name`, `race`, `class`, `level`, `hp_current`, `hp_max`, `ac`, `stats: {str, dex, ...}`, `proficiency_bonus`, `attacks: [{name, bonus, damage}]`, `spells: [{name, level}]`, `inventory: string[]`). (45 min)
+9. Build `/characters/[id]` — a server-rendered page that fetches the character row and renders the sheet mobile-first with Tailwind. (1.5 hours)
+10. Build `/characters/[id]/edit` — a form using `react-hook-form` + the Zod schema. Save via server action. (1.5 hours)
+11. Insert your own character as a row. Test on your phone via your local network or a Vercel preview deploy. (15 min)
+
+**Sunday morning — 3 hours: The dice roller**
+12. Build `<DiceRoller character={...} />` client component. Renders pre-computed common roll buttons from the character sheet. Each button calls a server action that inserts to `dice_rolls`. (1.5 hours)
+13. Subscribe to `dice_rolls` via Supabase Realtime in a `<RollFeed />` component on the home page. Last 10 rolls visible. (1 hour)
+14. Add a custom expression input (`1d20+3`) using a tiny dice parser (3 lines of regex). (30 min)
+
+**Sunday afternoon — 3 hours: DM notebook + recap stub**
+15. `/sessions` and `/sessions/new` routes. DM-only via a server-side role check. Tiptap or simple `<textarea>` markdown editor. Save to `session_logs.raw_notes_md`. (1.5 hours)
+16. A “Generate recap” button that calls a server action, runs the recap prompt against Claude via the Vercel AI SDK, saves output to `recap_md`, redirects to `/sessions/[id]`. (1 hour)
+17. The home page shows the most recent `recap_md` for everyone. (30 min)
+
+**Sunday night — 1 hour: Deploy**
+18. Push to GitHub, link to Vercel, set env vars, deploy. Test the live URL on your phone and one player’s phone. (1 hour)
+
+**End of weekend, you have:** auth, role gating, one character sheet, a working dice roller with shared visibility, a DM notebook, and an AI-generated recap. **That is end-to-end useful.** You can run a session next weekend.
+
+The next weekend is for: SMS auth, all six characters seeded, RSVP + scheduling, and polish. After that, you ship to your group.
+
+-----
+
+## K. The “Don’t Bother” List
+
+Cut or defer with reasons. Be honest. Push back on these.
+
+|Feature                                         |Verdict                                             |Why                                                                                                                                                                    |
+|------------------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|**Full GraphQL API in v1**                      |**CUT until Phase 2**                               |Six users do not justify GraphQL infrastructure. Server actions are strictly less code. Add Yoga only when semantic search arrives.                                    |
+|**Hasura / PostGraphile**                       |**CUT**                                             |Operational overhead for zero benefit at this scale.                                                                                                                   |
+|**Pinecone / Qdrant / Weaviate**                |**CUT**                                             |pgvector handles your corpus size 50× over. Two systems = two failure modes.                                                                                           |
+|**Auto-updating wiki in v1**                    |**DEFER to Phase 2**                                |This is the headline feature. It is also the time-sink most likely to kill the project. Ship the foundation first.                                                     |
+|**Voice transcript ingest**                     |**DEFER to Phase 2 stretch**                        |Whisper transcripts are messy; cleanup scripts and prompt iteration take weekends; the value-add over typed notes is marginal.                                         |
+|**Full character creation wizard**              |**DEFER to Phase 2**                                |Each player makes ~1 character/year. Manual JSON or a hand-edited form is fine.                                                                                        |
+|**Level-up wizard**                             |**DEFER to Phase 2**                                |Same reasoning.                                                                                                                                                        |
+|**Battle outcome / rules engine**               |**CUT entirely, or trivial initiative tracker only**|D&D 5e has thousands of edge cases. Foundry VTT has a paid team and still gets it wrong. Your group is “casual-but-organized” — they’ll keep adjudicating at the table.|
+|**Push notifications**                          |**DEFER**                                           |Email and SMS already work.                                                                                                                                            |
+|**In-app voice/video chat**                     |**CUT forever**                                     |Discord exists.                                                                                                                                                        |
+|**Maps with dynamic lighting / fog of war**     |**CUT forever**                                     |Foundry exists. You are not building a VTT.                                                                                                                            |
+|**Multi-campaign support**                      |**CUT**                                             |You have one. Add it only if a second campaign actually starts.                                                                                                        |
+|**A polished landing page**                     |**CUT**                                             |It’s private. Sign-in *is* the landing page.                                                                                                                           |
+|**Custom design system / branding**             |**CUT**                                             |shadcn defaults. Your time is the cost.                                                                                                                                |
+|**Stripe / billing**                            |**CUT**                                             |Private.                                                                                                                                                               |
+|**Public character sharing / world publishing** |**CUT**                                             |Private.                                                                                                                                                               |
+|**Native iOS app**                              |**CUT**                                             |PWA via “Add to Home Screen” gets you 95% of the way. You explicitly said web.                                                                                         |
+|**Self-hosting any of the stack**               |**CUT**                                             |Six users. Managed services. No.                                                                                                                                       |
+|**Anthropic + OpenAI + local model abstraction**|**TRIM to two providers**                           |Vercel AI SDK already abstracts. Pick Claude as default, OpenAI as fallback for embeddings. Local models are a Phase 3 toy.                                            |
+|**ElevenLabs voice recap audio**                |**CUT v1**                                          |Cool demo, zero practical value at the table. Maybe Phase 2 if a player asks.                                                                                          |
+|**Markdown-flavored homebrew rule editor**      |**CUT v1**                                          |A `homebrew.md` field on the campaign is enough.                                                                                                                       |
+
+-----
+
+## Closing Take
+
+The single biggest risk to this project is **over-scoping the wiki and the rules engine and never shipping anything to your friends.** The single biggest accelerant is **using Supabase + Next.js + Vercel AI SDK as a tightly-coupled bundle** so that auth, data, realtime, storage, and LLM calls all “just work” against the same `auth.uid()` and you spend your weekends on product, not plumbing.
+
+Build the first weekend exactly as written above. Run a real session against it. Then — and only then — decide which Phase 1 features your group actually wants. The DM (you) is the only person whose vote counts for what to build next, and you’ll know better after one real session than after a month of design.
+
+Ship small. Ship soon. The auto-wiki will still be there in Phase 2.
