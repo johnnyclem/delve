@@ -31,8 +31,8 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 
 ## Database Schema
 
-- `campaigns` — Single campaign record
-- `campaign_members` — Users in the campaign (role: dm/player)
+- `campaigns` — Single campaign record (includes `invite_code` for joining)
+- `campaign_members` — Users in the campaign (role: dm/player, unique index on `(campaign_id, user_id)`)
 - `characters` — Character sheets (JSON-backed sheetJson)
 - `session_logs` — Session notes + AI recaps
 - `calendar_events` — Scheduled sessions
@@ -43,22 +43,26 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 
 - **Auth**: Clerk middleware (plain `clerkMiddleware()` — no callback pattern)
 - **Authorization**: `requireAuth` (JWT validation) + `requireCampaignMember` (membership check) on all campaign-scoped routes
-- **Entry points**: `/members/me` and `/campaign/dashboard` auto-enroll users via `ensureMember()`; all other routes require existing membership
+- **Membership gating**: First user auto-enrolls as DM via `bootstrapDmIfNeeded()`. All subsequent users must join with invite code via `POST /members/join`. No auto-enrollment for non-first users.
+- **DM-only data**: `rawNotesMd` stripped from session responses for non-DM users via `stripDmFields()`. DM Notes section hidden from players in the frontend.
 - **DM-only actions**: Session/event create/update, recap generation gated by `isDm()` check
 - **Owner-only actions**: Character updates gated by `ownerUserId` check
 - **Entity scoping**: All entity queries (read + write) scope by both `id` and `campaignId`
+- **Invite code flow**: Campaign has `inviteCode` column. DM sees invite code on dashboard. Players enter code to join via `POST /members/join`.
 - **XSS prevention**: HTML escaped before markdown rendering (`dangerouslySetInnerHTML`)
 - **CORS**: Currently allows all origins (tighten for production)
+- **Typed middleware**: `AuthenticatedRequest` interface with helper functions (`getUserId`, `getCampaignMember`, `getUserDisplayName`, `getUserAvatarUrl`) to avoid `as any` casts in routes.
 
 ## Key Features
 
-- **Auth**: Clerk with dark theme, "Return to the Tavern" / "Join the Party" copy
-- **Dashboard**: Overview with next session, party members, latest recap, recent rolls
+- **Auth**: Clerk with dark theme, "Return to the Tavern" / "Join the Party" copy. Landing page IS the sign-in page (no marketing page).
+- **Join flow**: Non-members see a "Join Campaign" page with invite code input. DM shares invite code from dashboard.
+- **Dashboard**: Overview with next session, party members, latest recap, recent rolls. DM sees invite code.
 - **Characters**: List + detail view with editable 5e character sheets
-- **Sessions**: Create sessions, add DM notes, generate AI recaps
+- **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes.
 - **Calendar**: Schedule sessions with RSVP (yes/maybe/no)
 - **Dice Roller**: Roll any dice expression (e.g. 2d6+3) with shared log
-- **Roles**: First user auto-becomes DM; subsequent users are players
+- **Roles**: First user auto-becomes DM; subsequent users join with invite code as players
 
 ## Key Commands
 
@@ -72,21 +76,22 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 
 Auth-only (no membership required):
 - GET /healthz — health check
-- GET /members/me — get/create current user's membership
-- GET /campaign/dashboard — dashboard (auto-enrolls user)
+- GET /members/me — get current user's membership (404 if not a member)
+- GET /campaign/dashboard — dashboard (auto-enrolls first user as DM, 403 for non-members)
+- GET /campaign — get campaign info
+- POST /members/join — join campaign with invite code
 
 Requires campaign membership:
-- GET /campaign — get campaign info
 - GET /members — list members
 - GET /characters — list characters
 - GET /characters/:id — get character detail
 - PATCH /characters/:id — update character (owner only)
-- GET /sessions — list session logs
+- GET /sessions — list session logs (rawNotesMd stripped for players)
 - POST /sessions — create session (DM only)
-- GET /sessions/:id — get session detail
+- GET /sessions/:id — get session detail (rawNotesMd stripped for players)
 - PATCH /sessions/:id — update session (DM only)
 - POST /sessions/:id/generate-recap — generate AI recap (DM only)
-- GET /sessions/latest-recap — get latest recap
+- GET /sessions/latest-recap — get latest recap (rawNotesMd stripped)
 - GET /calendar — list events
 - POST /calendar — create event (DM only)
 - GET /calendar/:id — get event with RSVPs

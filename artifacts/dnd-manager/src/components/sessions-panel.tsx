@@ -8,6 +8,7 @@ import {
   getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey
 } from "@workspace/api-client-react";
 import { useGetMyMembership } from "@workspace/api-client-react";
+import type { SessionLog, CampaignMember } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -30,7 +31,7 @@ export default function SessionsPanel() {
 function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; onCreate: () => void }) {
   const { data: sessions, isLoading } = useListSessions();
   const { data: membership } = useGetMyMembership();
-  const isDm = (membership as any)?.role === "dm";
+  const isDm = (membership as CampaignMember | undefined)?.role === "dm";
 
   return (
     <div className="space-y-6" data-testid="sessions-panel">
@@ -58,7 +59,7 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
         </div>
       ) : (
         <div className="space-y-3">
-          {(sessions as any[]).map((s: any) => (
+          {(sessions as SessionLog[]).map((s) => (
             <button
               key={s.id}
               onClick={() => onSelect(s.id)}
@@ -98,7 +99,7 @@ function CreateSession({ onBack, onCreated }: { onBack: () => void; onCreated: (
     createMutation.mutate(
       { data: { sessionNumber, title, rawNotesMd: notes || null } },
       {
-        onSuccess: (data: any) => {
+        onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
           toast({ title: "Session created!" });
           onCreated(data.id);
@@ -144,8 +145,8 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const updateSession = useUpdateSession();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const isDm = (membership as any)?.role === "dm";
-  const s = session as any;
+  const isDm = (membership as CampaignMember | undefined)?.role === "dm";
+  const s = session as SessionLog | undefined;
 
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState("");
@@ -154,7 +155,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     generateRecap.mutate(
       { id },
       {
-        onSuccess: (data: any) => {
+        onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
@@ -222,29 +223,31 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         </div>
       )}
 
-      <div className="rounded-xl border border-border/50 bg-card p-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-card-foreground">DM Notes</h3>
-          {isDm && !editingNotes && (
-            <Button variant="ghost" size="sm" onClick={() => { setNotes(s.rawNotesMd ?? ""); setEditingNotes(true); }} data-testid="button-edit-notes">
-              Edit
-            </Button>
+      {isDm && (
+        <div className="rounded-xl border border-border/50 bg-card p-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-card-foreground">DM Notes</h3>
+            {!editingNotes && (
+              <Button variant="ghost" size="sm" onClick={() => { setNotes(s.rawNotesMd ?? ""); setEditingNotes(true); }} data-testid="button-edit-notes">
+                Edit
+              </Button>
+            )}
+          </div>
+          {editingNotes ? (
+            <div className="space-y-3">
+              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={10} data-testid="input-edit-notes" />
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleSaveNotes} disabled={updateSession.isPending} data-testid="button-save-notes">Save</Button>
+                <Button variant="ghost" size="sm" onClick={() => setEditingNotes(false)}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-session-notes">
+              {s.rawNotesMd || "No notes yet."}
+            </div>
           )}
         </div>
-        {editingNotes ? (
-          <div className="space-y-3">
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={10} data-testid="input-edit-notes" />
-            <div className="flex gap-2">
-              <Button size="sm" onClick={handleSaveNotes} disabled={updateSession.isPending} data-testid="button-save-notes">Save</Button>
-              <Button variant="ghost" size="sm" onClick={() => setEditingNotes(false)}>Cancel</Button>
-            </div>
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-session-notes">
-            {s.rawNotesMd || "No notes yet."}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }

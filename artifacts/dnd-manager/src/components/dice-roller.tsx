@@ -3,6 +3,7 @@ import { Dice5 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useRollDice, useGetRecentRolls, getGetRecentRollsQueryKey } from "@workspace/api-client-react";
+import type { DiceRoll, DiceRollBreakdown } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const quickRolls = [
@@ -17,10 +18,20 @@ const quickRolls = [
   { label: "4d6", expr: "4d6" },
 ];
 
+interface BreakdownRoll {
+  die: string;
+  results: number[];
+}
+
+interface ParsedBreakdown {
+  rolls?: BreakdownRoll[];
+  modifier?: number;
+}
+
 export default function DiceRollerPanel() {
   const [expression, setExpression] = useState("1d20");
   const [label, setLabel] = useState("");
-  const [lastResult, setLastResult] = useState<{ result: number; expression: string; breakdown: any } | null>(null);
+  const [lastResult, setLastResult] = useState<{ result: number; expression: string; breakdown: ParsedBreakdown } | null>(null);
   const queryClient = useQueryClient();
 
   const rollMutation = useRollDice();
@@ -33,8 +44,8 @@ export default function DiceRollerPanel() {
     rollMutation.mutate(
       { data: { expression: rollExpr, label: label || null } },
       {
-        onSuccess: (data: any) => {
-          setLastResult({ result: data.result, expression: data.expression, breakdown: data.breakdown });
+        onSuccess: (data) => {
+          setLastResult({ result: data.result, expression: data.expression, breakdown: data.breakdown as ParsedBreakdown });
           queryClient.invalidateQueries({ queryKey: getGetRecentRollsQueryKey() });
         },
       },
@@ -52,12 +63,12 @@ export default function DiceRollerPanel() {
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center" data-testid="dice-result">
           <p className="text-sm text-muted-foreground mb-1">{lastResult.expression}</p>
           <p className="font-serif text-5xl font-bold text-primary" data-testid="text-dice-result">{lastResult.result}</p>
-          {lastResult.breakdown?.rolls?.map((r: any, i: number) => (
+          {lastResult.breakdown?.rolls?.map((r, i) => (
             <p key={i} className="text-xs text-muted-foreground mt-1">
               {r.die}: [{r.results.join(", ")}]
             </p>
           ))}
-          {lastResult.breakdown?.modifier !== 0 && (
+          {lastResult.breakdown?.modifier !== undefined && lastResult.breakdown.modifier !== 0 && (
             <p className="text-xs text-muted-foreground">
               Modifier: {lastResult.breakdown.modifier > 0 ? "+" : ""}{lastResult.breakdown.modifier}
             </p>
@@ -111,7 +122,7 @@ export default function DiceRollerPanel() {
           <p className="text-sm text-muted-foreground">No rolls yet. Roll some dice!</p>
         ) : (
           <div className="space-y-2 max-h-80 overflow-auto">
-            {(recentRolls as any[]).map((roll: any) => (
+            {(recentRolls as DiceRoll[]).map((roll) => (
               <div key={roll.id} className="flex items-center justify-between text-sm py-1 border-b border-border/20 last:border-0" data-testid={`recent-roll-${roll.id}`}>
                 <div>
                   <span className="text-foreground font-medium">{roll.displayName}</span>

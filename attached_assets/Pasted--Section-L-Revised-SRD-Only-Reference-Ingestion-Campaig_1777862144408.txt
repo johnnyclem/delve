@@ -1,0 +1,617 @@
+# Section L (Revised): SRD-Only Reference Ingestion + Campaign-Content Gating
+
+**Bottom line:** Drop everything PDF-related, ingest both SRDs from a single canonical JSON source (`foundryvtt/dnd5e` v5.x packs via the Foundry CLI), tag rows with an `edition` column, and shift the entire spoiler-gating mechanism from chapter-based module unlocks to per-entity, RLS-enforced reveals on a single discriminated `campaign_entities` table. The whole reference layer becomes a half-day script and pennies of embedding cost; the gating layer becomes the load-bearing part of this section.
+
+## TL;DR
+
+- **Reference ingestion is now trivial:** pull SRD 5.1 + SRD 5.2 from the `foundryvtt/dnd5e` v5.x system packs (LevelDB → JSON via `@foundryvtt/foundryvtt-cli`), tag every row with `edition ∈ {'2014','2024'}`, embed once, done. Estimated total cost ≈ **$0.01–$0.03**, total runtime ≈ **2–5 minutes**, total chunks ≈ **1,500–2,500**.
+- **Edition handling is a per-campaign default + a per-row tag:** one `default_edition text` column on `campaigns`, two rows for entities that exist in both SRDs (e.g., Fireball), shared `entity_slug`, distinct `edition`. Pre-filter in the retrieval CTE and turn on `hnsw.iterative_scan = 'relaxed_order'` so the edition filter doesn’t murder recall.
+- **Gating moves to one mega-table with RLS + column grants:** a single `campaign_entities` table discriminated by `kind`, with `revealed boolean`, RLS forcing `revealed = true` for player roles, and a `REVOKE SELECT(...)` on always-secret columns (`dm_notes`, `secret_md`, `true_motivation`). Reveal is a one-click button on the entity card; reveals are reversible via an `entity_reveal_audit` table (small, cheap, worth it).
+
+-----
+
+## A. Reference content ingestion
+
+### Source picks (one canonical, one verifier)
+
+|Content type                                                                                                          |**Canonical source**                                                                                                                                                                                |Verifier / backfill                                                                             |
+|----------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+|Spells, Classes, Subclasses, Species, Backgrounds, Feats, Equipment, Magic Items, Monsters, Rules glossary, Conditions|**`foundryvtt/dnd5e` packs (v5.x)** — both SRD 5.1 and SRD 5.2 ship as separate top-level pack folders, structured + maintained by a paid team, with explicit `source` fields and full SRD coverage.|**Open5e v2 API** (`?document__key__in=srd-2014` or `srd-2024`) for diffing and filling any gap.|
+|Anything where Foundry’s structure feels too “VTT-shaped” (action economies, spell activities)                        |Foundry pack with a small normalization pass                                                                                                                                                        |Open5e v2 (cleaner field shapes for some types)                                                 |
+
+**Why not `5e-bits/5e-database` as canonical?** Its `src/2014/` directory is mature and excellent, but `src/2024/` is still rolling. As of the v4.6.x release line (early 2025) and ongoing through 2025–2026, releases note things like “2024: Add Magic Items,” “2024: Initial pass at Subclass data,” “2024: Replace unknown with APIReferenceSchema for magic items”  — i.e., the 2024 corpus is being filled in piecemeal. You don’t want to ingest from a moving target where coverage gaps are silent. The 5e-bits 5e-srd-api itself still says “Currently only /api/2014 is available. The next version will be /api/2024”  (no firm date). Use 5e-bits if you need *only* SRD 5.1 — but you don’t.
+
+**Why Foundry v5.x is the right primary:** The `foundryvtt/dnd5e` system as of release-5.0.0 (Apr/May 2025) and later (5.2.x, 5.3.x, etc.) ships **both** SRDs as compendium packs in separate folder hierarchies, integrated, validated, and updated alongside errata. License: CC-BY-4.0 for the SRD content (MIT for the software).   Each item is tagged with a `source` field that distinguishes SRD 5.1 from SRD 5.2 — that field becomes your `edition` literal directly. You get monsters, spells, items, classes, origins, feats, rules, and roll tables, all in machine-readable JSON  after a one-shot `extractPack`. 
+
+**Why Open5e v2 as verifier:** Open5e v2 is the actively maintained version  (v1 deprecated in 2025),   has explicit `srd-2014` and `srd-2024` document keys, and is `document__key__in=`-filterable. It’s perfect for a diff-job that runs in CI and yells if an entity disappears or changes shape. Not the primary because it’s a network dependency and Foundry’s data is already on disk after install.
+
+### Ingestion pipeline
+
+Three steps. The whole thing is a single Node script you run locally.
+
+**Step 1: extract Foundry packs to JSON.** One-time, idempotent.
+
+```ts
+// scripts/srd/extract.ts
+import { extractPack } from "@foundryvtt/foundryvtt-cli";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+
+// Point this at your Foundry data dir or a checked-out copy of foundryvtt/dnd5e at v5.3+.
+const FOUNDRY_DND5E = process.env.FOUNDRY_DND5E_PATH!;
+const OUT = "./data/srd";
+
+// Foundry v5.x pack layout: top-level folders separate SRD 5.1 from SRD 5.2.
+// Folder names follow Foundry's compendium naming; these are the two roots we care about.
+const PACK_ROOTS = [
+  { dir: "packs/srd5.1", edition: "2014" as const },
+  { dir: "packs/srd5.2", edition: "2024" as const },
+];
+
+for (const { dir, edition } of PACK_ROOTS) {
+  const root = path.join(FOUNDRY_DND5E, dir);
+  for (const pack of await fs.readdir(root)) {
+    if (pack.startsWith(".")) continue;
+    await extractPack(
+      path.join(root, pack),
+      path.join(OUT, edition, pack),
+      { yaml: false, recursive: false, log: true }
+    );
+  }
+}
+```
+
+(In practice you confirm folder names by inspecting the dnd5e `system.json` `packs[]` entries — the v5.0.0 release notes explicitly call out the rename of the legacy “D&D SRD Content” folder to make clear it’s 2014, and the new top-level folder for SRD 5.2.) 
+
+**Step 2: normalize + chunk + embed + upsert.** Single file, idempotent via SHA-256 content hash. Embeddings use `text-embedding-3-small` with `dimensions: 1536` and `halfvec` storage.
+
+```ts
+// scripts/srd/ingest.ts
+import { createHash } from "node:crypto";
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
+import OpenAI from "openai";
+import pLimit from "p-limit";
+
+const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE!);
+const openai  = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const limit   = pLimit(8);
+
+type Edition = "2014" | "2024";
+
+interface Chunk {
+  edition: Edition;
+  entity_slug: string;     // e.g., "fireball", "adult-red-dragon"
+  entity_kind: string;     // "spell" | "monster" | "class" | "feat" | "item" | "rule" | ...
+  section: string | null;  // e.g., "description", "at higher levels", "actions"
+  title: string;
+  body_md: string;
+  source_url: string | null;
+  content_hash: string;
+}
+
+function hash(s: string) { return createHash("sha256").update(s).digest("hex"); }
+
+// Foundry doc → 1..N chunks. Most SRD entries are short enough to be one chunk.
+function toChunks(doc: any, edition: Edition): Chunk[] {
+  const slug = doc.system?.identifier ?? doc.name?.toLowerCase().replaceAll(/\s+/g, "-");
+  const kind = doc.type ?? "rule"; // Foundry's discriminator
+  const desc = doc.system?.description?.value ?? doc.text?.content ?? "";
+  // strip Foundry @UUID / @Compendium link rot, leave plain markdown
+  const body = stripFoundryLinks(htmlToMd(desc));
+  if (!body.trim()) return [];
+  const base: Chunk = {
+    edition,
+    entity_slug: slug,
+    entity_kind: kind,
+    section: null,
+    title: doc.name,
+    body_md: body,
+    source_url: srdUrlFor(kind, slug, edition),
+    content_hash: hash(`${edition}:${slug}:${kind}:${body}`),
+  };
+  // For monsters and classes you may want to split actions / features into their own chunks.
+  return splitIfLong(base);
+}
+
+async function embed(texts: string[]): Promise<number[][]> {
+  const res = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: texts,
+    dimensions: 1536,
+  });
+  return res.data.map(d => d.embedding);
+}
+
+async function upsertBatch(chunks: Chunk[]) {
+  // skip rows whose content_hash already exists — this is the idempotency gate.
+  const hashes = chunks.map(c => c.content_hash);
+  const { data: existing } = await supabase
+    .from("reference_chunks")
+    .select("content_hash")
+    .in("content_hash", hashes);
+  const have = new Set((existing ?? []).map(r => r.content_hash));
+  const todo = chunks.filter(c => !have.has(c.content_hash));
+  if (!todo.length) return;
+  const vecs = await embed(todo.map(c => `${c.title}\n\n${c.body_md}`));
+  const rows = todo.map((c, i) => ({ ...c, embedding: vecs[i] }));
+  const { error } = await supabase.from("reference_chunks").upsert(rows, {
+    onConflict: "edition,entity_slug,entity_kind,content_hash",
+  });
+  if (error) throw error;
+}
+
+const editions: Edition[] = ["2014", "2024"];
+for (const edition of editions) {
+  const root = path.join("./data/srd", edition);
+  const packs = await readdir(root);
+  const allChunks: Chunk[] = [];
+  for (const pack of packs) {
+    for (const file of await readdir(path.join(root, pack))) {
+      if (!file.endsWith(".json")) continue;
+      const doc = JSON.parse(await readFile(path.join(root, pack, file), "utf8"));
+      allChunks.push(...toChunks(doc, edition));
+    }
+  }
+  // batch in groups of 100 (well under OpenAI's per-request token limit for embeddings)
+  for (let i = 0; i < allChunks.length; i += 100) {
+    await limit(() => upsertBatch(allChunks.slice(i, i + 100)));
+  }
+}
+```
+
+**Step 3 (optional, CI):** A nightly diff against Open5e v2:
+
+```
+GET https://api.open5e.com/v2/spells/?document__key__in=srd-2024&fields=key,name,desc
+GET https://api.open5e.com/v2/creatures/?document__key__in=srd-2024&fields=key,name,...
+```
+
+Compare counts and fingerprints; alert if Foundry drifts. This keeps the Foundry pin honest without making Open5e a runtime dependency.
+
+### Updated `reference_chunks` schema
+
+```sql
+create extension if not exists vector;
+
+create table reference_chunks (
+  id              bigserial primary key,
+  edition         text       not null check (edition in ('2014','2024')),
+  entity_slug     text       not null,            -- e.g. 'fireball'
+  entity_kind     text       not null,            -- 'spell','monster','class','feat','item','rule',...
+  section         text,
+  title           text       not null,
+  body_md         text       not null,
+  source_url      text,
+  content_hash    text       not null,
+  embedding       halfvec(1536) not null,         -- text-embedding-3-small @ 1536, half-precision
+  tsv             tsvector generated always as (
+                    setweight(to_tsvector('english', coalesce(title,'')), 'A') ||
+                    setweight(to_tsvector('english', coalesce(body_md,'')), 'B')
+                  ) stored,
+  created_at      timestamptz not null default now(),
+  unique (edition, entity_slug, entity_kind, content_hash)
+);
+
+-- Index strategy: one HNSW per edition via partial indexes.
+-- Partial HNSW indexes work well as long as the planner uses them for the matching
+-- WHERE clause; they avoid the recall-collapse-on-postfilter problem entirely
+-- because the filter is satisfied at index-selection time, not after the scan.
+create index reference_chunks_hnsw_2014
+  on reference_chunks using hnsw (embedding halfvec_cosine_ops)
+  where edition = '2014';
+
+create index reference_chunks_hnsw_2024
+  on reference_chunks using hnsw (embedding halfvec_cosine_ops)
+  where edition = '2024';
+
+-- BM25 / FTS
+create index reference_chunks_tsv_idx on reference_chunks using gin (tsv);
+
+-- Lookup by slug (rules tooltip, deep links)
+create index reference_chunks_slug_idx
+  on reference_chunks (edition, entity_kind, entity_slug);
+```
+
+Two HNSW partial indexes (one per edition) is the cleanest play. It eliminates the classic pgvector footgun where a `WHERE edition = $1` post-filter inside an HNSW scan returns < `k` rows  and tanks recall. Since you only ever query one edition at a time, the planner picks the matching partial index and gives you full recall against the relevant subset. Belt-and-suspenders: also enable `SET hnsw.iterative_scan = 'relaxed_order'` per query, which from pgvector 0.8.0 lets the index iteratively scan further  if a filter happens to slip past the partial.
+
+### Cost / runtime estimates
+
+- **SRD 5.1 PDF**: ~400 pages, ~150K words.
+- **SRD 5.2 PDF**: 361 pages, 5.68 MB,  ~140K words.
+- **Combined raw**: ~290K words ≈ **~400K tokens** of source text, plus titles and section markers.
+- **Chunked**: ~1,500–2,500 chunks total across both editions (most SRD entries are 1 chunk; monsters/classes split into 2–4).
+- **Embedding tokens**: ~500K (chunks include title context).
+- **Embedding cost**: 0.5M × $0.02/M = **$0.01**.  With Batch API, $0.005.  Pocket change.
+- **Local runtime**: dominated by network round-trips to OpenAI; with `pLimit(8)` and batch size 100, **2–5 minutes** end-to-end including extraction.
+- **Storage**: ~1,500 × 1,536 × 2 bytes (halfvec) ≈ **5 MB** of vectors + ~20–40 MB of `body_md`. Fits in any free Supabase tier with room to spare.
+
+Compared to the previous PDF-ingestion plan (Marker + Claude vision + module chunking, hours of runtime, dollars to tens of dollars per book), this is rounding error.
+
+-----
+
+## B. Edition handling at query time
+
+### Per-campaign default
+
+```sql
+alter table campaigns
+  add column default_edition text not null default '2024'
+  check (default_edition in ('2014','2024'));
+```
+
+That’s it. The DM picks once at campaign creation, can flip later, and every retrieval call inherits that as the default filter.
+
+### Retrieval RPC respects edition
+
+```sql
+create or replace function retrieve_reference(
+  p_edition       text,
+  p_query_emb     halfvec(1536),
+  p_query_text    text,
+  p_k             int default 12
+) returns table (
+  id bigint, edition text, entity_slug text, entity_kind text,
+  title text, body_md text, source_url text,
+  semantic_rank int, lexical_rank int, rrf numeric
+)
+language sql stable as $$
+with semantic as (
+  select id, row_number() over (order by embedding <=> p_query_emb) as r
+  from reference_chunks
+  where edition = p_edition                            -- pre-filter; matches partial index
+  order by embedding <=> p_query_emb
+  limit p_k * 4
+),
+lexical as (
+  select id, row_number() over (order by ts_rank(tsv, plainto_tsquery('english', p_query_text)) desc) as r
+  from reference_chunks
+  where edition = p_edition
+    and tsv @@ plainto_tsquery('english', p_query_text)
+  limit p_k * 4
+),
+fused as (
+  select coalesce(s.id, l.id) as id,
+         s.r as semantic_rank, l.r as lexical_rank,
+         (1.0/(60 + coalesce(s.r, p_k*4+1))) +
+         (1.0/(60 + coalesce(l.r, p_k*4+1))) as rrf
+  from semantic s full outer join lexical l on s.id = l.id
+)
+select rc.id, rc.edition, rc.entity_slug, rc.entity_kind,
+       rc.title, rc.body_md, rc.source_url,
+       f.semantic_rank, f.lexical_rank, f.rrf
+from fused f join reference_chunks rc on rc.id = f.id
+order by f.rrf desc
+limit p_k;
+$$;
+```
+
+Caller side (Next.js route handler):
+
+```ts
+// In your retrieval action, before the RPC call:
+await supabase.rpc("execute_sql", {
+  sql: "set local hnsw.iterative_scan = 'relaxed_order'; set local hnsw.ef_search = 100;"
+});
+const { data } = await supabase.rpc("retrieve_reference", {
+  p_edition: campaign.default_edition,
+  p_query_emb: embedding,
+  p_query_text: query,
+  p_k: 12,
+});
+```
+
+(Or simpler: stuff the `SET LOCAL`s into the SQL function body itself.)
+
+### Fireball in both editions: two rows, shared slug
+
+**Recommendation: two rows, `entity_slug='fireball'` shared, `edition` distinct.** Reasons:
+
+1. The natural per-campaign filter (`WHERE edition = $1`) returns exactly one row with no special-case logic.
+1. The two SRDs genuinely differ in text — SRD 5.2’s Fireball has slightly different wording and the 2024 spellcasting framing. Storing them as a “versioned single row” forces every consumer to know which version it wants and conditionally pick a column. Two rows is one fact per row.
+1. Joining citations to `reference_chunks.id` stays trivial; you don’t need a synthetic “current version” pointer.
+1. Storage cost is meaningless at this scale (≤ 5 MB).
+
+Versioned-row patterns (single row + `valid_from`/`valid_to` or a `versions` JSON blob) make sense when you’re tracking *changes over time within a single canonical thing*. Here you have two parallel canonical things licensed under two CC-BY documents. Treat them that way.
+
+### Optional: “show me both editions” toggle
+
+A DM looking up a rule sometimes wants to compare. Cheap to add: a UI toggle that calls the RPC twice (`p_edition='2014'` and `'2024'`) and renders both columns side-by-side, with a diff highlight on the body markdown. Surface it only on the rules-lookup page, not in chat retrieval (which always uses the campaign default — players shouldn’t get cross-edition leakage).
+
+-----
+
+## C. Campaign-content gating (the load-bearing part)
+
+### Schema: one discriminated table, justified
+
+**Recommendation: one `campaign_entities` mega-table with a `kind` enum.** Justification:
+
+- All the kinds (NPC, quest, location, story beat, mob encounter, plot twist) share the same lifecycle: created by DM → optionally revealed → optionally edited → optionally archived. They share the same gating column, the same audit story, the same RAG embedding shape, and the same `campaign_id` parent.
+- Per-kind tables would force per-kind RLS policies (×6), per-kind embed jobs (×6), per-kind audit triggers (×6), and per-kind retrieval CTEs. That’s six times the surface area for a private 6-person app.
+- The “cleaner types” argument for separate tables is real but solvable in the TypeScript layer with a discriminated union over `kind` and per-kind Zod schemas validating the `data jsonb` payload. That gets you type safety where it matters (the app), without DB sprawl.
+- If a kind eventually grows enough specialized columns to feel cramped in shared `data jsonb`, you can extract it later — Postgres is forgiving about that with `CREATE TABLE ... AS SELECT` migrations.
+
+Schema:
+
+```sql
+create type entity_kind as enum (
+  'npc','quest','location','story_beat','mob_encounter','plot_twist','faction','item_unique'
+);
+
+create table campaign_entities (
+  id              uuid primary key default gen_random_uuid(),
+  campaign_id     uuid not null references campaigns(id) on delete cascade,
+  kind            entity_kind not null,
+  slug            text not null,
+  name            text not null,
+  -- player-visible fields (only readable when revealed=true):
+  public_md       text,               -- the "what players know" description
+  -- DM-only fields, NEVER exposed to players regardless of revealed flag:
+  dm_notes        text,               -- private DM scratch
+  secret_md       text,               -- the actual truth/twist/mechanics
+  true_motivation text,               -- e.g. for NPCs and factions
+  -- structured payload (kind-specific shape, validated in app):
+  data            jsonb not null default '{}'::jsonb,
+  -- gating:
+  revealed        boolean not null default false,
+  revealed_at     timestamptz,
+  revealed_by     uuid references auth.users(id),
+  -- bookkeeping:
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (campaign_id, kind, slug)
+);
+
+create index on campaign_entities (campaign_id, kind);
+create index on campaign_entities (campaign_id) where revealed = true;
+```
+
+### Companion: embeddings table for RAG
+
+```sql
+create table campaign_entity_chunks (
+  id            bigserial primary key,
+  entity_id     uuid not null references campaign_entities(id) on delete cascade,
+  campaign_id   uuid not null,                 -- denormalized for RLS speed
+  source_field  text not null check (source_field in ('public_md','secret_md','dm_notes')),
+  body_md       text not null,
+  embedding     halfvec(1536) not null,
+  tsv           tsvector generated always as (to_tsvector('english', coalesce(body_md,''))) stored,
+  content_hash  text not null,
+  created_at    timestamptz not null default now(),
+  unique (entity_id, source_field, content_hash)
+);
+
+create index campaign_entity_chunks_hnsw
+  on campaign_entity_chunks using hnsw (embedding halfvec_cosine_ops);
+create index on campaign_entity_chunks using gin (tsv);
+create index on campaign_entity_chunks (campaign_id, source_field);
+```
+
+`source_field` is the critical RAG-side gate: chunks derived from `secret_md` or `dm_notes` are forever DM-only, even when the parent entity is revealed. Reveal flips player-visible chunks (those from `public_md`) into the player’s retrieval pool; secret chunks never enter it.
+
+### RLS — physical, not advisory
+
+```sql
+alter table campaign_entities       enable row level security;
+alter table campaign_entities       force  row level security;  -- include table owners
+alter table campaign_entity_chunks  enable row level security;
+alter table campaign_entity_chunks  force  row level security;
+
+-- Helper: am I the DM of this campaign?
+create or replace function is_dm(c uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from campaign_members m
+    where m.campaign_id = c and m.user_id = auth.uid() and m.role = 'dm'
+  );
+$$;
+
+-- Helper: am I any member of this campaign?
+create or replace function is_member(c uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from campaign_members m
+    where m.campaign_id = c and m.user_id = auth.uid()
+  );
+$$;
+
+-- DM: full access in their campaign.
+create policy ce_dm_all on campaign_entities
+  for all to authenticated
+  using ( is_dm(campaign_id) )
+  with check ( is_dm(campaign_id) );
+
+-- Players: read-only, only revealed entities.
+create policy ce_player_select on campaign_entities
+  for select to authenticated
+  using ( is_member(campaign_id) and revealed = true );
+
+-- Same shape for chunks, plus the source_field guard.
+create policy cec_dm_all on campaign_entity_chunks
+  for all to authenticated
+  using ( is_dm(campaign_id) )
+  with check ( is_dm(campaign_id) );
+
+create policy cec_player_select on campaign_entity_chunks
+  for select to authenticated
+  using (
+    is_member(campaign_id)
+    and source_field = 'public_md'
+    and exists (
+      select 1 from campaign_entities e
+      where e.id = campaign_entity_chunks.entity_id and e.revealed = true
+    )
+  );
+```
+
+### Column-level guard for always-secret fields
+
+Even when an entity is `revealed = true`, players must never see `dm_notes`, `secret_md`, or `true_motivation`. RLS gates rows; you need column grants for columns. **Recommended pattern: use Postgres column-level `REVOKE` + `GRANT` against the `authenticated` role**, which is exactly what Supabase’s docs prescribe for column-level security.  It’s the simplest correct pattern and composes cleanly with RLS.
+
+```sql
+-- Players (authenticated role hitting the Data API as non-DM) get no select on these columns.
+revoke select on campaign_entities from authenticated;
+grant  select (
+  id, campaign_id, kind, slug, name,
+  public_md, data, revealed, revealed_at, created_at, updated_at
+) on campaign_entities to authenticated;
+
+-- DMs need everything; we surface that via a SECURITY DEFINER view (not exposed to players).
+create view dm_campaign_entities with (security_invoker = true) as
+  select * from campaign_entities;
+-- Combined with the RLS policy ce_dm_all + a separate grant to a dm role,
+-- but the simpler pattern below avoids a second role:
+```
+
+For a 6-person app, the simplest correct shape is: one role (`authenticated`), column grants restrict players, and the DM gets the full row through a **service-role-backed Next.js Server Action** when they hit `/dm/...` routes. You verify DM membership in the action, then use the service role client to bypass RLS for that single read. That’s slightly less defense-in-depth than a separate `dm` Postgres role, but for a private 6-person table it’s the right pragmatic call. If you ever go multi-tenant or public, switch to a separate role + a security-definer-view-with-RLS pattern.
+
+> One nit: enable `force row level security` on these tables. Postgres bypasses RLS for table owners by default,   and that has bitten plenty of teams; `FORCE` is the only way the policies apply uniformly.
+
+### Reveal UX — the lightest implementation
+
+**One-click button on the entity card, plus an inline action in the session log.** Concretely:
+
+1. Every entity in the DM’s view shows a single toggle: `Hidden ⟷ Revealed`. Click it → optimistic update → Server Action calls `update campaign_entities set revealed=true, revealed_at=now(), revealed_by=auth.uid() where id=$1` → Supabase Realtime Broadcast (from-DB trigger on the row update) pushes a `topic:campaign:<id>` message → players’ UIs receive `{ kind: 'reveal', entity_id }` and re-fetch.
+1. In the session log / chat, a slash command `/reveal "Captain Yora"` finds the entity by name (per-campaign), and flips the same flag. Same Realtime broadcast.
+1. No modal, no confirmation step. The undo path makes that safe.
+
+### Audit & undo — small table, big peace of mind
+
+**Yes, reveals must be reversible.** DMs reveal prematurely, players misread the room, sessions go sideways. Recommendation: a tiny audit table, not Supabase row history.
+
+```sql
+create table entity_reveal_audit (
+  id            bigserial primary key,
+  entity_id     uuid not null references campaign_entities(id) on delete cascade,
+  campaign_id   uuid not null,
+  action        text not null check (action in ('reveal','unreveal','edit_public','edit_secret')),
+  actor         uuid not null references auth.users(id),
+  at            timestamptz not null default now(),
+  diff          jsonb
+);
+create index on entity_reveal_audit (campaign_id, at desc);
+```
+
+Why a dedicated audit table over Supabase’s row history: row history is heavy (full snapshots), opaque to your app, and not currently easy to query for “show me a reveal timeline for this campaign.” A 7-column audit table costs nothing, gives the DM a per-entity reveal timeline UI for free, and makes the un-reveal flow trivial: flip the boolean and append an `unreveal` row. Keep the Supabase row-history backup if you have it, but build the user-facing audit on this table.
+
+### Two-way RAG retrieval (no longer three-way)
+
+The PRD previously had three retrieval lanes: `reference_chunks` + `module_chunks` + `campaign_chunks`. With modules gone, you have two: `reference_chunks` (edition-filtered) + `campaign_entity_chunks` (gated). The retrieval action runs both in parallel, applies RRF independently, and concatenates the top-k from each before handing to Claude. Pseudocode:
+
+```ts
+const [ref, camp] = await Promise.all([
+  supabase.rpc("retrieve_reference", { p_edition: c.default_edition, p_query_emb: q, p_query_text: text, p_k: 8 }),
+  supabase.rpc("retrieve_campaign",  { p_campaign: c.id, p_query_emb: q, p_query_text: text, p_k: 8, p_is_dm: isDm }),
+]);
+// citations show source: 'srd-2014' | 'srd-2024' | 'campaign'
+```
+
+The campaign retrieval RPC relies entirely on RLS for gating — you don’t need a `revealed` filter in the RPC body, because RLS already strips unrevealed rows for the player. **Test this with a non-DM session**, because forgetting `force row level security` or testing as service role makes everything look fine when it isn’t.
+
+-----
+
+## D. Updated phased roadmap
+
+|Phase                              |Was                                                 |Now                                                                                                                                                                                                                                                                                                          |
+|-----------------------------------|----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+|**0 — MVP**                        |Auth, campaigns, members, basic chat                |(unchanged)                                                                                                                                                                                                                                                                                                  |
+|**1 — Reference + manual entities**|“SRD ingestion + module ingestion (PDFs)”           |**SRD ingestion (half-day)** + manual entity CRUD for NPCs/quests/locations/etc. + reveal toggle + simple keyword search over both tables. Campaign wiki is fully usable here.                                                                                                                               |
+|**2 — Hybrid retrieval + chat**    |“RAG over 3 sources, edition + chapter unlocks”     |**Hybrid retrieval (semantic + BM25 + RRF) over `reference_chunks` (edition-filtered) and `campaign_entity_chunks` (RLS-gated).** Claude tool-calls the retrieve RPC. Edition default per campaign. Reveal-driven embedding job for new/edited entities (Edge Function or a tiny worker — no Inngest needed).|
+|**3 — Polish**                     |Module-aware DM dashboard, ingestion-status UI, etc.|Slash commands, session-log inline reveal, “compare editions” lookup view, optional homebrew-rules feature (see §F).                                                                                                                                                                                         |
+
+**What slides earlier:** the campaign-entity wiki was previously gated behind module ingestion (because story beats and quests came from parsed adventures). With the wiki being entirely DM-authored, **it moves into Phase 1**. That’s a big win — the user gets a usable “shared notebook with reveal control” before they need any RAG.
+
+**Realistic timeline (single senior engineer, evenings/weekends):**
+
+- Phase 0: ~1 week (auth + campaign shell, mostly Supabase config).
+- Phase 1: ~1 week. SRD ingestion is a half-day. Manual entity CRUD with the discriminated table + RLS + column grants is ~3 days of careful work (the policies and column grants want to be tested with a real non-DM session, not just SQL editor). Reveal UI + audit is another day.
+- Phase 2: ~1.5 weeks. Hybrid retrieval RPCs + Vercel AI SDK tool plumbing + Claude system prompt for citations + the embedding worker.
+- Phase 3: open-ended polish.
+
+**~3.5 weeks of part-time work to a feature-complete v1**, vs. the 6–8 weeks the PDF-ingestion plan implied.
+
+-----
+
+## E. What we just removed
+
+Take a victory lap. All of this is out of the architecture:
+
+- **No PDF parsing.** Marker, LlamaParse, Docling, PyMuPDF, Unstructured — none of it. Zero Python in the stack.
+- **No Claude vision passes for stat-block extraction.** No multi-modal calls, no token bills for image processing, no fragile bbox regression code, no monster-stat-reconciliation step.
+- **No `module_chunks` table.** Schema collapses by one whole table + its indexes + its RLS + its embedding pipeline.
+- **No `adventure_creatures` table or its joins.**
+- **No `campaign_unlocks` chapter-based gating.** That whole “Chapter 3 is now visible to players” mental model is gone. Gating is per-entity, which matches how DMs actually run a session.
+- **No Inngest dependency.** SRD ingestion is a single local script run; entity-edit re-embeds are a few hundred ms each and fit in a Supabase Edge Function or a Next.js Server Action. You don’t need a queue.
+- **No legal/IP gray zone.** SRD 5.1 and SRD 5.2 are CC-BY-4.0 forever and irrevocable.  You can ship attribution and sleep at night. If you ever wanted to make this a public product, you could, without ripping anything out.
+
+You still get **80%+ of the original UX value**: SRD rules lookup, semantic chat over rules, DM-authored wiki with spoiler control, citations, edition awareness. What you lose is “auto-import the Curse of Strahd PDF” — and you almost certainly weren’t going to ingest enough modules to justify the complexity anyway.
+
+-----
+
+## F. Worth adding now that the architecture got cheaper
+
+Pick at most **one** of these for v1; both are Phase 2 polish, not Phase 1.
+
+### F1 (recommended) — Homebrew rules table
+
+The DM types or pastes a house rule. It joins the retrieval CTE alongside SRD chunks, with a distinct citation badge. This is genuinely high-leverage in actual play because every table has 3–10 house rules and players forget them.
+
+```sql
+create table homebrew_rules (
+  id           uuid primary key default gen_random_uuid(),
+  campaign_id  uuid not null references campaigns(id) on delete cascade,
+  title        text not null,
+  body_md      text not null,
+  embedding    halfvec(1536) not null,
+  tsv          tsvector generated always as (
+                 setweight(to_tsvector('english', title), 'A') ||
+                 setweight(to_tsvector('english', body_md), 'B')
+               ) stored,
+  active       boolean not null default true,
+  created_at   timestamptz not null default now()
+);
+alter table homebrew_rules enable row level security;
+alter table homebrew_rules force row level security;
+create policy hr_member_select on homebrew_rules for select to authenticated
+  using ( is_member(campaign_id) and active );
+create policy hr_dm_all on homebrew_rules for all to authenticated
+  using ( is_dm(campaign_id) ) with check ( is_dm(campaign_id) );
+```
+
+Citations render as **House rule** with a colored badge and Claude’s system prompt instructs it to surface house rules *first* when they conflict with SRD text. Cost to build: half a day. Cost to use: zero. This earns its weight on session 2.
+
+### F2 (also recommended, light) — “Compare editions” view
+
+Already justified in §B. UI cost: a single new page (`/rules/compare?slug=fireball`) that fans out two RPCs and renders side-by-side with a markdown diff. Useful for the DM during prep when porting old adventures to 2024 rules. Half a day.
+
+### F3 (skip for now) — Static `reference_chunks` JSON dump
+
+Idea was fast cold-start by shipping the full SRD as a JSON bundle. **Skip it.** The corpus is small (~5 MB vectors + ~20 MB markdown), Supabase queries are sub-100ms, and the fallback adds two rendering paths to maintain. Not worth it for a 6-person private app. Revisit only if you ever go public and want offline-capable rules lookup.
+
+-----
+
+## Recommendations (decision-ready next steps)
+
+1. **This week**: clone `foundryvtt/dnd5e` at the latest 5.x release, run the extraction script in §A, and visually spot-check a dozen entries (Fireball, Adult Red Dragon, Bard, Plate Armor) across both `2014/` and `2024/` outputs. If anything’s missing (e.g., a kind you care about isn’t in the SRD pack folder), file a one-line note and fall back to Open5e v2 for that kind only.
+1. **Next**: write the `reference_chunks` migration (with both partial HNSW indexes), run the ingest script, ship a “rules lookup” page that hits a `select ... where edition = $1 and entity_slug ilike $2` query — no semantic search yet. Confirm round-trip latency is good.
+1. **Then**: build `campaign_entities` + RLS + column grants + the reveal toggle. **Test with a real non-DM Supabase session** before declaring victory. Don’t trust SQL-editor results — that runs as service role and bypasses RLS.
+1. **Then**: hybrid retrieval RPCs + Vercel AI SDK tool wiring + Claude system prompt for citations.
+1. **Benchmarks that would change the plan:**
+- If SRD coverage in Foundry packs turns out to be < 95% of what the campaign actually references in early play, switch to **Open5e v2 as primary** (it has both `srd-2014` and `srd-2024` clean and complete) and keep Foundry as the verifier. Cost: a few hours of script changes.
+- If hybrid retrieval recall feels weak after 100 real queries, raise `hnsw.ef_search` to 200 and consider re-ranking with `text-embedding-3-large` only for the final top-k. Don’t pre-optimize.
+- If players ever report seeing an unrevealed entity, treat it as a P0 RLS bug, write a regression test, and audit every policy. The whole gating premise depends on never being wrong here.
+
+-----
+
+## Caveats
+
+- **Foundry pack coverage isn’t formally documented.** The dnd5e v5.0 release notes describe SRD 5.2 as “fully integrated”   and the v5.x patch notes show ongoing fixes against both SRDs (ACs, durations, recharge data, etc.),  which suggests near-complete but actively-curated coverage. Assume ≥95% but verify against Open5e v2 counts on first ingest.
+- **5e-database 2024 is incomplete (as of late 2025 / early 2026).** Releases like v4.6.0 (“Add Magic Items,” “Initial pass at Subclass data”) show piecemeal additions; their own README/docs note `/api/2024` isn’t yet served from `5e-srd-api`. That’s the main reason we don’t recommend it as primary. Recheck quarterly.
+- **Open5e v2 is “actively maintained” but volunteer-run.** Treat it as a verifier, not a runtime SLA. Cache results if you ever do call it from the app.
+- **`hnsw.iterative_scan` is documented and stable in pgvector 0.8.0.** Supabase ships 0.8.x. If you’re on an older Supabase project that hasn’t been upgraded, check `select extversion from pg_extension where extname='vector';` — pre-0.8 you’ll need `relaxed_order` workarounds (or ride exclusively on the partial indexes, which is fine here).
+- **Postgres column-level security via REVOKE/GRANT is the right tool, but it’s easy to forget when adding new columns.** Every `ALTER TABLE campaign_entities ADD COLUMN ...` should be accompanied by either a `GRANT (col)` (player-visible) or a deliberate non-grant (DM-only). Add a CI check or a migration template comment.
+- **One mega-table with `kind` discriminator is the right call here, not universally.** If `mob_encounter` grows initiative tracking, HP state, and combat-log relationships, it’ll outgrow the shared shape and want its own table. Plan to split at that point, not before.
+- **`FORCE ROW LEVEL SECURITY` is non-default and important.** Without it, table owners (including the role you used to create the table) bypass policies, which makes “test in SQL editor” misleading.  Always enable.
+- **SRD 5.2.1 is the current 5.2 line as of early 2026** (the dndbeyond.com/srd page noted “last updated March 02, 2026” with the 5.2.1 conversion guide). Build the ingest to be re-runnable so when 5.2.2 lands you flip the Foundry pin and run the script again. The `content_hash` idempotency key handles the rest.

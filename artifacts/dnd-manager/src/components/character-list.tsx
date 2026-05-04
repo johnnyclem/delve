@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BookOpen, ChevronRight, Edit, Heart, Shield, Zap, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useListCharacters, useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey } from "@workspace/api-client-react";
+import type { Character, CharacterSheet } from "@workspace/api-client-react";
 import { useUser } from "@clerk/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,7 @@ function CharacterGrid({ onSelect }: { onSelect: (id: number) => void }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(characters as any[]).map((char: any) => (
+          {(characters as Character[]).map((char) => (
             <button
               key={char.id}
               onClick={() => onSelect(char.id)}
@@ -73,18 +74,20 @@ function CharacterDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
-  const [editSheet, setEditSheet] = useState<any>(null);
+  const [editSheet, setEditSheet] = useState<CharacterSheet | null>(null);
 
-  const char = character as any;
+  const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
-  const sheet = editing ? editSheet : char?.sheetJson;
+  const sheet: CharacterSheet | undefined = editing ? (editSheet ?? undefined) : char?.sheetJson;
 
   const startEditing = () => {
+    if (!char) return;
     setEditSheet({ ...char.sheetJson });
     setEditing(true);
   };
 
   const saveChanges = () => {
+    if (!editSheet) return;
     updateMutation.mutate(
       { id, data: { sheetJson: editSheet } },
       {
@@ -145,7 +148,7 @@ function CharacterDetail({ id, onBack }: { id: number; onBack: () => void }) {
               <Heart className="h-4 w-4 text-red-400" /> Hit Points
             </h3>
             <div className="flex items-baseline gap-1">
-              {editing ? (
+              {editing && editSheet ? (
                 <Input
                   type="number"
                   value={editSheet.currentHp ?? 0}
@@ -177,13 +180,13 @@ function CharacterDetail({ id, onBack }: { id: number; onBack: () => void }) {
           <div className="rounded-xl border border-border/50 bg-card p-5 md:col-span-2 lg:col-span-3">
             <h3 className="font-semibold text-sm text-card-foreground mb-3">Ability Scores</h3>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-              {["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"].map((stat) => {
+              {(["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"] as const).map((stat) => {
                 const val = sheet[stat] ?? 10;
                 const mod = Math.floor((val - 10) / 2);
                 return (
                   <div key={stat} className="text-center p-2 rounded-lg bg-muted/50">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{stat.slice(0, 3)}</p>
-                    {editing ? (
+                    {editing && editSheet ? (
                       <Input
                         type="number"
                         value={editSheet[stat] ?? 10}
@@ -201,7 +204,7 @@ function CharacterDetail({ id, onBack }: { id: number; onBack: () => void }) {
             </div>
           </div>
 
-          {sheet.inventory?.length > 0 && (
+          {sheet.inventory && sheet.inventory.length > 0 && (
             <div className="rounded-xl border border-border/50 bg-card p-5 md:col-span-2 lg:col-span-3">
               <h3 className="font-semibold text-sm text-card-foreground mb-3">Inventory</h3>
               <div className="flex flex-wrap gap-2">
@@ -215,7 +218,7 @@ function CharacterDetail({ id, onBack }: { id: number; onBack: () => void }) {
           {(sheet.notes || editing) && (
             <div className="rounded-xl border border-border/50 bg-card p-5 md:col-span-2 lg:col-span-3">
               <h3 className="font-semibold text-sm text-card-foreground mb-3">Notes</h3>
-              {editing ? (
+              {editing && editSheet ? (
                 <Textarea
                   value={editSheet.notes ?? ""}
                   onChange={(e) => setEditSheet({ ...editSheet, notes: e.target.value })}

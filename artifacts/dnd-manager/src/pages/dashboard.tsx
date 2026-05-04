@@ -1,18 +1,20 @@
 import { useState } from "react";
 import { useUser } from "@clerk/react";
-import { useLocation } from "wouter";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
   LogOut, ChevronRight, Users, Sparkles, Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useGetDashboard } from "@workspace/api-client-react";
+import type { DashboardSummary, PartyMemberSummary, DiceRoll } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
 import CharacterListPanel from "@/components/character-list";
 import SessionsPanel from "@/components/sessions-panel";
 import CalendarPanel from "@/components/calendar-panel";
 import { useClerk } from "@clerk/react";
+import { useToast } from "@/hooks/use-toast";
 
 const navItems = [
   { id: "overview", label: "Overview", icon: Shield },
@@ -27,11 +29,17 @@ export default function DashboardPage() {
   const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState("overview");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { data: dashboard, isLoading } = useGetDashboard();
+  const { data: dashboard, isLoading, error } = useGetDashboard();
 
   const handleSignOut = () => {
     signOut();
   };
+
+  const needsInvite = error && (error as { status?: number }).status === 403;
+
+  if (needsInvite) {
+    return <JoinCampaignPage />;
+  }
 
   return (
     <div className="dark min-h-[100dvh] bg-background flex" data-testid="page-dashboard">
@@ -111,7 +119,7 @@ export default function DashboardPage() {
         )}
 
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-          {activeTab === "overview" && <OverviewPanel dashboard={dashboard} isLoading={isLoading} onNavigate={setActiveTab} />}
+          {activeTab === "overview" && <OverviewPanel dashboard={dashboard as DashboardSummary & { inviteCode?: string }} isLoading={isLoading} onNavigate={setActiveTab} />}
           {activeTab === "characters" && <CharacterListPanel />}
           {activeTab === "sessions" && <SessionsPanel />}
           {activeTab === "calendar" && <CalendarPanel />}
@@ -122,7 +130,83 @@ export default function DashboardPage() {
   );
 }
 
-function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: any; isLoading: boolean; onNavigate: (tab: string) => void }) {
+function JoinCampaignPage() {
+  const [inviteCode, setInviteCode] = useState("");
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState("");
+  const { toast } = useToast();
+  const { signOut } = useClerk();
+
+  const handleJoin = async () => {
+    if (!inviteCode.trim()) return;
+    setJoining(true);
+    setJoinError("");
+
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}api/members/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ inviteCode: inviteCode.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Failed to join" }));
+        setJoinError(data.error ?? "Failed to join");
+        return;
+      }
+
+      toast({ title: "Welcome to the campaign!" });
+      window.location.reload();
+    } catch {
+      setJoinError("Network error");
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return (
+    <div className="dark min-h-[100dvh] bg-background flex items-center justify-center px-4" data-testid="page-join">
+      <div className="w-full max-w-md space-y-6">
+        <div className="text-center">
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Logo" className="h-16 w-16 mx-auto mb-4" />
+          <h1 className="font-serif text-3xl font-bold text-foreground">Join the Campaign</h1>
+          <p className="text-muted-foreground mt-2">Enter the invite code from your DM to join the campaign.</p>
+        </div>
+
+        <div className="rounded-xl border border-border/50 bg-card p-6 space-y-4">
+          <div>
+            <label className="text-sm font-medium text-foreground mb-1 block">Invite Code</label>
+            <Input
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+              placeholder="e.g. A1B2C3D4"
+              className="font-mono text-center text-lg tracking-widest"
+              maxLength={8}
+              onKeyDown={(e) => e.key === "Enter" && handleJoin()}
+              data-testid="input-invite-code"
+            />
+          </div>
+          {joinError && (
+            <p className="text-sm text-destructive" data-testid="text-join-error">{joinError}</p>
+          )}
+          <Button className="w-full" onClick={handleJoin} disabled={joining || !inviteCode.trim()} data-testid="button-join">
+            {joining ? "Joining..." : "Join Campaign"}
+          </Button>
+        </div>
+
+        <div className="text-center">
+          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => signOut()}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign Out
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; onNavigate: (tab: string) => void }) {
   if (isLoading) {
     return (
       <div className="space-y-6" data-testid="overview-loading">
@@ -144,6 +228,16 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: any; i
           {dashboard?.totalSessions ?? 0} sessions played
         </p>
       </div>
+
+      {dashboard?.inviteCode && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-foreground">Invite Code</p>
+            <p className="text-xs text-muted-foreground">Share with players to join</p>
+          </div>
+          <span className="font-mono text-lg font-bold text-primary tracking-widest" data-testid="text-invite-code">{dashboard.inviteCode}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <button onClick={() => onNavigate("calendar")} className="text-left rounded-xl border border-border/50 bg-card p-5 hover:border-primary/30 transition-colors">
@@ -169,7 +263,7 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: any; i
           </div>
           <h3 className="font-semibold text-card-foreground text-sm">Party ({dashboard?.partyMembers?.length ?? 0})</h3>
           <div className="text-muted-foreground text-xs mt-1 space-y-0.5">
-            {dashboard?.partyMembers?.slice(0, 3).map((m: any) => (
+            {dashboard?.partyMembers?.slice(0, 3).map((m: PartyMemberSummary) => (
               <p key={m.userId}>{m.displayName}{m.characterName ? ` — ${m.characterName}` : ""}</p>
             ))}
           </div>
@@ -191,7 +285,7 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: any; i
         </button>
       </div>
 
-      {dashboard?.recentRolls?.length > 0 && (
+      {dashboard?.recentRolls && dashboard.recentRolls.length > 0 && (
         <div className="rounded-xl border border-border/50 bg-card p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-card-foreground text-sm flex items-center gap-2">
@@ -203,7 +297,7 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: any; i
             </button>
           </div>
           <div className="space-y-2">
-            {dashboard.recentRolls.slice(0, 5).map((roll: any) => (
+            {dashboard.recentRolls.slice(0, 5).map((roll: DiceRoll) => (
               <div key={roll.id} className="flex items-center justify-between text-sm" data-testid={`roll-${roll.id}`}>
                 <span className="text-muted-foreground">
                   {roll.displayName} rolled <span className="font-mono text-foreground">{roll.expression}</span>

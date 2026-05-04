@@ -2,20 +2,26 @@ import { Router, type IRouter } from "express";
 import { db, campaignsTable, campaignMembersTable, charactersTable, sessionLogsTable, calendarEventsTable, rsvpsTable, diceRollsTable } from "@workspace/db";
 import { eq, desc, and, gte, asc, isNotNull } from "drizzle-orm";
 import { requireAuth, getUserId, getUserDisplayName, getUserAvatarUrl } from "../middlewares/requireAuth";
-import { getOrCreateCampaign, ensureMember } from "../lib/campaign";
+import { getOrCreateCampaign, bootstrapDmIfNeeded, getMember, getCampaignInviteCode } from "../lib/campaign";
 
 const router: IRouter = Router();
 
 router.get("/campaign", requireAuth, async (req, res): Promise<void> => {
   const campaignId = await getOrCreateCampaign();
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
-  res.json(campaign);
+  const { inviteCode: _code, ...safeCampaign } = campaign;
+  res.json(safeCampaign);
 });
 
 router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
-  await ensureMember(campaignId, userId, getUserDisplayName(req), getUserAvatarUrl(req));
+
+  const member = await bootstrapDmIfNeeded(campaignId, userId, getUserDisplayName(req), getUserAvatarUrl(req));
+  if (!member) {
+    res.status(403).json({ error: "Not a campaign member", needsInvite: true });
+    return;
+  }
 
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
 
@@ -47,6 +53,18 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
     .orderBy(desc(sessionLogsTable.sessionNumber))
     .limit(1);
 
+  const safeRecap = latestRecap ? {
+    id: latestRecap.id,
+    campaignId: latestRecap.campaignId,
+    sessionNumber: latestRecap.sessionNumber,
+    title: latestRecap.title,
+    playedAt: latestRecap.playedAt,
+    recapMd: latestRecap.recapMd,
+    generatedAt: latestRecap.generatedAt,
+    createdAt: latestRecap.createdAt,
+    updatedAt: latestRecap.updatedAt,
+  } : null;
+
   const now = new Date();
   const [nextEvent] = await db
     .select()
@@ -59,11 +77,11 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
   if (nextEvent) {
     const eventRsvps = await db.select().from(rsvpsTable).where(eq(rsvpsTable.calendarEventId, nextEvent.id));
     const rsvpsWithMembers = eventRsvps.map((r) => {
-      const member = members.find((m) => m.userId === r.userId);
+      const m = members.find((mem) => mem.userId === r.userId);
       return {
         ...r,
-        displayName: member?.displayName ?? "Unknown",
-        avatarUrl: member?.avatarUrl ?? null,
+        displayName: m?.displayName ?? "Unknown",
+        avatarUrl: m?.avatarUrl ?? null,
       };
     });
     nextEventWithRsvps = { ...nextEvent, rsvps: rsvpsWithMembers };
@@ -76,14 +94,22 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
     .orderBy(desc(diceRollsTable.rolledAt))
     .limit(5);
 
-  res.json({
-    campaign,
+  const { inviteCode: _code, ...safeCampaign } = campaign;
+
+  const response: Record<string, unknown> = {
+    campaign: safeCampaign,
     nextEvent: nextEventWithRsvps,
-    latestRecap: latestRecap ?? null,
+    latestRecap: safeRecap,
     partyMembers,
     totalSessions: sessions.length,
     recentRolls,
-  });
+  };
+
+  if (member.role === "dm") {
+    response.inviteCode = campaign.inviteCode;
+  }
+
+  res.json(response);
 });
 
 export default router;

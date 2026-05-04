@@ -7,6 +7,7 @@ import {
   getListEventsQueryKey, getGetEventQueryKey, getGetDashboardQueryKey
 } from "@workspace/api-client-react";
 import { useGetMyMembership } from "@workspace/api-client-react";
+import type { CalendarEvent, CalendarEventWithRsvps, CampaignMember, RsvpWithMember } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -29,9 +30,9 @@ export default function CalendarPanel() {
 function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onCreate: () => void }) {
   const { data: events, isLoading } = useListEvents();
   const { data: membership } = useGetMyMembership();
-  const isDm = (membership as any)?.role === "dm";
+  const isDm = (membership as CampaignMember | undefined)?.role === "dm";
 
-  const sorted = events ? [...(events as any[])].sort((a, b) => new Date(a.proposedAt).getTime() - new Date(b.proposedAt).getTime()) : [];
+  const sorted = events ? [...(events as CalendarEvent[])].sort((a, b) => new Date(a.proposedAt).getTime() - new Date(b.proposedAt).getTime()) : [];
 
   return (
     <div className="space-y-6" data-testid="calendar-panel">
@@ -59,7 +60,7 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
         </div>
       ) : (
         <div className="space-y-3">
-          {sorted.map((ev: any) => {
+          {sorted.map((ev) => {
             const date = new Date(ev.proposedAt);
             const isPast = date < new Date();
             return (
@@ -108,7 +109,7 @@ function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id
     createMutation.mutate(
       { data: { title, proposedAt: new Date(dateStr).toISOString(), location: location || null } },
       {
-        onSuccess: (data: any) => {
+        onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
           toast({ title: "Session scheduled!" });
@@ -151,7 +152,7 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const upsertRsvp = useUpsertRsvp();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const ev = event as any;
+  const ev = event as CalendarEventWithRsvps | undefined;
 
   const handleRsvp = (status: "yes" | "no" | "maybe") => {
     upsertRsvp.mutate(
@@ -210,7 +211,7 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
         <div className="rounded-xl border border-border/50 bg-card p-5">
           <h3 className="font-semibold text-card-foreground text-sm mb-3">RSVPs ({ev.rsvps.length})</h3>
           <div className="space-y-2">
-            {ev.rsvps.map((r: any) => (
+            {ev.rsvps.map((r: RsvpWithMember) => (
               <div key={r.id} className="flex items-center justify-between text-sm" data-testid={`rsvp-${r.id}`}>
                 <span className="text-foreground">{r.displayName}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full ${

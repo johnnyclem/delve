@@ -1,20 +1,31 @@
 import { Router, type IRouter } from "express";
 import { db, sessionLogsTable } from "@workspace/db";
 import { eq, desc, and, isNotNull } from "drizzle-orm";
-import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
+import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
+function stripDmFields(session: typeof sessionLogsTable.$inferSelect): Record<string, unknown> {
+  const { rawNotesMd: _raw, ...safe } = session;
+  return safe;
+}
+
 router.get("/sessions", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const campaignId = await getOrCreateCampaign();
+  const member = getCampaignMember(req);
   const sessions = await db
     .select()
     .from(sessionLogsTable)
     .where(eq(sessionLogsTable.campaignId, campaignId))
     .orderBy(desc(sessionLogsTable.sessionNumber));
-  res.json(sessions);
+
+  if (member.role === "dm") {
+    res.json(sessions);
+  } else {
+    res.json(sessions.map(stripDmFields));
+  }
 });
 
 router.post("/sessions", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
@@ -60,7 +71,7 @@ router.get("/sessions/latest-recap", requireAuth, requireCampaignMember, async (
     return;
   }
 
-  res.json(latest);
+  res.json(stripDmFields(latest));
 });
 
 router.get("/sessions/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
@@ -72,6 +83,7 @@ router.get("/sessions/:id", requireAuth, requireCampaignMember, async (req, res)
   }
 
   const campaignId = await getOrCreateCampaign();
+  const member = getCampaignMember(req);
   const [session] = await db
     .select()
     .from(sessionLogsTable)
@@ -81,7 +93,12 @@ router.get("/sessions/:id", requireAuth, requireCampaignMember, async (req, res)
     res.status(404).json({ error: "Session not found" });
     return;
   }
-  res.json(session);
+
+  if (member.role === "dm") {
+    res.json(session);
+  } else {
+    res.json(stripDmFields(session));
+  }
 });
 
 router.patch("/sessions/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {

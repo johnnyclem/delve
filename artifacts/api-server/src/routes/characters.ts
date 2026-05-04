@@ -83,7 +83,7 @@ router.patch("/characters/:id", requireAuth, requireCampaignMember, async (req, 
   const updateData: Record<string, unknown> = {};
   if (parsed.data.name !== undefined) updateData.name = parsed.data.name;
   if (parsed.data.race !== undefined) updateData.race = parsed.data.race;
-  if ((parsed.data as any).class !== undefined) updateData.class = (parsed.data as any).class;
+  if (parsed.data.class !== undefined) updateData.class = parsed.data.class;
   if (parsed.data.level !== undefined) updateData.level = parsed.data.level;
   if (parsed.data.sheetJson !== undefined) updateData.sheetJson = parsed.data.sheetJson;
   if (parsed.data.portraitUrl !== undefined) updateData.portraitUrl = parsed.data.portraitUrl;

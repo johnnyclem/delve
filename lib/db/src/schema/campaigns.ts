@@ -7,6 +7,7 @@ export const campaignsTable = pgTable("campaigns", {
   name: text("name").notNull(),
   worldName: text("world_name"),
   dmUserId: text("dm_user_id").notNull(),
+  inviteCode: text("invite_code").notNull().default("CHANGEME"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
