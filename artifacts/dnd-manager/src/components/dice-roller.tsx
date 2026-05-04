@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Dice5 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useRollDice, useGetRecentRolls, getGetRecentRollsQueryKey } from "@workspace/api-client-react";
@@ -31,7 +32,7 @@ interface ParsedBreakdown {
 export default function DiceRollerPanel() {
   const [expression, setExpression] = useState("1d20");
   const [label, setLabel] = useState("");
-  const [lastResult, setLastResult] = useState<{ result: number; expression: string; breakdown: ParsedBreakdown } | null>(null);
+  const [lastResult, setLastResult] = useState<{ result: number; expression: string; breakdown: ParsedBreakdown; key: number } | null>(null);
   const queryClient = useQueryClient();
 
   const rollMutation = useRollDice();
@@ -45,7 +46,7 @@ export default function DiceRollerPanel() {
       { data: { expression: rollExpr, label: label || null } },
       {
         onSuccess: (data) => {
-          setLastResult({ result: data.result, expression: data.expression, breakdown: data.breakdown as ParsedBreakdown });
+          setLastResult({ result: data.result, expression: data.expression, breakdown: data.breakdown as ParsedBreakdown, key: Date.now() });
           queryClient.invalidateQueries({ queryKey: getGetRecentRollsQueryKey() });
         },
       },
@@ -54,27 +55,36 @@ export default function DiceRollerPanel() {
 
   return (
     <div className="space-y-6" data-testid="dice-roller-panel">
-      <h2 className="font-serif text-2xl font-bold text-foreground flex items-center gap-2">
+      <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2 tracking-tight">
         <Dice5 className="h-6 w-6 text-primary" />
         Dice Roller
       </h2>
 
-      {lastResult && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center" data-testid="dice-result">
-          <p className="text-sm text-muted-foreground mb-1">{lastResult.expression}</p>
-          <p className="font-serif text-5xl font-bold text-primary" data-testid="text-dice-result">{lastResult.result}</p>
-          {lastResult.breakdown?.rolls?.map((r, i) => (
-            <p key={i} className="text-xs text-muted-foreground mt-1">
-              {r.die}: [{r.results.join(", ")}]
-            </p>
-          ))}
-          {lastResult.breakdown?.modifier !== undefined && lastResult.breakdown.modifier !== 0 && (
-            <p className="text-xs text-muted-foreground">
-              Modifier: {lastResult.breakdown.modifier > 0 ? "+" : ""}{lastResult.breakdown.modifier}
-            </p>
-          )}
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {lastResult && (
+          <motion.div
+            key={lastResult.key}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            className="rounded-2xl glass-panel p-6 text-center ambient-glow"
+            data-testid="dice-result"
+          >
+            <p className="text-sm text-muted-foreground mb-1 font-mono">{lastResult.expression}</p>
+            <p className="font-mono text-5xl font-bold text-primary tabular-nums" data-testid="text-dice-result">{lastResult.result}</p>
+            {lastResult.breakdown?.rolls?.map((r, i) => (
+              <p key={i} className="text-xs text-muted-foreground mt-1 font-mono tabular-nums">
+                {r.die}: [{r.results.join(", ")}]
+              </p>
+            ))}
+            {lastResult.breakdown?.modifier !== undefined && lastResult.breakdown.modifier !== 0 && (
+              <p className="text-xs text-muted-foreground font-mono tabular-nums">
+                Modifier: {lastResult.breakdown.modifier > 0 ? "+" : ""}{lastResult.breakdown.modifier}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="space-y-3">
         <div className="flex gap-2">
@@ -114,8 +124,8 @@ export default function DiceRollerPanel() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/50 bg-card p-5">
-        <h3 className="font-semibold text-card-foreground text-sm mb-3">Recent Rolls</h3>
+      <div className="rounded-2xl glass-panel p-5">
+        <h3 className="font-semibold text-foreground text-sm mb-3">Recent Rolls</h3>
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : !recentRolls?.length ? (
@@ -123,14 +133,14 @@ export default function DiceRollerPanel() {
         ) : (
           <div className="space-y-2 max-h-80 overflow-auto">
             {(recentRolls as DiceRoll[]).map((roll) => (
-              <div key={roll.id} className="flex items-center justify-between text-sm py-1 border-b border-border/20 last:border-0" data-testid={`recent-roll-${roll.id}`}>
+              <div key={roll.id} className="flex items-center justify-between text-sm py-1 border-b border-[rgba(255,255,255,0.04)] last:border-0" data-testid={`recent-roll-${roll.id}`}>
                 <div>
                   <span className="text-foreground font-medium">{roll.displayName}</span>
                   <span className="text-muted-foreground"> rolled </span>
                   <span className="font-mono text-foreground">{roll.expression}</span>
                   {roll.label && <span className="text-muted-foreground text-xs ml-1">({roll.label})</span>}
                 </div>
-                <span className="font-mono font-bold text-foreground text-base">{roll.result}</span>
+                <span className="font-mono font-bold text-foreground text-base tabular-nums">{roll.result}</span>
               </div>
             ))}
           </div>

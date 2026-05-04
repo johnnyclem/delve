@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,7 +37,7 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
   return (
     <div className="space-y-6" data-testid="sessions-panel">
       <div className="flex items-center justify-between">
-        <h2 className="font-serif text-2xl font-bold text-foreground flex items-center gap-2">
+        <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2 tracking-tight">
           <ScrollText className="h-6 w-6 text-primary" />
           Sessions
         </h2>
@@ -50,26 +51,28 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
         </div>
       ) : !sessions?.length ? (
-        <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-[rgba(255,255,255,0.08)] p-8 text-center">
           <ScrollText className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground">No session logs yet.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {(sessions as SessionLog[]).map((s) => (
-            <button
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
               key={s.id}
               onClick={() => onSelect(s.id)}
-              className="w-full text-left rounded-xl border border-border/50 bg-card p-4 hover:border-primary/30 transition-colors"
+              className="w-full text-left rounded-2xl glass-panel-hover p-4"
               data-testid={`card-session-${s.id}`}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-card-foreground">
-                    Session {s.sessionNumber}: {s.title}
+                  <h3 className="font-semibold text-foreground">
+                    Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
                     {s.playedAt ? new Date(s.playedAt).toLocaleDateString() : "Date TBD"}
@@ -78,7 +81,7 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </div>
-            </button>
+            </motion.button>
           ))}
         </div>
       )}
@@ -114,12 +117,12 @@ function CreateSession({ onBack, onCreated }: { onBack: () => void; onCreated: (
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back
       </Button>
-      <h2 className="font-serif text-2xl font-bold text-foreground">New Session Log</h2>
+      <h2 className="text-2xl font-semibold text-foreground tracking-tight">New Session Log</h2>
       <div className="space-y-4 max-w-xl">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium text-foreground mb-1 block">Session #</label>
-            <Input type="number" value={sessionNumber} onChange={(e) => setSessionNumber(parseInt(e.target.value) || 1)} data-testid="input-session-number" />
+            <Input type="number" value={sessionNumber} onChange={(e) => setSessionNumber(parseInt(e.target.value) || 1)} className="font-mono tabular-nums" data-testid="input-session-number" />
           </div>
           <div>
             <label className="text-sm font-medium text-foreground mb-1 block">Title</label>
@@ -205,7 +208,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   };
 
   if (isLoading) {
-    return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 rounded-xl" /></div>;
+    return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 rounded-2xl" /></div>;
   }
 
   if (!s) {
@@ -222,8 +225,8 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
 
       <div>
-        <h2 className="font-serif text-2xl font-bold text-foreground" data-testid="text-session-title">
-          Session {s.sessionNumber}: {s.title}
+        <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-session-title">
+          Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
         </h2>
         <p className="text-sm text-muted-foreground">
           {s.playedAt ? `Played on ${new Date(s.playedAt).toLocaleDateString()}` : "Date TBD"}
@@ -231,9 +234,9 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
 
       {s.recapMd && (
-        <div className="rounded-xl border border-primary/20 bg-card p-6">
+        <div className="rounded-2xl glass-panel p-6" style={{ boxShadow: "0 0 25px hsla(270, 100%, 60%, 0.1)" }}>
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-card-foreground flex items-center gap-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               AI Recap
             </h3>
@@ -249,9 +252,9 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       )}
 
       {isDm && (
-        <div className="rounded-xl border border-border/50 bg-card p-6">
+        <div className="rounded-2xl glass-panel p-6">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-card-foreground flex items-center gap-2">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
               <Pencil className="h-4 w-4 text-muted-foreground" />
               DM Notes
               {isDirty && <span className="text-xs text-amber-400">(unsaved)</span>}
@@ -305,7 +308,7 @@ function escapeHtml(text: string): string {
 function markdownToHtml(md: string): string {
   const escaped = escapeHtml(md);
   return escaped
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-serif font-semibold mt-4 mb-2">$1</h2>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
     .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.+?)\*/g, "<em>$1</em>")

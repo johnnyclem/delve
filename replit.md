@@ -1,8 +1,8 @@
-# D&D 5e Campaign Manager
+# Delve — D&D 5e Campaign Manager
 
 ## Overview
 
-A private D&D 5e campaign manager web app for ~6 users. Single campaign, no multi-tenancy.
+A private D&D 5e campaign manager web app for ~6 users. Single campaign, no multi-tenancy. Branded as **Delve** with an "Arcane Artifact" dark glass UI identity.
 
 ## Stack
 
@@ -21,7 +21,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 
 ## Architecture
 
-- `artifacts/dnd-manager/` — React frontend (dark fantasy theme, Cinzel serif + Inter sans)
+- `artifacts/dnd-manager/` — React frontend ("Delve" brand, dark glass UI, Inter sans + JetBrains Mono for numbers)
 - `artifacts/api-server/` — Express API server (port 8080)
 - `lib/api-spec/` — OpenAPI spec + Orval codegen config
 - `lib/api-client-react/` — Generated React Query hooks
@@ -55,7 +55,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 
 ## Key Features
 
-- **Auth**: Clerk with dark theme, "Return to the Tavern" / "Join the Party" copy. Landing page IS the sign-in page (no marketing page).
+- **Auth**: Clerk with dark glass theme, "Welcome Back" / "Begin Your Journey" copy. Landing page IS the sign-in page (no marketing page).
 - **Join flow**: Non-members see a "Join Campaign" page with invite code input. DM shares invite code from dashboard.
 - **Dashboard**: Overview with next session, party members, latest recap, recent rolls. DM sees invite code.
 - **Characters**: List + detail view with editable 5e character sheets + multi-step creation wizard (basics → ability scores → combat → details)
@@ -101,6 +101,6 @@ Requires campaign membership:
 - POST /dice/roll — roll dice
 - GET /dice/recent — recent rolls
 
-## Theme
+## Theme / Brand — "Delve"
 
-Dark mode default. Purple primary (#9333ea). Cinzel serif for headings, Inter for body. Warm parchment tones for foreground text.
+Dark-only "Scrying Mirror" glass UI. Obsidian background (#09090B). Arcane Purple primary (hsl 270 100% 60%). Neon Magenta secondary (hsl 320 100% 50%). Inter for all text (tracking -0.01em, Medium 500 body / SemiBold 600 headings). JetBrains Mono for changing numeric values (HP, AC, dice results). Glass panels: translucent fill (white 4% opacity), backdrop-blur 20px, 1px glass borders with directional light catch, purple underglow shadow. Framer Motion spring-based button tap animations (scale 0.95, stiffness 400, damping 17). Dice results use fade-up drift animation. tabular-nums on all numeric displays.

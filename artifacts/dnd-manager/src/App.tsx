@@ -37,41 +37,41 @@ const clerkAppearance = {
     logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
   },
   variables: {
-    colorPrimary: "#9333ea",
-    colorForeground: "#e8e0d2",
-    colorMutedForeground: "#8b8078",
+    colorPrimary: "hsl(270, 100%, 60%)",
+    colorForeground: "#ededed",
+    colorMutedForeground: "#737373",
     colorDanger: "#ef4444",
-    colorBackground: "#16151a",
-    colorInput: "#1e1d24",
-    colorInputForeground: "#e8e0d2",
-    colorNeutral: "#2d2c34",
+    colorBackground: "#09090B",
+    colorInput: "rgba(255,255,255,0.06)",
+    colorInputForeground: "#ededed",
+    colorNeutral: "rgba(255,255,255,0.08)",
     fontFamily: "'Inter', system-ui, sans-serif",
-    borderRadius: "0.625rem",
+    borderRadius: "0.75rem",
   },
   elements: {
     rootBox: "w-full flex justify-center",
-    cardBox: "bg-[#1a1920] rounded-2xl w-[440px] max-w-full overflow-hidden border border-[#2d2c34]",
+    cardBox: "glass-panel rounded-2xl w-[440px] max-w-full overflow-hidden",
     card: "!shadow-none !border-0 !bg-transparent !rounded-none",
     footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    headerTitle: "text-[#e8e0d2] font-serif",
-    headerSubtitle: "text-[#8b8078]",
-    socialButtonsBlockButtonText: "text-[#e8e0d2]",
-    formFieldLabel: "text-[#c0b8ad]",
-    footerActionLink: "text-[#9333ea] hover:text-[#a855f7]",
-    footerActionText: "text-[#8b8078]",
-    dividerText: "text-[#6b6560]",
-    identityPreviewEditButton: "text-[#9333ea]",
+    headerTitle: "text-foreground font-semibold",
+    headerSubtitle: "text-muted-foreground",
+    socialButtonsBlockButtonText: "text-foreground",
+    formFieldLabel: "text-[rgba(255,255,255,0.7)]",
+    footerActionLink: "text-primary hover:text-[hsl(270,100%,70%)]",
+    footerActionText: "text-muted-foreground",
+    dividerText: "text-muted-foreground",
+    identityPreviewEditButton: "text-primary",
     formFieldSuccessText: "text-emerald-400",
-    alertText: "text-[#e8e0d2]",
+    alertText: "text-foreground",
     logoBox: "mb-4",
     logoImage: "h-10 w-10",
-    socialButtonsBlockButton: "border-[#2d2c34] bg-[#16151a] hover:bg-[#222128]",
-    formButtonPrimary: "bg-[#9333ea] hover:bg-[#7e22ce] text-white",
-    formFieldInput: "bg-[#16151a] border-[#2d2c34] text-[#e8e0d2]",
+    socialButtonsBlockButton: "border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)]",
+    formButtonPrimary: "bg-primary hover:bg-[hsl(270,100%,50%)] text-white",
+    formFieldInput: "bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.08)] text-foreground",
     footerAction: "justify-center",
-    dividerLine: "bg-[#2d2c34]",
-    alert: "bg-[#16151a] border-[#2d2c34]",
-    otpCodeFieldInput: "bg-[#16151a] border-[#2d2c34] text-[#e8e0d2]",
+    dividerLine: "bg-[rgba(255,255,255,0.08)]",
+    alert: "bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.08)]",
+    otpCodeFieldInput: "bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.08)] text-foreground",
     formFieldRow: "mb-1",
     main: "gap-4",
   },
@@ -79,7 +79,7 @@ const clerkAppearance = {
 
 function SignInPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4" data-testid="page-sign-in">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090B] px-4" data-testid="page-sign-in">
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
     </div>
   );
@@ -87,7 +87,7 @@ function SignInPage() {
 
 function SignUpPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4" data-testid="page-sign-up">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090B] px-4" data-testid="page-sign-up">
       <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
     </div>
   );
@@ -156,14 +156,14 @@ function ClerkProviderWithRoutes() {
       localization={{
         signIn: {
           start: {
-            title: "Return to the Tavern",
-            subtitle: "Sign in to continue your adventure",
+            title: "Welcome to Delve",
+            subtitle: "Sign in to continue your campaign",
           },
         },
         signUp: {
           start: {
-            title: "Join the Party",
-            subtitle: "Create your account to begin",
+            title: "Join Delve",
+            subtitle: "Create your account to get started",
           },
         },
       }}

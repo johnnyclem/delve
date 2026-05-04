@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Calendar, Plus, ArrowLeft, Check, X, HelpCircle } from "lucide-react";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -37,7 +38,7 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
   return (
     <div className="space-y-6" data-testid="calendar-panel">
       <div className="flex items-center justify-between">
-        <h2 className="font-serif text-2xl font-bold text-foreground flex items-center gap-2">
+        <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2 tracking-tight">
           <Calendar className="h-6 w-6 text-primary" />
           Schedule
         </h2>
@@ -51,10 +52,10 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
 
       {isLoading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
         </div>
       ) : !sorted.length ? (
-        <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-[rgba(255,255,255,0.08)] p-8 text-center">
           <Calendar className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground">No sessions scheduled yet.</p>
         </div>
@@ -64,17 +65,19 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
             const date = new Date(ev.proposedAt);
             const isPast = date < new Date();
             return (
-              <button
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 key={ev.id}
                 onClick={() => onSelect(ev.id)}
-                className={`w-full text-left rounded-xl border bg-card p-4 transition-colors ${
-                  isPast ? "border-border/30 opacity-60" : "border-border/50 hover:border-primary/30"
+                className={`w-full text-left rounded-2xl glass-panel-hover p-4 ${
+                  isPast ? "opacity-60" : ""
                 }`}
                 data-testid={`card-event-${ev.id}`}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-semibold text-card-foreground">{ev.title}</h3>
+                    <h3 className="font-semibold text-foreground">{ev.title}</h3>
                     <p className="text-xs text-muted-foreground mt-1">
                       {date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} at {date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                     </p>
@@ -87,7 +90,7 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
                     {ev.status}
                   </span>
                 </div>
-              </button>
+              </motion.button>
             );
           })}
         </div>
@@ -125,7 +128,7 @@ function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back
       </Button>
-      <h2 className="font-serif text-2xl font-bold text-foreground">Schedule Session</h2>
+      <h2 className="text-2xl font-semibold text-foreground tracking-tight">Schedule Session</h2>
       <div className="space-y-4 max-w-md">
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">Title</label>
@@ -168,7 +171,7 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
   };
 
   if (isLoading) {
-    return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-40 rounded-xl" /></div>;
+    return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-40 rounded-2xl" /></div>;
   }
 
   if (!ev) {
@@ -185,15 +188,15 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
       </Button>
 
       <div>
-        <h2 className="font-serif text-2xl font-bold text-foreground" data-testid="text-event-title">{ev.title}</h2>
+        <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-event-title">{ev.title}</h2>
         <p className="text-muted-foreground">
           {date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} at {date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
         </p>
         {ev.location && <p className="text-sm text-muted-foreground mt-1">Location: {ev.location}</p>}
       </div>
 
-      <div className="rounded-xl border border-border/50 bg-card p-5">
-        <h3 className="font-semibold text-card-foreground text-sm mb-3">Your RSVP</h3>
+      <div className="rounded-2xl glass-panel p-5">
+        <h3 className="font-semibold text-foreground text-sm mb-3">Your RSVP</h3>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => handleRsvp("yes")} disabled={upsertRsvp.isPending} data-testid="button-rsvp-yes" className="gap-1">
             <Check className="h-3 w-3 text-emerald-400" /> Yes
@@ -208,8 +211,8 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
 
       {ev.rsvps?.length > 0 && (
-        <div className="rounded-xl border border-border/50 bg-card p-5">
-          <h3 className="font-semibold text-card-foreground text-sm mb-3">RSVPs ({ev.rsvps.length})</h3>
+        <div className="rounded-2xl glass-panel p-5">
+          <h3 className="font-semibold text-foreground text-sm mb-3">RSVPs (<span className="font-mono tabular-nums">{ev.rsvps.length}</span>)</h3>
           <div className="space-y-2">
             {ev.rsvps.map((r: RsvpWithMember) => (
               <div key={r.id} className="flex items-center justify-between text-sm" data-testid={`rsvp-${r.id}`}>
