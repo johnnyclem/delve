@@ -16,6 +16,7 @@ import type { SessionLog, CampaignMember } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 
 export default function SessionsPanel() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -302,6 +303,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       setEditingTitle(false);
       return;
     }
+    const previousTitle = s.title;
     updateSession.mutate(
       { id, data: { title: draftTitle.trim() } },
       {
@@ -309,7 +311,32 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           setEditingTitle(false);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({ title: "Title updated!" });
+          toast({
+            title: "Title updated",
+            duration: 5000,
+            action: (
+              <ToastAction
+                altText="Undo title change"
+                onClick={() => {
+                  updateSession.mutate(
+                    { id, data: { title: previousTitle } },
+                    {
+                      onSuccess: () => {
+                        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+                        queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+                        toast({ title: "Title reverted" });
+                      },
+                      onError: () => {
+                        toast({ title: "Failed to undo title change", variant: "destructive" });
+                      },
+                    },
+                  );
+                }}
+              >
+                Undo
+              </ToastAction>
+            ),
+          });
         },
         onError: () => {
           toast({ title: "Failed to update title", variant: "destructive" });
@@ -325,6 +352,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       setEditingDate(false);
       return;
     }
+    const previousPlayedAt = s?.playedAt ?? null;
     updateSession.mutate(
       { id, data: { playedAt: newPlayedAt ? new Date(newPlayedAt).toISOString() : null } },
       {
@@ -332,7 +360,32 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           setEditingDate(false);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({ title: "Date updated!" });
+          toast({
+            title: "Date updated",
+            duration: 5000,
+            action: (
+              <ToastAction
+                altText="Undo date change"
+                onClick={() => {
+                  updateSession.mutate(
+                    { id, data: { playedAt: previousPlayedAt } },
+                    {
+                      onSuccess: () => {
+                        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+                        queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+                        toast({ title: "Date reverted" });
+                      },
+                      onError: () => {
+                        toast({ title: "Failed to undo date change", variant: "destructive" });
+                      },
+                    },
+                  );
+                }}
+              >
+                Undo
+              </ToastAction>
+            ),
+          });
         },
         onError: () => {
           toast({ title: "Failed to update date", variant: "destructive" });
