@@ -1001,6 +1001,8 @@ components:
             $ref: "#/components/schemas/PartyMemberSummary"
         totalSessions:
           type: integer
+        recapCount:
+          type: integer
         recentRolls:
           type: array
           items:
@@ -1009,6 +1011,7 @@ components:
         - campaign
         - partyMembers
         - totalSessions
+        - recapCount
         - recentRolls
 
     PartyMemberSummary:

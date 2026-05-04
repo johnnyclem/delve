@@ -58,7 +58,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 
 - **Auth**: Clerk with dark glass theme, "Welcome Back" / "Begin Your Journey" copy. Landing page IS the sign-in page (no marketing page).
 - **Join flow**: Non-members see a "Join Campaign" page with invite code input. DM shares invite code from dashboard.
-- **Dashboard**: Overview with next session, party members, latest recap, recent rolls. DM sees invite code.
+- **Dashboard**: Overview with session stats card (total sessions + recap count), next session, party members, latest recap, recent rolls. DM sees invite code.
 - **Characters**: List + detail view with editable 5e character sheets + multi-step creation wizard (basics → ability scores → combat → details)
 - **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes. DM notes have autosave: drafts persist to localStorage immediately on each keystroke, and auto-save to the server via debounced PATCH (30s after last keystroke). Drafts are restored when re-opening edit mode if the server version hasn't changed. Visual status indicators show auto-save progress. Custom hook: `use-autosave.ts`. Players get notified of new recaps via "New" badge + toast; notification clears after viewing.
 - **Calendar**: Schedule sessions with RSVP (yes/maybe/no)

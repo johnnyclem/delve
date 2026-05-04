@@ -45,6 +45,7 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
   });
 
   const sessions = await db.select().from(sessionLogsTable).where(eq(sessionLogsTable.campaignId, campaignId));
+  const recapCount = sessions.filter((s) => !!s.recapMd).length;
 
   const [latestRecap] = await db
     .select()
@@ -102,6 +103,7 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
     latestRecap: safeRecap,
     partyMembers,
     totalSessions: sessions.length,
+    recapCount,
     recentRolls,
   };
 

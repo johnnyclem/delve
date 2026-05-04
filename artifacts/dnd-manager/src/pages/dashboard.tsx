@@ -230,9 +230,6 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
         <h1 className="text-2xl md:text-3xl font-semibold text-foreground tracking-tight" data-testid="text-campaign-name">
           {dashboard?.campaign?.name ?? "Your Campaign"}
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          <span className="font-mono tabular-nums">{dashboard?.totalSessions ?? 0}</span> sessions played
-        </p>
       </div>
 
       {dashboard?.inviteCode && (
@@ -244,6 +241,32 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
           <span className="font-mono text-lg font-bold text-primary tracking-widest tabular-nums" data-testid="text-invite-code">{dashboard.inviteCode}</span>
         </AnimatedBorder>
       )}
+
+      <motion.button
+        whileTap={{ scale: 0.95 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        onClick={() => onNavigate("sessions")}
+        className="w-full text-left rounded-2xl glass-panel-hover p-5"
+        data-testid="card-session-stats"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+            <ScrollText className="h-5 w-5 text-primary" />
+            Sessions
+          </h3>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="flex gap-6">
+          <div>
+            <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-total-sessions">{dashboard?.totalSessions ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">sessions played</p>
+          </div>
+          <div>
+            <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-recap-count">{dashboard?.recapCount ?? 0}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">recaps available</p>
+          </div>
+        </div>
+      </motion.button>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("calendar")} className="text-left rounded-2xl glass-panel-hover p-5">

@@ -345,5 +345,6 @@ export interface DashboardSummary {
   latestRecap?: SessionLog;
   partyMembers: PartyMemberSummary[];
   totalSessions: number;
+  recapCount: number;
   recentRolls: DiceRoll[];
 }
