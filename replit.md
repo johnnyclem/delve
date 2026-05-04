@@ -50,7 +50,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - **Entity scoping**: All entity queries (read + write) scope by both `id` and `campaignId`
 - **Invite code flow**: Campaign has `inviteCode` column. DM sees invite code on dashboard. Players enter code to join via `POST /members/join`.
 - **XSS prevention**: HTML escaped before markdown rendering (`dangerouslySetInnerHTML`)
-- **CORS**: Currently allows all origins (tighten for production)
+- **CORS**: In production, cross-origin requests are blocked by default (frontend and API share the same domain via path-based routing). Set `ALLOWED_ORIGINS` env var (comma-separated URLs) to allow specific external origins. In development, all origins are allowed.
 - **Typed middleware**: `AuthenticatedRequest` interface with helper functions (`getUserId`, `getCampaignMember`, `getUserDisplayName`, `getUserAvatarUrl`) to avoid `as any` casts in routes.
 
 ## Key Features
