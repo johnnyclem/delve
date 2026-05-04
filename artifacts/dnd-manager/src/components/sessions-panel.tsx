@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -150,6 +150,25 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
 
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState("");
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editingNotes && notesRef.current) {
+      notesRef.current.focus();
+      const len = notesRef.current.value.length;
+      notesRef.current.setSelectionRange(len, len);
+    }
+  }, [editingNotes]);
+
+  const isDirty = editingNotes && notes !== (s?.rawNotesMd ?? "");
+  const isRecapStale = !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt));
+
+  const handleBack = () => {
+    if (isDirty && !confirm("You have unsaved changes to your notes. Discard them?")) {
+      return;
+    }
+    onBack();
+  };
 
   const handleGenerateRecap = () => {
     generateRecap.mutate(
@@ -175,7 +194,11 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         onSuccess: () => {
           setEditingNotes(false);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
           toast({ title: "Notes saved!" });
+        },
+        onError: () => {
+          toast({ title: "Failed to save notes", variant: "destructive" });
         },
       },
     );
@@ -192,16 +215,10 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   return (
     <div className="space-y-6" data-testid="session-detail">
       <div className="flex items-center gap-3 flex-wrap">
-        <Button variant="ghost" size="sm" onClick={onBack} data-testid="button-back-sessions">
+        <Button variant="ghost" size="sm" onClick={handleBack} data-testid="button-back-sessions">
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back
         </Button>
-        {isDm && s.rawNotesMd && (
-          <Button size="sm" variant="outline" onClick={handleGenerateRecap} disabled={generateRecap.isPending} data-testid="button-generate-recap">
-            <Sparkles className="h-4 w-4 mr-1" />
-            {generateRecap.isPending ? "Generating..." : "Generate Recap"}
-          </Button>
-        )}
       </div>
 
       <div>
@@ -215,10 +232,18 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
 
       {s.recapMd && (
         <div className="rounded-xl border border-primary/20 bg-card p-6">
-          <h3 className="font-semibold text-card-foreground mb-3 flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            AI Recap
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-card-foreground flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              AI Recap
+            </h3>
+            {isDm && isRecapStale && (
+              <span className="flex items-center gap-1 text-xs text-amber-400">
+                <AlertTriangle className="h-3 w-3" />
+                Notes updated since last recap
+              </span>
+            )}
+          </div>
           <div className="prose prose-sm prose-invert max-w-none text-foreground/90" dangerouslySetInnerHTML={{ __html: markdownToHtml(s.recapMd) }} />
         </div>
       )}
@@ -226,25 +251,41 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       {isDm && (
         <div className="rounded-xl border border-border/50 bg-card p-6">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-card-foreground">DM Notes</h3>
-            {!editingNotes && (
-              <Button variant="ghost" size="sm" onClick={() => { setNotes(s.rawNotesMd ?? ""); setEditingNotes(true); }} data-testid="button-edit-notes">
-                Edit
-              </Button>
-            )}
+            <h3 className="font-semibold text-card-foreground flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-muted-foreground" />
+              DM Notes
+              {isDirty && <span className="text-xs text-amber-400">(unsaved)</span>}
+            </h3>
+            <div className="flex items-center gap-2">
+              {!editingNotes && s.rawNotesMd && (
+                <Button size="sm" variant="outline" onClick={handleGenerateRecap} disabled={generateRecap.isPending} data-testid="button-generate-recap">
+                  <Sparkles className="h-4 w-4 mr-1" />
+                  {generateRecap.isPending ? "Generating..." : s.recapMd ? "Regenerate Recap" : "Generate Recap"}
+                </Button>
+              )}
+              {!editingNotes && (
+                <Button variant="ghost" size="sm" onClick={() => { setNotes(s.rawNotesMd ?? ""); setEditingNotes(true); }} data-testid="button-edit-notes">
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              )}
+            </div>
           </div>
           {editingNotes ? (
             <div className="space-y-3">
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={10} data-testid="input-edit-notes" />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={handleSaveNotes} disabled={updateSession.isPending} data-testid="button-save-notes">Save</Button>
-                <Button variant="ghost" size="sm" onClick={() => setEditingNotes(false)}>Cancel</Button>
+              <Textarea ref={notesRef} value={notes} onChange={(e) => setNotes(e.target.value)} rows={12} placeholder="Write your session notes in markdown..." className="font-mono text-sm" data-testid="input-edit-notes" />
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={handleSaveNotes} disabled={updateSession.isPending || !isDirty} data-testid="button-save-notes">
+                  <Save className="h-4 w-4 mr-1" />
+                  {updateSession.isPending ? "Saving..." : "Save Notes"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { if (isDirty && !confirm("Discard unsaved changes?")) return; setEditingNotes(false); }}>Cancel</Button>
               </div>
             </div>
+          ) : s.rawNotesMd ? (
+            <div className="prose prose-sm prose-invert max-w-none text-foreground/90" data-testid="text-session-notes" dangerouslySetInnerHTML={{ __html: markdownToHtml(s.rawNotesMd) }} />
           ) : (
-            <div className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-session-notes">
-              {s.rawNotesMd || "No notes yet."}
-            </div>
+            <p className="text-sm text-muted-foreground italic" data-testid="text-session-notes">No notes yet. Click Edit to add session notes.</p>
           )}
         </div>
       )}
