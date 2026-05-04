@@ -58,7 +58,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - **Auth**: Clerk with dark theme, "Return to the Tavern" / "Join the Party" copy. Landing page IS the sign-in page (no marketing page).
 - **Join flow**: Non-members see a "Join Campaign" page with invite code input. DM shares invite code from dashboard.
 - **Dashboard**: Overview with next session, party members, latest recap, recent rolls. DM sees invite code.
-- **Characters**: List + detail view with editable 5e character sheets
+- **Characters**: List + detail view with editable 5e character sheets + multi-step creation wizard (basics → ability scores → combat → details)
 - **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes.
 - **Calendar**: Schedule sessions with RSVP (yes/maybe/no)
 - **Dice Roller**: Roll any dice expression (e.g. 2d6+3) with shared log
@@ -84,6 +84,7 @@ Auth-only (no membership required):
 Requires campaign membership:
 - GET /members — list members
 - GET /characters — list characters
+- POST /characters — create character (any member)
 - GET /characters/:id — get character detail
 - PATCH /characters/:id — update character (owner only)
 - GET /sessions — list session logs (rawNotesMd stripped for players)

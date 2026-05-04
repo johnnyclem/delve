@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, ChevronRight, Edit, Heart, Shield, Zap, ArrowLeft } from "lucide-react";
+import { BookOpen, ChevronRight, Edit, Heart, Shield, Zap, ArrowLeft, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useListCharacters, useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey } from "@workspace/api-client-react";
 import type { Character, CharacterSheet } from "@workspace/api-client-react";
@@ -9,26 +9,49 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import CharacterCreateForm from "./character-create";
+
+type View = { mode: "list" } | { mode: "detail"; id: number } | { mode: "create" };
 
 export default function CharacterListPanel() {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [view, setView] = useState<View>({ mode: "list" });
 
-  if (selectedId !== null) {
-    return <CharacterDetail id={selectedId} onBack={() => setSelectedId(null)} />;
+  if (view.mode === "create") {
+    return (
+      <CharacterCreateForm
+        onCancel={() => setView({ mode: "list" })}
+        onCreated={() => setView({ mode: "list" })}
+      />
+    );
   }
 
-  return <CharacterGrid onSelect={setSelectedId} />;
+  if (view.mode === "detail") {
+    return <CharacterDetail id={view.id} onBack={() => setView({ mode: "list" })} />;
+  }
+
+  return (
+    <CharacterGrid
+      onSelect={(id) => setView({ mode: "detail", id })}
+      onCreate={() => setView({ mode: "create" })}
+    />
+  );
 }
 
-function CharacterGrid({ onSelect }: { onSelect: (id: number) => void }) {
+function CharacterGrid({ onSelect, onCreate }: { onSelect: (id: number) => void; onCreate: () => void }) {
   const { data: characters, isLoading } = useListCharacters();
 
   return (
     <div className="space-y-6" data-testid="character-list-panel">
-      <h2 className="font-serif text-2xl font-bold text-foreground flex items-center gap-2">
-        <BookOpen className="h-6 w-6 text-primary" />
-        Characters
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="font-serif text-2xl font-bold text-foreground flex items-center gap-2">
+          <BookOpen className="h-6 w-6 text-primary" />
+          Characters
+        </h2>
+        <Button onClick={onCreate} size="sm" data-testid="button-new-character">
+          <Plus className="h-4 w-4 mr-1" />
+          New Character
+        </Button>
+      </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -38,7 +61,11 @@ function CharacterGrid({ onSelect }: { onSelect: (id: number) => void }) {
         <div className="rounded-xl border border-dashed border-border/50 p-8 text-center">
           <BookOpen className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
           <p className="text-muted-foreground">No characters yet.</p>
-          <p className="text-sm text-muted-foreground mt-1">Characters will appear here when created by party members.</p>
+          <p className="text-sm text-muted-foreground mt-1">Create your first character to get started!</p>
+          <Button onClick={onCreate} className="mt-4" data-testid="button-create-first-character">
+            <Plus className="h-4 w-4 mr-1" />
+            Create Character
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

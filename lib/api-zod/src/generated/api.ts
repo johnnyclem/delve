@@ -196,6 +196,66 @@ export const ListCharactersResponseItem = zod.object({
 export const ListCharactersResponse = zod.array(ListCharactersResponseItem);
 
 /**
+ * @summary Create a new character
+ */
+export const createCharacterBodyLevelDefault = 1;
+
+export const CreateCharacterBody = zod.object({
+  name: zod.string(),
+  race: zod.string(),
+  class: zod.string(),
+  level: zod.number().default(createCharacterBodyLevelDefault),
+  sheetJson: zod
+    .object({
+      strength: zod.number(),
+      dexterity: zod.number(),
+      constitution: zod.number(),
+      intelligence: zod.number(),
+      wisdom: zod.number(),
+      charisma: zod.number(),
+      maxHp: zod.number(),
+      currentHp: zod.number(),
+      armorClass: zod.number(),
+      speed: zod.number(),
+      proficiencyBonus: zod.number(),
+      attacks: zod
+        .array(
+          zod.object({
+            name: zod.string(),
+            bonus: zod.number(),
+            damage: zod.string(),
+          }),
+        )
+        .optional(),
+      savingThrows: zod.array(zod.string()).optional(),
+      skills: zod.array(zod.string()).optional(),
+      spells: zod
+        .array(
+          zod.object({
+            name: zod.string(),
+            level: zod.number(),
+            prepared: zod.boolean().optional(),
+          }),
+        )
+        .optional(),
+      cantrips: zod.array(zod.string()).optional(),
+      spellSlots: zod
+        .record(
+          zod.string(),
+          zod.object({
+            total: zod.number(),
+            used: zod.number(),
+          }),
+        )
+        .optional(),
+      inventory: zod.array(zod.string()).optional(),
+      notes: zod.string().optional(),
+    })
+    .optional(),
+  portraitUrl: zod.string().nullish(),
+});
+
+/**
  * @summary Get a character by ID
  */
 export const GetCharacterParams = zod.object({

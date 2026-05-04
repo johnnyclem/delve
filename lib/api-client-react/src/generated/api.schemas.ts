@@ -109,6 +109,16 @@ export interface UpdateCharacterBody {
   portraitUrl?: string | null;
 }
 
+export interface CreateCharacterBody {
+  name: string;
+  race: string;
+  class: string;
+  level?: number;
+  sheetJson?: CharacterSheet;
+  /** @nullable */
+  portraitUrl?: string | null;
+}
+
 export interface SessionLog {
   id: number;
   campaignId: number;

@@ -3,9 +3,45 @@ import { db, charactersTable, campaignMembersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
 import { getOrCreateCampaign } from "../lib/campaign";
-import { UpdateCharacterBody } from "@workspace/api-zod";
+import { UpdateCharacterBody, CreateCharacterBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
+
+router.post("/characters", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const parsed = CreateCharacterBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const campaignId = await getOrCreateCampaign();
+
+  const [created] = await db
+    .insert(charactersTable)
+    .values({
+      campaignId,
+      ownerUserId: userId,
+      name: parsed.data.name,
+      race: parsed.data.race,
+      class: parsed.data.class,
+      level: parsed.data.level ?? 1,
+      sheetJson: {
+        strength: 10, dexterity: 10, constitution: 10,
+        intelligence: 10, wisdom: 10, charisma: 10,
+        maxHp: 10, currentHp: 10, armorClass: 10,
+        speed: 30, proficiencyBonus: 2,
+        ...(parsed.data.sheetJson ?? {}),
+      },
+      portraitUrl: parsed.data.portraitUrl ?? null,
+    })
+    .returning();
+
+  const members = await db.select().from(campaignMembersTable).where(eq(campaignMembersTable.campaignId, campaignId));
+  const owner = members.find((m) => m.userId === created.ownerUserId);
+
+  res.status(201).json({ ...created, ownerDisplayName: owner?.displayName ?? "Unknown" });
+});
 
 router.get("/characters", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const campaignId = await getOrCreateCampaign();

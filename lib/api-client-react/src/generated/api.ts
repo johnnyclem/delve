@@ -22,6 +22,7 @@ import type {
   Campaign,
   CampaignMember,
   Character,
+  CreateCharacterBody,
   CreateEventBody,
   CreateSessionBody,
   DashboardSummary,
@@ -494,6 +495,92 @@ export function useListCharacters<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Create a new character
+ */
+export const getCreateCharacterUrl = () => {
+  return `/api/characters`;
+};
+
+export const createCharacter = async (
+  createCharacterBody: CreateCharacterBody,
+  options?: RequestInit,
+): Promise<Character> => {
+  return customFetch<Character>(getCreateCharacterUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createCharacterBody),
+  });
+};
+
+export const getCreateCharacterMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCharacter>>,
+    TError,
+    { data: BodyType<CreateCharacterBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createCharacter>>,
+  TError,
+  { data: BodyType<CreateCharacterBody> },
+  TContext
+> => {
+  const mutationKey = ["createCharacter"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createCharacter>>,
+    { data: BodyType<CreateCharacterBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createCharacter(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateCharacterMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createCharacter>>
+>;
+export type CreateCharacterMutationBody = BodyType<CreateCharacterBody>;
+export type CreateCharacterMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new character
+ */
+export const useCreateCharacter = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createCharacter>>,
+    TError,
+    { data: BodyType<CreateCharacterBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createCharacter>>,
+  TError,
+  { data: BodyType<CreateCharacterBody> },
+  TContext
+> => {
+  return useMutation(getCreateCharacterMutationOptions(options));
+};
 
 /**
  * @summary Get a character by ID

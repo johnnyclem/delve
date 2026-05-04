@@ -114,6 +114,23 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Character"
+    post:
+      operationId: createCharacter
+      tags: [characters]
+      summary: Create a new character
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCharacterBody"
+      responses:
+        "201":
+          description: Created character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
 
   /characters/{id}:
     get:
@@ -638,6 +655,27 @@ components:
           $ref: "#/components/schemas/CharacterSheet"
         portraitUrl:
           type: ["string", "null"]
+
+    CreateCharacterBody:
+      type: object
+      properties:
+        name:
+          type: string
+        race:
+          type: string
+        class:
+          type: string
+        level:
+          type: integer
+          default: 1
+        sheetJson:
+          $ref: "#/components/schemas/CharacterSheet"
+        portraitUrl:
+          type: ["string", "null"]
+      required:
+        - name
+        - race
+        - class
 
     SessionLog:
       type: object
