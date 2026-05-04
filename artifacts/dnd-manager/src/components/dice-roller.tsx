@@ -3,6 +3,7 @@ import { Dice5 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useRollDice, useGetRecentRolls, getGetRecentRollsQueryKey } from "@workspace/api-client-react";
 import type { DiceRoll, DiceRollBreakdown } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -67,21 +68,22 @@ export default function DiceRollerPanel() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 400, damping: 17 }}
-            className="rounded-2xl glass-panel p-6 text-center ambient-glow"
             data-testid="dice-result"
           >
-            <p className="text-sm text-muted-foreground mb-1 font-mono">{lastResult.expression}</p>
-            <p className="font-mono text-5xl font-bold text-primary tabular-nums" data-testid="text-dice-result">{lastResult.result}</p>
-            {lastResult.breakdown?.rolls?.map((r, i) => (
-              <p key={i} className="text-xs text-muted-foreground mt-1 font-mono tabular-nums">
-                {r.die}: [{r.results.join(", ")}]
-              </p>
-            ))}
-            {lastResult.breakdown?.modifier !== undefined && lastResult.breakdown.modifier !== 0 && (
-              <p className="text-xs text-muted-foreground font-mono tabular-nums">
-                Modifier: {lastResult.breakdown.modifier > 0 ? "+" : ""}{lastResult.breakdown.modifier}
-              </p>
-            )}
+            <AnimatedBorder className="p-6 text-center">
+              <p className="text-sm text-muted-foreground mb-1 font-mono">{lastResult.expression}</p>
+              <p className="font-mono text-5xl font-bold text-primary tabular-nums" data-testid="text-dice-result">{lastResult.result}</p>
+              {lastResult.breakdown?.rolls?.map((r, i) => (
+                <p key={i} className="text-xs text-muted-foreground mt-1 font-mono tabular-nums">
+                  {r.die}: [{r.results.join(", ")}]
+                </p>
+              ))}
+              {lastResult.breakdown?.modifier !== undefined && lastResult.breakdown.modifier !== 0 && (
+                <p className="text-xs text-muted-foreground font-mono tabular-nums">
+                  Modifier: {lastResult.breakdown.modifier > 0 ? "+" : ""}{lastResult.breakdown.modifier}
+                </p>
+              )}
+            </AnimatedBorder>
           </motion.div>
         )}
       </AnimatePresence>

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { AnimatedBorder } from "@/components/ui/animated-border";
 import CharacterCreateForm from "./character-create";
 
 type View = { mode: "list" } | { mode: "detail"; id: number } | { mode: "create" };
@@ -173,7 +174,7 @@ function CharacterDetail({ id, onBack }: { id: number; onBack: () => void }) {
 
       {sheet && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="rounded-2xl glass-panel p-5 ambient-glow">
+          <AnimatedBorder className="p-5">
             <h3 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">
               <Heart className="h-4 w-4 text-red-400" /> Hit Points
             </h3>
@@ -191,7 +192,7 @@ function CharacterDetail({ id, onBack }: { id: number; onBack: () => void }) {
               )}
               <span className="text-muted-foreground text-sm font-mono tabular-nums">/ {sheet.maxHp ?? 0}</span>
             </div>
-          </div>
+          </AnimatedBorder>
 
           <div className="rounded-2xl glass-panel p-5">
             <h3 className="font-semibold text-sm text-foreground mb-3 flex items-center gap-2">

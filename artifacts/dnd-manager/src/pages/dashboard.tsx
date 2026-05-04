@@ -16,6 +16,7 @@ import SessionsPanel from "@/components/sessions-panel";
 import CalendarPanel from "@/components/calendar-panel";
 import { useClerk } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
+import { AnimatedBorder } from "@/components/ui/animated-border";
 
 const navItems = [
   { id: "overview", label: "Overview", icon: Shield },
@@ -235,13 +236,13 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
       </div>
 
       {dashboard?.inviteCode && (
-        <div className="rounded-2xl glass-panel p-4 flex items-center justify-between" style={{ boxShadow: "0 0 25px hsla(270, 100%, 60%, 0.12)" }}>
+        <AnimatedBorder className="p-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-foreground">Invite Code</p>
             <p className="text-xs text-muted-foreground">Share with players to join</p>
           </div>
           <span className="font-mono text-lg font-bold text-primary tracking-widest tabular-nums" data-testid="text-invite-code">{dashboard.inviteCode}</span>
-        </div>
+        </AnimatedBorder>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

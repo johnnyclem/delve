@@ -281,3 +281,35 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+@keyframes animated-border-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animated-border-gradient {
+  position: absolute;
+  inset: -100%;
+  z-index: 0;
+  pointer-events: none;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    hsla(270, 100%, 60%, 0.5) 5%,
+    hsla(320, 100%, 50%, 0.4) 10%,
+    transparent 15%,
+    transparent 100%
+  );
+  animation: animated-border-spin 4s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-border-gradient {
+    animation: none;
+  }
+}
