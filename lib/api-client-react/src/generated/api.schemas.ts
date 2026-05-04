@@ -151,6 +151,7 @@ export interface CreateSessionBody {
 }
 
 export interface UpdateSessionBody {
+  sessionNumber?: number;
   title?: string;
   /** @nullable */
   playedAt?: string | null;

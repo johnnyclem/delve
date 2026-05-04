@@ -760,6 +760,8 @@ components:
     UpdateSessionBody:
       type: object
       properties:
+        sessionNumber:
+          type: integer
         title:
           type: string
         playedAt:

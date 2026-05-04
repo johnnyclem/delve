@@ -503,6 +503,7 @@ export const UpdateSessionParams = zod.object({
 });
 
 export const UpdateSessionBody = zod.object({
+  sessionNumber: zod.number().optional(),
   title: zod.string().optional(),
   playedAt: zod.coerce.date().nullish(),
   rawNotesMd: zod.string().nullish(),

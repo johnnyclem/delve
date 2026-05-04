@@ -202,6 +202,10 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [draftDate, setDraftDate] = useState("");
   const dateInputRef = useRef<HTMLInputElement>(null);
 
+  const [editingSessionNumber, setEditingSessionNumber] = useState(false);
+  const [draftSessionNumber, setDraftSessionNumber] = useState(0);
+  const sessionNumberInputRef = useRef<HTMLInputElement>(null);
+
   const autosaveSaveFn = useCallback(
     async (text: string) => {
       await updateSessionApi(id, { rawNotesMd: text });
@@ -253,6 +257,13 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     }
   }, [editingDate]);
 
+  useEffect(() => {
+    if (editingSessionNumber && sessionNumberInputRef.current) {
+      sessionNumberInputRef.current.focus();
+      sessionNumberInputRef.current.select();
+    }
+  }, [editingSessionNumber]);
+
   const isDirty = editingNotes && notes !== (s?.rawNotesMd ?? "");
 
   useEffect(() => {
@@ -264,6 +275,27 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
   const isRecapStale = !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt));
+
+  const handleSaveSessionNumber = useCallback(() => {
+    if (!s || draftSessionNumber < 1 || draftSessionNumber === s.sessionNumber) {
+      setEditingSessionNumber(false);
+      return;
+    }
+    updateSession.mutate(
+      { id, data: { sessionNumber: draftSessionNumber } },
+      {
+        onSuccess: () => {
+          setEditingSessionNumber(false);
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          toast({ title: "Session number updated!" });
+        },
+        onError: () => {
+          toast({ title: "Failed to update session number", variant: "destructive" });
+        },
+      },
+    );
+  }, [s, draftSessionNumber, id, updateSession, queryClient, toast]);
 
   const handleSaveTitle = useCallback(() => {
     if (!s || !draftTitle.trim() || draftTitle.trim() === s.title) {
@@ -369,7 +401,31 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
 
       <div>
-        {isDm && editingTitle ? (
+        {isDm && editingSessionNumber ? (
+          <div className="flex items-center gap-2" data-testid="edit-session-number">
+            <span className="text-2xl font-semibold text-foreground whitespace-nowrap tracking-tight">Session</span>
+            <Input
+              ref={sessionNumberInputRef}
+              type="number"
+              min={1}
+              value={draftSessionNumber}
+              onChange={(e) => setDraftSessionNumber(parseInt(e.target.value) || 1)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveSessionNumber();
+                if (e.key === "Escape") setEditingSessionNumber(false);
+              }}
+              className="text-2xl font-semibold font-mono tabular-nums h-auto py-0.5 px-2 w-24"
+              data-testid="input-edit-session-number"
+            />
+            <span className="text-2xl font-semibold text-foreground">: {s.title}</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={handleSaveSessionNumber} disabled={updateSession.isPending || draftSessionNumber < 1} data-testid="button-save-session-number">
+              <Check className="h-4 w-4 text-green-400" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingSessionNumber(false)} data-testid="button-cancel-session-number">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </div>
+        ) : isDm && editingTitle ? (
           <div className="flex items-center gap-2" data-testid="edit-session-title">
             <span className="text-2xl font-semibold text-foreground whitespace-nowrap tracking-tight">Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>:</span>
             <Input
@@ -392,12 +448,21 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           </div>
         ) : (
           <h2
-            className={`text-2xl font-semibold text-foreground tracking-tight${isDm ? " cursor-pointer hover:text-primary/80 transition-colors" : ""}`}
-            onClick={isDm ? () => { setDraftTitle(s.title); setEditingTitle(true); } : undefined}
-            title={isDm ? "Click to edit title" : undefined}
+            className="text-2xl font-semibold text-foreground tracking-tight"
             data-testid="text-session-title"
           >
-            Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
+            Session{" "}
+            <span
+              className={`font-mono tabular-nums${isDm ? " cursor-pointer hover:text-primary/80 transition-colors" : ""}`}
+              onClick={isDm ? (e) => { e.stopPropagation(); setDraftSessionNumber(s.sessionNumber); setEditingSessionNumber(true); } : undefined}
+              title={isDm ? "Click to edit session number" : undefined}
+              data-testid="text-session-number"
+            >{s.sessionNumber}</span>:{" "}
+            <span
+              className={isDm ? "cursor-pointer hover:text-primary/80 transition-colors" : ""}
+              onClick={isDm ? () => { setDraftTitle(s.title); setEditingTitle(true); } : undefined}
+              title={isDm ? "Click to edit title" : undefined}
+            >{s.title}</span>
             {isDm && <Pencil className="inline h-3.5 w-3.5 ml-2 text-muted-foreground opacity-0 group-hover:opacity-100" />}
           </h2>
         )}

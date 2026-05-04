@@ -140,6 +140,7 @@ router.patch("/sessions/:id", requireAuth, requireCampaignMember, async (req, re
   }
 
   const updateData: Record<string, unknown> = {};
+  if (parsed.data.sessionNumber !== undefined) updateData.sessionNumber = parsed.data.sessionNumber;
   if (parsed.data.title !== undefined) updateData.title = parsed.data.title;
   if (parsed.data.playedAt !== undefined) updateData.playedAt = parsed.data.playedAt ? new Date(parsed.data.playedAt) : null;
   if (parsed.data.rawNotesMd !== undefined) updateData.rawNotesMd = parsed.data.rawNotesMd;
