@@ -1,0 +1,18 @@
+import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+import { campaignsTable } from "./campaigns";
+
+export const campaignMembersTable = pgTable("campaign_members", {
+  id: serial("id").primaryKey(),
+  campaignId: integer("campaign_id").notNull().references(() => campaignsTable.id),
+  userId: text("user_id").notNull(),
+  role: text("role").notNull().default("player"),
+  displayName: text("display_name").notNull(),
+  avatarUrl: text("avatar_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const insertCampaignMemberSchema = createInsertSchema(campaignMembersTable).omit({ id: true, createdAt: true });
+export type InsertCampaignMember = z.infer<typeof insertCampaignMemberSchema>;
+export type CampaignMember = typeof campaignMembersTable.$inferSelect;

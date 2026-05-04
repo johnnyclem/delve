@@ -1,22 +1,37 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: D&D Campaign Manager API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: campaign
+    description: Campaign operations
+  - name: members
+    description: Campaign member operations
+  - name: characters
+    description: Character sheet operations
+  - name: sessions
+    description: Session log operations
+  - name: calendar
+    description: Session scheduling and RSVPs
+  - name: dice
+    description: Dice rolling
+  - name: recap
+    description: AI recap generation
+  - name: dashboard
+    description: Dashboard summary
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +39,375 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /campaign:
+    get:
+      operationId: getCampaign
+      tags: [campaign]
+      summary: Get current campaign
+      responses:
+        "200":
+          description: Campaign details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+
+  /campaign/dashboard:
+    get:
+      operationId: getDashboard
+      tags: [dashboard]
+      summary: Dashboard summary (next session, party roster, latest recap)
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /members:
+    get:
+      operationId: listMembers
+      tags: [members]
+      summary: List campaign members
+      responses:
+        "200":
+          description: List of members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignMember"
+
+  /members/me:
+    get:
+      operationId: getMyMembership
+      tags: [members]
+      summary: Get the current user's membership and role
+      responses:
+        "200":
+          description: Current user membership
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignMember"
+        "404":
+          description: Not a member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /characters:
+    get:
+      operationId: listCharacters
+      tags: [characters]
+      summary: List all active characters in the campaign
+      responses:
+        "200":
+          description: List of characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Character"
+
+  /characters/{id}:
+    get:
+      operationId: getCharacter
+      tags: [characters]
+      summary: Get a character by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Character details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateCharacter
+      tags: [characters]
+      summary: Update a character sheet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCharacterBody"
+      responses:
+        "200":
+          description: Updated character
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List all session logs
+      responses:
+        "200":
+          description: List of sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionLog"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a new session log (DM only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionBody"
+      responses:
+        "201":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLog"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Get a session log by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLog"
+    patch:
+      operationId: updateSession
+      tags: [sessions]
+      summary: Update a session log (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionBody"
+      responses:
+        "200":
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLog"
+
+  /sessions/{id}/generate-recap:
+    post:
+      operationId: generateRecap
+      tags: [recap]
+      summary: Generate a narrative recap from session notes (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Generated recap text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedRecap"
+
+  /sessions/latest-recap:
+    get:
+      operationId: getLatestRecap
+      tags: [sessions]
+      summary: Get the latest published recap
+      responses:
+        "200":
+          description: Latest recap
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLog"
+        "404":
+          description: No recaps found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /calendar:
+    get:
+      operationId: listEvents
+      tags: [calendar]
+      summary: List scheduled/proposed sessions
+      responses:
+        "200":
+          description: List of calendar events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CalendarEvent"
+    post:
+      operationId: createEvent
+      tags: [calendar]
+      summary: Create a new session event (DM only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEventBody"
+      responses:
+        "201":
+          description: Created event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEvent"
+
+  /calendar/{id}:
+    get:
+      operationId: getEvent
+      tags: [calendar]
+      summary: Get a calendar event with RSVPs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Event with RSVPs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEventWithRsvps"
+    patch:
+      operationId: updateEvent
+      tags: [calendar]
+      summary: Update a calendar event (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEventBody"
+      responses:
+        "200":
+          description: Updated event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarEvent"
+
+  /calendar/{eventId}/rsvp:
+    put:
+      operationId: upsertRsvp
+      tags: [calendar]
+      summary: Set or update RSVP for an event
+      parameters:
+        - name: eventId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertRsvpBody"
+      responses:
+        "200":
+          description: RSVP saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rsvp"
+
+  /dice/roll:
+    post:
+      operationId: rollDice
+      tags: [dice]
+      summary: Roll dice and log the result
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollDiceBody"
+      responses:
+        "201":
+          description: Dice roll result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiceRoll"
+
+  /dice/recent:
+    get:
+      operationId: getRecentRolls
+      tags: [dice]
+      summary: Get the 20 most recent dice rolls
+      responses:
+        "200":
+          description: Recent rolls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiceRoll"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +418,556 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        worldName:
+          type: ["string", "null"]
+        dmUserId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - dmUserId
+        - createdAt
+
+    CampaignMember:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        userId:
+          type: string
+        role:
+          type: string
+          enum: [dm, player]
+        displayName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - userId
+        - role
+        - displayName
+        - createdAt
+
+    CharacterSheet:
+      type: object
+      properties:
+        strength:
+          type: integer
+        dexterity:
+          type: integer
+        constitution:
+          type: integer
+        intelligence:
+          type: integer
+        wisdom:
+          type: integer
+        charisma:
+          type: integer
+        maxHp:
+          type: integer
+        currentHp:
+          type: integer
+        armorClass:
+          type: integer
+        speed:
+          type: integer
+        proficiencyBonus:
+          type: integer
+        attacks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Attack"
+        savingThrows:
+          type: array
+          items:
+            type: string
+        skills:
+          type: array
+          items:
+            type: string
+        spells:
+          type: array
+          items:
+            $ref: "#/components/schemas/Spell"
+        cantrips:
+          type: array
+          items:
+            type: string
+        spellSlots:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/SpellSlotLevel"
+        inventory:
+          type: array
+          items:
+            type: string
+        notes:
+          type: string
+      required:
+        - strength
+        - dexterity
+        - constitution
+        - intelligence
+        - wisdom
+        - charisma
+        - maxHp
+        - currentHp
+        - armorClass
+        - speed
+        - proficiencyBonus
+
+    Attack:
+      type: object
+      properties:
+        name:
+          type: string
+        bonus:
+          type: integer
+        damage:
+          type: string
+      required:
+        - name
+        - bonus
+        - damage
+
+    Spell:
+      type: object
+      properties:
+        name:
+          type: string
+        level:
+          type: integer
+        prepared:
+          type: boolean
+      required:
+        - name
+        - level
+
+    SpellSlotLevel:
+      type: object
+      properties:
+        total:
+          type: integer
+        used:
+          type: integer
+      required:
+        - total
+        - used
+
+    Character:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        ownerUserId:
+          type: string
+        ownerDisplayName:
+          type: string
+        name:
+          type: string
+        race:
+          type: string
+        class:
+          type: string
+        level:
+          type: integer
+        sheetJson:
+          $ref: "#/components/schemas/CharacterSheet"
+        portraitUrl:
+          type: ["string", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - ownerUserId
+        - name
+        - race
+        - class
+        - level
+        - sheetJson
+        - isActive
+        - createdAt
+        - updatedAt
+
+    UpdateCharacterBody:
+      type: object
+      properties:
+        name:
+          type: string
+        race:
+          type: string
+        class:
+          type: string
+        level:
+          type: integer
+        sheetJson:
+          $ref: "#/components/schemas/CharacterSheet"
+        portraitUrl:
+          type: ["string", "null"]
+
+    SessionLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        sessionNumber:
+          type: integer
+        title:
+          type: string
+        playedAt:
+          type: ["string", "null"]
+          format: date-time
+        rawNotesMd:
+          type: ["string", "null"]
+        recapMd:
+          type: ["string", "null"]
+        generatedAt:
+          type: ["string", "null"]
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - sessionNumber
+        - title
+        - createdAt
+        - updatedAt
+
+    CreateSessionBody:
+      type: object
+      properties:
+        sessionNumber:
+          type: integer
+        title:
+          type: string
+        playedAt:
+          type: ["string", "null"]
+          format: date-time
+        rawNotesMd:
+          type: ["string", "null"]
+      required:
+        - sessionNumber
+        - title
+
+    UpdateSessionBody:
+      type: object
+      properties:
+        title:
+          type: string
+        playedAt:
+          type: ["string", "null"]
+          format: date-time
+        rawNotesMd:
+          type: ["string", "null"]
+        recapMd:
+          type: ["string", "null"]
+
+    GeneratedRecap:
+      type: object
+      properties:
+        recap:
+          type: string
+        model:
+          type: string
+      required:
+        - recap
+        - model
+
+    CalendarEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        title:
+          type: string
+        proposedAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: ["string", "null"]
+          format: date-time
+        status:
+          type: string
+          enum: [proposed, confirmed, cancelled]
+        location:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - title
+        - proposedAt
+        - status
+        - createdAt
+
+    CalendarEventWithRsvps:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        title:
+          type: string
+        proposedAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: ["string", "null"]
+          format: date-time
+        status:
+          type: string
+          enum: [proposed, confirmed, cancelled]
+        location:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        rsvps:
+          type: array
+          items:
+            $ref: "#/components/schemas/RsvpWithMember"
+      required:
+        - id
+        - campaignId
+        - title
+        - proposedAt
+        - status
+        - createdAt
+        - rsvps
+
+    CreateEventBody:
+      type: object
+      properties:
+        title:
+          type: string
+        proposedAt:
+          type: string
+          format: date-time
+        location:
+          type: ["string", "null"]
+      required:
+        - title
+        - proposedAt
+
+    UpdateEventBody:
+      type: object
+      properties:
+        title:
+          type: string
+        proposedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [proposed, confirmed, cancelled]
+        location:
+          type: ["string", "null"]
+
+    Rsvp:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendarEventId:
+          type: integer
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [yes, no, maybe]
+        note:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - calendarEventId
+        - userId
+        - status
+        - createdAt
+
+    RsvpWithMember:
+      type: object
+      properties:
+        id:
+          type: integer
+        calendarEventId:
+          type: integer
+        userId:
+          type: string
+        status:
+          type: string
+          enum: [yes, no, maybe]
+        note:
+          type: ["string", "null"]
+        displayName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - calendarEventId
+        - userId
+        - status
+        - displayName
+        - createdAt
+
+    UpsertRsvpBody:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [yes, no, maybe]
+        note:
+          type: ["string", "null"]
+      required:
+        - status
+
+    RollDiceBody:
+      type: object
+      properties:
+        expression:
+          type: string
+        label:
+          type: ["string", "null"]
+        characterId:
+          type: ["integer", "null"]
+      required:
+        - expression
+
+    DiceRoll:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        characterId:
+          type: ["integer", "null"]
+        userId:
+          type: string
+        expression:
+          type: string
+        result:
+          type: integer
+        breakdown:
+          type: object
+        label:
+          type: ["string", "null"]
+        displayName:
+          type: string
+        rolledAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - userId
+        - expression
+        - result
+        - breakdown
+        - displayName
+        - rolledAt
+
+    DashboardSummary:
+      type: object
+      properties:
+        campaign:
+          $ref: "#/components/schemas/Campaign"
+        nextEvent:
+          $ref: "#/components/schemas/CalendarEventWithRsvps"
+        latestRecap:
+          $ref: "#/components/schemas/SessionLog"
+        partyMembers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PartyMemberSummary"
+        totalSessions:
+          type: integer
+        recentRolls:
+          type: array
+          items:
+            $ref: "#/components/schemas/DiceRoll"
+      required:
+        - campaign
+        - partyMembers
+        - totalSessions
+        - recentRolls
+
+    PartyMemberSummary:
+      type: object
+      properties:
+        memberId:
+          type: integer
+        userId:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: ["string", "null"]
+        role:
+          type: string
+          enum: [dm, player]
+        characterName:
+          type: ["string", "null"]
+        characterClass:
+          type: ["string", "null"]
+        characterLevel:
+          type: ["integer", "null"]
+        characterRace:
+          type: ["string", "null"]
+      required:
+        - memberId
+        - userId
+        - displayName
+        - role

@@ -1,0 +1,62 @@
+This is the definitive handoff document for Delve’s “Arcane Artifact” UI. It translates the high-level brand concept into explicit visual rules for Figma and concrete implementation specs for the Next.js/Tailwind codebase.
+### **The Core Metaphor: The Scrying Mirror**
+Delve does not use standard Material Design or flat web paradigms. The application is a void (deep obsidian), and the UI elements are polished, frosted glass panels floating above that void. When data updates or a die is rolled, the interface shouldn't just change state; it should pulse, glow, and react like a physical magical item.
+## Part 1: For the Designer (Figma Translation)
+Your goal is to create depth without relying on traditional opaque drop-shadows. Depth is achieved through layer blurring, subtle inner borders, and ambient light bleed.
+### 1. The Spatial System (Z-Index Hierarchy)
+ * **Z-0 (The Void):** The absolute background. Solid, very dark charcoal/obsidian (#09090B). Never use pure black (#000000); it kills the optical depth.
+ * **Z-10 (The Ambient Glow):** Soft, highly feathered radial gradients (opacity ~15-20%) placed behind key UI areas (like the active character's HP, or the dice roller button) to simulate magical energy pooling behind the glass.
+ * **Z-20 (The Glass Panels):** The primary UI containers (cards, modals, nav bars). These are translucent (fill: #FFFFFF at 3-5% opacity or #000000 at 40%), with a heavy background blur (e.g., Blur: 24px).
+ * **Z-30 (The Inscriptions):** The text and icons resting on the glass. High contrast, crisp edges.
+### 2. Panel Styling (The "Liquid Glass" Look)
+Do not use flat background colors for cards. Every card or container must have:
+ 1. **Fill:** #FFFFFF at 3% opacity (or #18181B at 60% depending on context).
+ 2. **Backdrop Blur:** Minimum 16px, ideally 24px for larger panels.
+ 3. **Border (Crucial):** A 1px inside stroke. The top and left edges should be #FFFFFF at 10% opacity (simulating a top-down light catch), and the bottom/right should be #FFFFFF at 2%. This gives the glass its physical edge.
+ 4. **Shadow:** Drop shadow should be colored, not black. Use the primary accent color (Purple/Magenta) at 10% opacity, heavily blurred (Blur: 40px, Y: 10), to create an "underglow."
+### 3. Typography Rules
+ * **Primary (Inter):** Tracked slightly tight (-1% or -0.01em) for a modern, dense feel. Use Medium (500) for body, SemiBold (600) for headers.
+ * **Technical/Magic (Geist Mono):** Use exclusively for numbers that change (HP, AC, Dice Rolls) and system metadata (timestamps, session IDs). This contrast between elegant sans-serif and mechanical monospace creates the "tech-magic" friction.
+## Part 2: For the Frontend Engineer (Next.js + Tailwind)
+This aesthetic requires precise control over CSS backdrop filters and animations. For a mental model, the primary UI surfaces behave exactly like SwiftUI's .ultraThinMaterial or UIVisualEffectView, combined with animated, glowing border traces.
+### 1. Tailwind Configuration Strategy
+Extend your tailwind.config.ts to support the specific glass and glow utilities so your JSX remains readable.
+```typescript
+// tailwind.config.ts extensions
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        background: "hsl(240 10% 4%)", // The Void
+        glass: "rgba(255, 255, 255, 0.03)", // Base glass fill
+        "glass-border": "rgba(255, 255, 255, 0.08)",
+        primary: "hsl(270 100% 60%)", // Arcane Purple
+        secondary: "hsl(320 100% 50%)", // Neon Magenta
+      },
+      boxShadow: {
+        'glow-primary': '0 0 20px 2px rgba(138, 43, 226, 0.15)', // Hex for hsl(270 100% 60%)
+        'glow-secondary': '0 0 20px 2px rgba(255, 0, 128, 0.15)',
+      },
+      backgroundImage: {
+        'glass-gradient': 'linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)',
+      }
+    }
+  }
+}
+
+```
+### 2. The Universal Glass Component
+You will use this pattern constantly. Abstract this into a reusable <GlassCard> component early.
+**The Tailwind Recipe for a Glass Panel:**
+bg-glass backdrop-blur-xl border border-glass-border shadow-glow-primary rounded-2xl
+ * *Note on Performance:* Heavy backdrop-blur on multiple layered elements can cause rendering hitches on older mobile devices. Limit the blur to primary containers (the main card, the sticky header, the modal background) and avoid blurring elements inside already blurred elements.
+### 3. Interaction & Animation (Framer Motion)
+State changes in Delve shouldn't snap; they should breathe. Bring in framer-motion for layout transitions and micro-interactions.
+ * **Buttons (The Trigger):** Tapping "Roll d20" shouldn't just depress the button. It should trigger a quick scale-down and a spike in the box-shadow's opacity.
+   * *Framer Motion specs:* whileTap={{ scale: 0.95 }} with a spring transition: transition={{ type: "spring", stiffness: 400, damping: 17 }}.
+ * **The Glowing Border Effect (Aceternity Style):** For the "magical" active states (like when a player's turn is active, or a modal is open), use an SVG or a CSS conic-gradient that spins slowly behind a masked border to create a tracing light effect.
+ * **Dice Roll Broadcasts:** When a roll result appears on screen, it should fade up and drift slightly upwards (initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}), lingering before returning to its resting state.
+### 4. Typography Implementation
+ * Map your fonts in layout.tsx using next/font/google.
+ * Bind Inter to a CSS variable --font-inter and Geist Mono (or JetBrains Mono if Geist isn't installed) to --font-mono.
+ * **Crucial modifier:** Use tabular-nums on all HP, AC, and dice roll text components. Because these values will change frequently during a session, proportional numbers will cause the layout to jitter horizontally. Tabular figures lock the character widths, keeping the interface rock-solid during play.
