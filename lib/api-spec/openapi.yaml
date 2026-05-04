@@ -273,6 +273,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/GeneratedRecap"
 
+  /sessions/{id}/mark-recap-viewed:
+    post:
+      operationId: markRecapViewed
+      tags: [sessions]
+      summary: Mark a session recap as viewed by the current player
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recap marked as viewed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
   /sessions/latest-recap:
     get:
       operationId: getLatestRecap
@@ -677,6 +696,14 @@ components:
         - race
         - class
 
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required:
+        - success
+
     SessionLog:
       type: object
       properties:
@@ -698,6 +725,8 @@ components:
         generatedAt:
           type: ["string", "null"]
           format: date-time
+        hasNewRecap:
+          type: boolean
         createdAt:
           type: string
           format: date-time

@@ -70,6 +70,7 @@ export const GetDashboardResponse = zod.object({
       rawNotesMd: zod.string().nullish(),
       recapMd: zod.string().nullish(),
       generatedAt: zod.coerce.date().nullish(),
+      hasNewRecap: zod.boolean().optional(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     })
@@ -456,6 +457,7 @@ export const ListSessionsResponseItem = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  hasNewRecap: zod.boolean().optional(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -487,6 +489,7 @@ export const GetSessionResponse = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  hasNewRecap: zod.boolean().optional(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -514,6 +517,7 @@ export const UpdateSessionResponse = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  hasNewRecap: zod.boolean().optional(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -531,6 +535,17 @@ export const GenerateRecapResponse = zod.object({
 });
 
 /**
+ * @summary Mark a session recap as viewed by the current player
+ */
+export const MarkRecapViewedParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const MarkRecapViewedResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary Get the latest published recap
  */
 export const GetLatestRecapResponse = zod.object({
@@ -542,6 +557,7 @@ export const GetLatestRecapResponse = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  hasNewRecap: zod.boolean().optional(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });

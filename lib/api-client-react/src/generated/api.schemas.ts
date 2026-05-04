@@ -119,6 +119,10 @@ export interface CreateCharacterBody {
   portraitUrl?: string | null;
 }
 
+export interface SuccessResponse {
+  success: boolean;
+}
+
 export interface SessionLog {
   id: number;
   campaignId: number;
@@ -132,6 +136,7 @@ export interface SessionLog {
   recapMd?: string | null;
   /** @nullable */
   generatedAt?: string | null;
+  hasNewRecap?: boolean;
   createdAt: string;
   updatedAt: string;
 }

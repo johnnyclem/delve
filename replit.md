@@ -35,6 +35,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - `campaign_members` — Users in the campaign (role: dm/player, unique index on `(campaign_id, user_id)`)
 - `characters` — Character sheets (JSON-backed sheetJson)
 - `session_logs` — Session notes + AI recaps
+- `recap_views` — Tracks which players have viewed which recaps (unique index on `(session_log_id, user_id)`)
 - `calendar_events` — Scheduled sessions
 - `rsvps` — RSVPs for calendar events
 - `dice_rolls` — Dice roll history
@@ -59,7 +60,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - **Join flow**: Non-members see a "Join Campaign" page with invite code input. DM shares invite code from dashboard.
 - **Dashboard**: Overview with next session, party members, latest recap, recent rolls. DM sees invite code.
 - **Characters**: List + detail view with editable 5e character sheets + multi-step creation wizard (basics → ability scores → combat → details)
-- **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes. DM notes have autosave: drafts persist to localStorage immediately on each keystroke, and auto-save to the server via debounced PATCH (30s after last keystroke). Drafts are restored when re-opening edit mode if the server version hasn't changed. Visual status indicators show auto-save progress. Custom hook: `use-autosave.ts`.
+- **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes. DM notes have autosave: drafts persist to localStorage immediately on each keystroke, and auto-save to the server via debounced PATCH (30s after last keystroke). Drafts are restored when re-opening edit mode if the server version hasn't changed. Visual status indicators show auto-save progress. Custom hook: `use-autosave.ts`. Players get notified of new recaps via "New" badge + toast; notification clears after viewing.
 - **Calendar**: Schedule sessions with RSVP (yes/maybe/no)
 - **Dice Roller**: Roll any dice expression (e.g. 2d6+3) with shared log
 - **Roles**: First user auto-becomes DM; subsequent users join with invite code as players
@@ -87,11 +88,12 @@ Requires campaign membership:
 - POST /characters — create character (any member)
 - GET /characters/:id — get character detail
 - PATCH /characters/:id — update character (owner only)
-- GET /sessions — list session logs (rawNotesMd stripped for players)
+- GET /sessions — list session logs (rawNotesMd stripped for players; includes hasNewRecap boolean for players)
 - POST /sessions — create session (DM only)
 - GET /sessions/:id — get session detail (rawNotesMd stripped for players)
 - PATCH /sessions/:id — update session (DM only)
-- POST /sessions/:id/generate-recap — generate AI recap (DM only)
+- POST /sessions/:id/generate-recap — generate AI recap (DM only, clears recap_views so players see it as new)
+- POST /sessions/:id/mark-recap-viewed — mark recap as viewed by current player
 - GET /sessions/latest-recap — get latest recap (rawNotesMd stripped)
 - GET /calendar — list events
 - POST /calendar — create event (DM only)

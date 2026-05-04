@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2 } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useListSessions, useGetSession, useCreateSession, useUpdateSession, useGenerateRecap,
+  useMarkRecapViewed,
   getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey,
   updateSession as updateSessionApi,
 } from "@workspace/api-client-react";
@@ -35,6 +36,22 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
   const { data: sessions, isLoading } = useListSessions();
   const { data: membership } = useGetMyMembership();
   const isDm = (membership as CampaignMember | undefined)?.role === "dm";
+  const { toast } = useToast();
+  const toastShownRef = useRef(false);
+
+  const newRecapCount = !isDm && sessions
+    ? (sessions as SessionLog[]).filter(s => s.hasNewRecap).length
+    : 0;
+
+  useEffect(() => {
+    if (newRecapCount > 0 && !toastShownRef.current) {
+      toastShownRef.current = true;
+      toast({
+        title: `${newRecapCount} new recap${newRecapCount > 1 ? "s" : ""} available!`,
+        description: "Your DM has published new session recaps. Check them out!",
+      });
+    }
+  }, [newRecapCount, toast]);
 
   return (
     <div className="space-y-6" data-testid="sessions-panel">
@@ -73,8 +90,14 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
             >
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-foreground">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
                     Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
+                    {s.hasNewRecap && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-400 animate-pulse" data-testid={`badge-new-recap-${s.id}`}>
+                        <Bell className="h-3 w-3" />
+                        New
+                      </span>
+                    )}
                   </h3>
                   <div className="flex items-center gap-3 mt-1.5">
                     <span className="text-xs text-muted-foreground">
@@ -159,11 +182,13 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const { data: session, isLoading } = useGetSession(id, { query: { queryKey: getGetSessionQueryKey(id) } });
   const { data: membership } = useGetMyMembership();
   const generateRecap = useGenerateRecap();
+  const markViewed = useMarkRecapViewed();
   const updateSession = useUpdateSession();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const isDm = (membership as CampaignMember | undefined)?.role === "dm";
   const s = session as SessionLog | undefined;
+  const markedViewedRef = useRef(false);
 
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState("");
@@ -192,6 +217,20 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     editingNotes,
     autosaveSaveFn,
   );
+
+  useEffect(() => {
+    if (!isDm && s?.recapMd && !markedViewedRef.current) {
+      markedViewedRef.current = true;
+      markViewed.mutate(
+        { id },
+        {
+          onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          },
+        },
+      );
+    }
+  }, [isDm, s, id, markViewed, queryClient]);
 
   useEffect(() => {
     if (editingNotes && notesRef.current) {

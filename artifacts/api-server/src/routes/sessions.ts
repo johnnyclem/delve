@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, sessionLogsTable } from "@workspace/db";
-import { eq, desc, and, isNotNull } from "drizzle-orm";
+import { db, sessionLogsTable, recapViewsTable } from "@workspace/db";
+import { eq, desc, and, isNotNull, inArray } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
@@ -15,6 +15,7 @@ function stripDmFields(session: typeof sessionLogsTable.$inferSelect): Record<st
 router.get("/sessions", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const campaignId = await getOrCreateCampaign();
   const member = getCampaignMember(req);
+  const userId = getUserId(req);
   const sessions = await db
     .select()
     .from(sessionLogsTable)
@@ -24,7 +25,22 @@ router.get("/sessions", requireAuth, requireCampaignMember, async (req, res): Pr
   if (member.role === "dm") {
     res.json(sessions);
   } else {
-    res.json(sessions.map(stripDmFields));
+    const sessionIds = sessions.filter(s => s.recapMd).map(s => s.id);
+    let viewedIds: Set<number> = new Set();
+    if (sessionIds.length > 0) {
+      const views = await db
+        .select({ sessionLogId: recapViewsTable.sessionLogId })
+        .from(recapViewsTable)
+        .where(and(
+          eq(recapViewsTable.userId, userId),
+          inArray(recapViewsTable.sessionLogId, sessionIds)
+        ));
+      viewedIds = new Set(views.map(v => v.sessionLogId));
+    }
+    res.json(sessions.map(s => ({
+      ...stripDmFields(s),
+      hasNewRecap: !!(s.recapMd && !viewedIds.has(s.id)),
+    })));
   }
 });
 
@@ -204,7 +220,48 @@ router.post("/sessions/:id/generate-recap", requireAuth, requireCampaignMember, 
     .set({ recapMd: recap, generatedAt: new Date() })
     .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
 
+  await db
+    .delete(recapViewsTable)
+    .where(eq(recapViewsTable.sessionLogId, id));
+
   res.json({ recap, model: "gpt-4o" });
+});
+
+router.post("/sessions/:id/mark-recap-viewed", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid session ID" });
+    return;
+  }
+
+  const [session] = await db
+    .select({ id: sessionLogsTable.id, recapMd: sessionLogsTable.recapMd })
+    .from(sessionLogsTable)
+    .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (!session.recapMd) {
+    res.status(400).json({ error: "No recap to mark as viewed" });
+    return;
+  }
+
+  await db
+    .insert(recapViewsTable)
+    .values({ sessionLogId: id, userId })
+    .onConflictDoUpdate({
+      target: [recapViewsTable.sessionLogId, recapViewsTable.userId],
+      set: { viewedAt: new Date() },
+    });
+
+  res.json({ success: true });
 });
 
 export default router;

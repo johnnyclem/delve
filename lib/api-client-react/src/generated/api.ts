@@ -33,6 +33,7 @@ import type {
   RollDiceBody,
   Rsvp,
   SessionLog,
+  SuccessResponse,
   UpdateCharacterBody,
   UpdateEventBody,
   UpdateSessionBody,
@@ -1173,6 +1174,90 @@ export const useGenerateRecap = <
   TContext
 > => {
   return useMutation(getGenerateRecapMutationOptions(options));
+};
+
+/**
+ * @summary Mark a session recap as viewed by the current player
+ */
+export const getMarkRecapViewedUrl = (id: number) => {
+  return `/api/sessions/${id}/mark-recap-viewed`;
+};
+
+export const markRecapViewed = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getMarkRecapViewedUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getMarkRecapViewedMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markRecapViewed>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof markRecapViewed>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["markRecapViewed"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof markRecapViewed>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return markRecapViewed(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type MarkRecapViewedMutationResult = NonNullable<
+  Awaited<ReturnType<typeof markRecapViewed>>
+>;
+
+export type MarkRecapViewedMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Mark a session recap as viewed by the current player
+ */
+export const useMarkRecapViewed = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof markRecapViewed>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof markRecapViewed>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getMarkRecapViewedMutationOptions(options));
 };
 
 /**
