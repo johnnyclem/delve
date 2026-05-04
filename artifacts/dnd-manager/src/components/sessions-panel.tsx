@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle } from "lucide-react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -155,6 +155,14 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [notes, setNotes] = useState("");
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  const [editingDate, setEditingDate] = useState(false);
+  const [draftDate, setDraftDate] = useState("");
+  const dateInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (editingNotes && notesRef.current) {
       notesRef.current.focus();
@@ -163,8 +171,65 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     }
   }, [editingNotes]);
 
+  useEffect(() => {
+    if (editingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [editingTitle]);
+
+  useEffect(() => {
+    if (editingDate && dateInputRef.current) {
+      dateInputRef.current.focus();
+    }
+  }, [editingDate]);
+
   const isDirty = editingNotes && notes !== (s?.rawNotesMd ?? "");
   const isRecapStale = !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt));
+
+  const handleSaveTitle = useCallback(() => {
+    if (!s || !draftTitle.trim() || draftTitle.trim() === s.title) {
+      setEditingTitle(false);
+      return;
+    }
+    updateSession.mutate(
+      { id, data: { title: draftTitle.trim() } },
+      {
+        onSuccess: () => {
+          setEditingTitle(false);
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          toast({ title: "Title updated!" });
+        },
+        onError: () => {
+          toast({ title: "Failed to update title", variant: "destructive" });
+        },
+      },
+    );
+  }, [s, draftTitle, id, updateSession, queryClient, toast]);
+
+  const handleSaveDate = useCallback((value: string) => {
+    const newPlayedAt = value || null;
+    const oldPlayedAt = s?.playedAt ? new Date(s.playedAt).toISOString().split("T")[0] : null;
+    if (newPlayedAt === oldPlayedAt) {
+      setEditingDate(false);
+      return;
+    }
+    updateSession.mutate(
+      { id, data: { playedAt: newPlayedAt ? new Date(newPlayedAt).toISOString() : null } },
+      {
+        onSuccess: () => {
+          setEditingDate(false);
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          toast({ title: "Date updated!" });
+        },
+        onError: () => {
+          toast({ title: "Failed to update date", variant: "destructive" });
+        },
+      },
+    );
+  }, [s, id, updateSession, queryClient, toast]);
 
   const handleBack = () => {
     if (isDirty && !confirm("You have unsaved changes to your notes. Discard them?")) {
@@ -225,12 +290,79 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
 
       <div>
-        <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-session-title">
-          Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          {s.playedAt ? `Played on ${new Date(s.playedAt).toLocaleDateString()}` : "Date TBD"}
-        </p>
+        {isDm && editingTitle ? (
+          <div className="flex items-center gap-2" data-testid="edit-session-title">
+            <span className="text-2xl font-semibold text-foreground whitespace-nowrap tracking-tight">Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>:</span>
+            <Input
+              ref={titleInputRef}
+              value={draftTitle}
+              onChange={(e) => setDraftTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveTitle();
+                if (e.key === "Escape") setEditingTitle(false);
+              }}
+              className="text-2xl font-semibold h-auto py-0.5 px-2"
+              data-testid="input-edit-title"
+            />
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={handleSaveTitle} disabled={updateSession.isPending || !draftTitle.trim()} data-testid="button-save-title">
+              <Check className="h-4 w-4 text-green-400" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingTitle(false)} data-testid="button-cancel-title">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </div>
+        ) : (
+          <h2
+            className={`text-2xl font-semibold text-foreground tracking-tight${isDm ? " cursor-pointer hover:text-primary/80 transition-colors" : ""}`}
+            onClick={isDm ? () => { setDraftTitle(s.title); setEditingTitle(true); } : undefined}
+            title={isDm ? "Click to edit title" : undefined}
+            data-testid="text-session-title"
+          >
+            Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
+            {isDm && <Pencil className="inline h-3.5 w-3.5 ml-2 text-muted-foreground opacity-0 group-hover:opacity-100" />}
+          </h2>
+        )}
+
+        {isDm && editingDate ? (
+          <div className="flex items-center gap-2 mt-1" data-testid="edit-session-date">
+            <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={draftDate}
+              onChange={(e) => setDraftDate(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveDate(draftDate);
+                if (e.key === "Escape") setEditingDate(false);
+              }}
+              className="bg-background border border-border rounded-md px-2 py-1 text-sm text-foreground"
+              data-testid="input-edit-date"
+            />
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => handleSaveDate(draftDate)} disabled={updateSession.isPending} data-testid="button-save-date">
+              <Check className="h-4 w-4 text-green-400" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingDate(false)} data-testid="button-cancel-date">
+              <X className="h-4 w-4 text-muted-foreground" />
+            </Button>
+            {draftDate && (
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => handleSaveDate("")} data-testid="button-clear-date">
+                Clear date
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p
+            className={`text-sm text-muted-foreground mt-1${isDm ? " cursor-pointer hover:text-primary/80 transition-colors" : ""}`}
+            onClick={isDm ? () => {
+              setDraftDate(s.playedAt ? new Date(s.playedAt).toISOString().split("T")[0] : "");
+              setEditingDate(true);
+            } : undefined}
+            title={isDm ? "Click to edit date" : undefined}
+            data-testid="text-session-date"
+          >
+            {s.playedAt ? `Played on ${new Date(s.playedAt).toLocaleDateString()}` : "Date TBD"}
+          </p>
+        )}
       </div>
 
       {s.recapMd && (
