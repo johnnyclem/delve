@@ -1,13 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2 } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useListSessions, useGetSession, useCreateSession, useUpdateSession, useGenerateRecap,
-  getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey
+  getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey,
+  updateSession as updateSessionApi,
 } from "@workspace/api-client-react";
+import { useAutosave } from "@/hooks/use-autosave";
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { SessionLog, CampaignMember } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -175,6 +177,22 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [draftDate, setDraftDate] = useState("");
   const dateInputRef = useRef<HTMLInputElement>(null);
 
+  const autosaveSaveFn = useCallback(
+    async (text: string) => {
+      await updateSessionApi(id, { rawNotesMd: text });
+      queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+    },
+    [id, queryClient],
+  );
+
+  const { status: autosaveStatus, lastSavedAt: autosaveLastSavedAt, handleNoteChange, getStoredDraft, clearDraft } = useAutosave(
+    id,
+    s?.rawNotesMd ?? "",
+    editingNotes,
+    autosaveSaveFn,
+  );
+
   useEffect(() => {
     if (editingNotes && notesRef.current) {
       notesRef.current.focus();
@@ -197,6 +215,15 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   }, [editingDate]);
 
   const isDirty = editingNotes && notes !== (s?.rawNotesMd ?? "");
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
   const isRecapStale = !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt));
 
   const handleSaveTitle = useCallback(() => {
@@ -272,6 +299,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       { id, data: { rawNotesMd: notes } },
       {
         onSuccess: () => {
+          clearDraft();
           setEditingNotes(false);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
@@ -417,7 +445,16 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
                 </Button>
               )}
               {!editingNotes && (
-                <Button variant="ghost" size="sm" onClick={() => { setNotes(s.rawNotesMd ?? ""); setEditingNotes(true); }} data-testid="button-edit-notes">
+                <Button variant="ghost" size="sm" onClick={() => {
+                  const draft = getStoredDraft();
+                  if (draft !== null) {
+                    setNotes(draft);
+                    toast({ title: "Restored unsaved draft" });
+                  } else {
+                    setNotes(s.rawNotesMd ?? "");
+                  }
+                  setEditingNotes(true);
+                }} data-testid="button-edit-notes">
                   <Pencil className="h-4 w-4 mr-1" />
                   Edit
                 </Button>
@@ -426,13 +463,31 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           </div>
           {editingNotes ? (
             <div className="space-y-3">
-              <Textarea ref={notesRef} value={notes} onChange={(e) => setNotes(e.target.value)} rows={12} placeholder="Write your session notes in markdown..." className="font-mono text-sm" data-testid="input-edit-notes" />
-              <div className="flex items-center gap-2">
+              <Textarea ref={notesRef} value={notes} onChange={(e) => { setNotes(e.target.value); handleNoteChange(e.target.value); }} rows={12} placeholder="Write your session notes in markdown..." className="font-mono text-sm" data-testid="input-edit-notes" />
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button size="sm" onClick={handleSaveNotes} disabled={updateSession.isPending || !isDirty} data-testid="button-save-notes">
                   <Save className="h-4 w-4 mr-1" />
                   {updateSession.isPending ? "Saving..." : "Save Notes"}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { if (isDirty && !confirm("Discard unsaved changes?")) return; setEditingNotes(false); }}>Cancel</Button>
+                <Button variant="ghost" size="sm" onClick={() => { if (isDirty && !confirm("Discard unsaved changes?")) return; clearDraft(); setEditingNotes(false); }}>Cancel</Button>
+                {autosaveStatus === "saving" && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="autosave-status">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Auto-saving...
+                  </span>
+                )}
+                {autosaveStatus === "saved" && autosaveLastSavedAt && (
+                  <span className="flex items-center gap-1 text-xs text-emerald-400" data-testid="autosave-status">
+                    <Check className="h-3 w-3" />
+                    Auto-saved at {autosaveLastSavedAt.toLocaleTimeString()}
+                  </span>
+                )}
+                {autosaveStatus === "error" && (
+                  <span className="flex items-center gap-1 text-xs text-destructive" data-testid="autosave-status">
+                    <AlertTriangle className="h-3 w-3" />
+                    Auto-save failed
+                  </span>
+                )}
               </div>
             </div>
           ) : s.rawNotesMd ? (
