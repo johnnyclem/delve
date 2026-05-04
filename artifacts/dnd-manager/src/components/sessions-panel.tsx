@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,16 +70,28 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
               data-testid={`card-session-${s.id}`}
             >
               <div className="flex items-center justify-between">
-                <div>
+                <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-foreground">
                     Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
                   </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {s.playedAt ? new Date(s.playedAt).toLocaleDateString() : "Date TBD"}
-                    {s.recapMd ? " — Recap available" : ""}
-                  </p>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-xs text-muted-foreground">
+                      {s.playedAt ? new Date(s.playedAt).toLocaleDateString() : "Date TBD"}
+                    </span>
+                    {s.recapMd ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary" data-testid={`badge-recap-available-${s.id}`}>
+                        <CheckCircle2 className="h-3 w-3" />
+                        Recap available
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid={`badge-recap-pending-${s.id}`}>
+                        <Clock className="h-3 w-3" />
+                        Recap pending
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
               </div>
             </motion.button>
           ))}
@@ -365,8 +377,8 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         )}
       </div>
 
-      {s.recapMd && (
-        <div className="rounded-2xl glass-panel p-6" style={{ boxShadow: "0 0 25px hsla(270, 100%, 60%, 0.1)" }}>
+      {s.recapMd ? (
+        <div className="rounded-2xl glass-panel p-6" style={{ boxShadow: "0 0 25px hsla(270, 100%, 60%, 0.1)" }} data-testid="section-recap">
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-semibold text-foreground flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
@@ -381,7 +393,13 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           </div>
           <div className="prose prose-sm prose-invert max-w-none text-foreground/90" dangerouslySetInnerHTML={{ __html: markdownToHtml(s.recapMd) }} />
         </div>
-      )}
+      ) : !isDm ? (
+        <div className="rounded-2xl border border-dashed border-[rgba(255,255,255,0.08)] p-6 text-center" data-testid="section-recap-pending">
+          <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+          <h3 className="font-semibold text-card-foreground mb-1">Recap coming soon</h3>
+          <p className="text-sm text-muted-foreground">The DM hasn't published a recap for this session yet. Check back later!</p>
+        </div>
+      ) : null}
 
       {isDm && (
         <div className="rounded-2xl glass-panel p-6">
