@@ -438,7 +438,38 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     serverVersion: number;
   } | null>(null);
 
+  const showNotesSavedUndoToast = (previousNotes: string, savedTitle: string) => {
+    toast({
+      title: savedTitle,
+      duration: 5000,
+      action: (
+        <ToastAction
+          altText="Undo notes change"
+          onClick={() => {
+            updateSession.mutate(
+              { id, data: { rawNotesMd: previousNotes } },
+              {
+                onSuccess: () => {
+                  setNotes(previousNotes);
+                  queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+                  queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+                  toast({ title: "Notes reverted" });
+                },
+                onError: () => {
+                  toast({ title: "Failed to undo notes change", variant: "destructive" });
+                },
+              },
+            );
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
+    });
+  };
+
   const handleSaveNotes = () => {
+    const previousNotes = s?.rawNotesMd ?? "";
     const ev = getExpectedVersion();
     updateSession.mutate(
       { id, data: { rawNotesMd: notes, expectedVersion: ev } },
@@ -449,7 +480,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           setManualSaveConflict(null);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({ title: "Notes saved!" });
+          showNotesSavedUndoToast(previousNotes, "Notes saved");
         },
         onError: (err: unknown) => {
           const apiErr = err as { status?: number; data?: { serverSession?: { rawNotesMd?: string; version?: number } } } | undefined;
@@ -468,6 +499,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   };
 
   const handleForceOverwrite = () => {
+    const previousNotes = manualSaveConflict?.serverNotes ?? s?.rawNotesMd ?? "";
     updateSession.mutate(
       { id, data: { rawNotesMd: notes } },
       {
@@ -478,7 +510,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           if (conflict) resolveConflict("discard");
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({ title: "Notes saved (overwritten)!" });
+          showNotesSavedUndoToast(previousNotes, "Notes saved (overwritten)");
         },
         onError: () => {
           toast({ title: "Failed to save notes", variant: "destructive" });
