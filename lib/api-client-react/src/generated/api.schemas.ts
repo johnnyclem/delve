@@ -354,6 +354,12 @@ export interface PartyMemberSummary {
   characterRace?: string | null;
 }
 
+export interface RecapLengthBreakdown {
+  short: number;
+  medium: number;
+  long: number;
+}
+
 export interface DashboardSummary {
   campaign: Campaign;
   nextEvent?: CalendarEventWithRsvps;
@@ -362,6 +368,7 @@ export interface DashboardSummary {
   totalSessions: number;
   recapCount: number;
   avgRecapWordCount: number;
+  recapLengthBreakdown: RecapLengthBreakdown;
   recentRolls: DiceRoll[];
   sessionTrend: SessionTrendPoint[];
 }

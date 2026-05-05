@@ -387,6 +387,19 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
             </div>
           )}
         </div>
+        {(dashboard?.recapCount ?? 0) > 0 && dashboard?.recapLengthBreakdown && (
+          <div className="mt-3 flex flex-wrap gap-2" data-testid="recap-length-breakdown" title="Short: <100 words • Medium: 100–300 • Long: 300+">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-short">
+              {dashboard.recapLengthBreakdown.short} short
+            </span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-medium">
+              {dashboard.recapLengthBreakdown.medium} medium
+            </span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-long">
+              {dashboard.recapLengthBreakdown.long} long
+            </span>
+          </div>
+        )}
         {dashboard?.sessionTrend && dashboard.sessionTrend.length > 0 && (
           <SessionTrendChart data={dashboard.sessionTrend} />
         )}

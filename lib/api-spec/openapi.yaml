@@ -1063,6 +1063,8 @@ components:
           type: integer
         avgRecapWordCount:
           type: integer
+        recapLengthBreakdown:
+          $ref: "#/components/schemas/RecapLengthBreakdown"
         recentRolls:
           type: array
           items:
@@ -1077,8 +1079,23 @@ components:
         - totalSessions
         - recapCount
         - avgRecapWordCount
+        - recapLengthBreakdown
         - recentRolls
         - sessionTrend
+
+    RecapLengthBreakdown:
+      type: object
+      properties:
+        short:
+          type: integer
+        medium:
+          type: integer
+        long:
+          type: integer
+      required:
+        - short
+        - medium
+        - long
 
     UpdateNotificationPrefsBody:
       type: object

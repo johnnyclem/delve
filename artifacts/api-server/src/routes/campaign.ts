@@ -47,9 +47,15 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
   const sessions = await db.select().from(sessionLogsTable).where(eq(sessionLogsTable.campaignId, campaignId));
   const recapsWithText = sessions.filter((s) => s.recapMd && s.recapMd.trim().length > 0);
   const recapCount = recapsWithText.length;
+  const recapWordCounts = recapsWithText.map((s) => s.recapMd!.trim().split(/\s+/).length);
   const avgRecapWordCount = recapCount > 0
-    ? Math.round(recapsWithText.reduce((sum, s) => sum + s.recapMd!.trim().split(/\s+/).length, 0) / recapCount)
+    ? Math.round(recapWordCounts.reduce((sum, n) => sum + n, 0) / recapCount)
     : 0;
+  const recapLengthBreakdown = {
+    short: recapWordCounts.filter((n) => n < 100).length,
+    medium: recapWordCounts.filter((n) => n >= 100 && n < 300).length,
+    long: recapWordCounts.filter((n) => n >= 300).length,
+  };
 
   const [latestRecap] = await db
     .select()
@@ -133,6 +139,7 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
     totalSessions: sessions.length,
     recapCount,
     avgRecapWordCount,
+    recapLengthBreakdown,
     recentRolls,
     sessionTrend,
   };
