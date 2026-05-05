@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, campaignMembersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getUserDisplayName, getUserAvatarUrl } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, getMember, syncMemberProfile, joinWithInviteCode } from "../lib/campaign";
 
@@ -27,6 +27,36 @@ router.get("/members/me", requireAuth, async (req, res): Promise<void> => {
 
   const synced = await syncMemberProfile(campaignId, userId, getUserDisplayName(req), getUserAvatarUrl(req));
   res.json(synced ?? member);
+});
+
+router.patch("/members/me/notifications", requireAuth, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  const member = await getMember(campaignId, userId);
+  if (!member) {
+    res.status(404).json({ error: "Not a campaign member" });
+    return;
+  }
+
+  const { emailNotifications } = req.body ?? {};
+  if (typeof emailNotifications !== "boolean") {
+    res.status(400).json({ error: "emailNotifications must be a boolean" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(campaignMembersTable)
+    .set({ emailNotifications })
+    .where(
+      and(
+        eq(campaignMembersTable.campaignId, campaignId),
+        eq(campaignMembersTable.userId, userId),
+      ),
+    )
+    .returning();
+
+  res.json(updated);
 });
 
 router.post("/members/join", requireAuth, async (req, res): Promise<void> => {

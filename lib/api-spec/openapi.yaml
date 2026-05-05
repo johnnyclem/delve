@@ -100,6 +100,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /members/me/notifications:
+    patch:
+      operationId: updateNotificationPrefs
+      tags: [members]
+      summary: Update email notification preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNotificationPrefsBody"
+      responses:
+        "200":
+          description: Updated member with new preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignMember"
+
   /characters:
     get:
       operationId: listCharacters
@@ -504,6 +523,8 @@ components:
           type: string
         avatarUrl:
           type: ["string", "null"]
+        emailNotifications:
+          type: boolean
         createdAt:
           type: string
           format: date-time
@@ -513,6 +534,7 @@ components:
         - userId
         - role
         - displayName
+        - emailNotifications
         - createdAt
 
     CharacterSheet:
@@ -1041,6 +1063,14 @@ components:
         - recapCount
         - avgRecapWordCount
         - recentRolls
+
+    UpdateNotificationPrefsBody:
+      type: object
+      properties:
+        emailNotifications:
+          type: boolean
+      required:
+        - emailNotifications
 
     PartyMemberSummary:
       type: object

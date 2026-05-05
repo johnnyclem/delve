@@ -32,7 +32,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 ## Database Schema
 
 - `campaigns` — Single campaign record (includes `invite_code` for joining)
-- `campaign_members` — Users in the campaign (role: dm/player, unique index on `(campaign_id, user_id)`)
+- `campaign_members` — Users in the campaign (role: dm/player, `email_notifications` boolean default false, unique index on `(campaign_id, user_id)`)
 - `characters` — Character sheets (JSON-backed sheetJson)
 - `session_logs` — Session notes + AI recaps
 - `recap_views` — Tracks which players have viewed which recaps (unique index on `(session_log_id, user_id)`)
@@ -60,7 +60,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - **Join flow**: Non-members see a "Join Campaign" page with invite code input. DM shares invite code from dashboard.
 - **Dashboard**: Overview with session stats card (total sessions + recap count), next session, party members, latest recap, recent rolls. DM sees invite code.
 - **Characters**: List + detail view with editable 5e character sheets + multi-step creation wizard (basics → ability scores → combat → details)
-- **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes. DM notes have autosave: drafts persist to localStorage immediately on each keystroke, and auto-save to the server via debounced PATCH (30s after last keystroke). Drafts are restored when re-opening edit mode if the server version hasn't changed. Visual status indicators show auto-save progress. Custom hook: `use-autosave.ts`. Players get notified of new recaps via "New" badge + toast; notification clears after viewing. **Multi-tab conflict detection**: Uses optimistic concurrency via integer `version` column + `expectedVersion` field in PATCH requests. Atomic `UPDATE ... WHERE version = ?` with auto-increment prevents race conditions. If another tab/window has saved changes, the API returns 409 Conflict with the current server session data. The UI shows an amber conflict banner with "Keep my changes" (force overwrite) and "Load server version" (discard local) options. Single-tab usage is unaffected.
+- **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes. DM notes have autosave: drafts persist to localStorage immediately on each keystroke, and auto-save to the server via debounced PATCH (30s after last keystroke). Drafts are restored when re-opening edit mode if the server version hasn't changed. Visual status indicators show auto-save progress. Custom hook: `use-autosave.ts`. Players get notified of new recaps via "New" badge + toast; notification clears after viewing. **Multi-tab conflict detection**: Uses optimistic concurrency via integer `version` column + `expectedVersion` field in PATCH requests. Atomic `UPDATE ... WHERE version = ?` with auto-increment prevents race conditions. If another tab/window has saved changes, the API returns 409 Conflict with the current server session data. The UI shows an amber conflict banner with "Keep my changes" (force overwrite) and "Load server version" (discard local) options. Single-tab usage is unaffected. Optional email notifications: players can toggle "Recap emails" in the sidebar to receive an email when a new recap is generated (requires `RESEND_API_KEY` env var; uses Clerk Backend API for email lookup).
 - **Calendar**: Schedule sessions with RSVP (yes/maybe/no)
 - **Dice Roller**: Roll any dice expression (e.g. 2d6+3) with shared log
 - **Roles**: First user auto-becomes DM; subsequent users join with invite code as players
@@ -81,6 +81,7 @@ Auth-only (no membership required):
 - GET /campaign/dashboard — dashboard (auto-enrolls first user as DM, 403 for non-members)
 - GET /campaign — get campaign info
 - POST /members/join — join campaign with invite code
+- PATCH /members/me/notifications — update email notification preferences
 
 Requires campaign membership:
 - GET /members — list members

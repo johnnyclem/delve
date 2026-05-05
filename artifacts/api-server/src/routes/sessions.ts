@@ -4,6 +4,7 @@ import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
+import { sendRecapNotifications } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -244,6 +245,13 @@ router.post("/sessions/:id/generate-recap", requireAuth, requireCampaignMember, 
   await db
     .delete(recapViewsTable)
     .where(eq(recapViewsTable.sessionLogId, id));
+
+  sendRecapNotifications({
+    campaignId,
+    sessionNumber: session.sessionNumber,
+    sessionTitle: session.title,
+    sessionId: id,
+  }).catch(() => {});
 
   res.json({ recap, model: "gpt-4o" });
 });

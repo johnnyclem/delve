@@ -2,12 +2,13 @@ import { useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useGetDashboard, useListSessions, useGetMyMembership } from "@workspace/api-client-react";
+import { Switch } from "@/components/ui/switch";
+import { useGetDashboard, useListSessions, useGetMyMembership, useUpdateNotificationPrefs } from "@workspace/api-client-react";
 import type { DashboardSummary, PartyMemberSummary, DiceRoll } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
@@ -17,6 +18,7 @@ import CalendarPanel from "@/components/calendar-panel";
 import { useClerk } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
+import { useQueryClient } from "@tanstack/react-query";
 
 const navItems = [
   { id: "overview", label: "Overview", icon: Shield },
@@ -34,6 +36,8 @@ export default function DashboardPage() {
   const { data: dashboard, isLoading, error } = useGetDashboard();
   const { data: sessions } = useListSessions();
   const { data: membership } = useGetMyMembership();
+  const updateNotificationPrefs = useUpdateNotificationPrefs();
+  const queryClient = useQueryClient();
   const isDm = membership?.role === "dm";
   const newRecapCount = membership && !isDm && sessions
     ? sessions.filter(s => s.hasNewRecap).length
@@ -41,6 +45,17 @@ export default function DashboardPage() {
 
   const handleSignOut = () => {
     signOut();
+  };
+
+  const handleToggleEmailNotifications = (checked: boolean) => {
+    updateNotificationPrefs.mutate(
+      { data: { emailNotifications: checked } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/members/me"] });
+        },
+      },
+    );
   };
 
   const needsInvite = error && (error as { status?: number }).status === 403;
@@ -91,6 +106,18 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
+          <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors" data-testid="label-email-notifications">
+            <span className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Mail className="h-4 w-4" />
+              Recap emails
+            </span>
+            <Switch
+              checked={membership?.emailNotifications ?? false}
+              onCheckedChange={handleToggleEmailNotifications}
+              disabled={updateNotificationPrefs.isPending}
+              data-testid="switch-email-notifications"
+            />
+          </label>
           <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={handleSignOut} data-testid="button-sign-out">
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
@@ -133,7 +160,18 @@ export default function DashboardPage() {
                 )}
               </motion.button>
             ))}
-            <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-2" onClick={handleSignOut}>
+            <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors mt-2">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Mail className="h-4 w-4" />
+                Recap emails
+              </span>
+              <Switch
+                checked={membership?.emailNotifications ?? false}
+                onCheckedChange={handleToggleEmailNotifications}
+                disabled={updateNotificationPrefs.isPending}
+              />
+            </label>
+            <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-1" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
             </Button>

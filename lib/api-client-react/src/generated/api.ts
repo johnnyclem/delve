@@ -37,6 +37,7 @@ import type {
   SuccessResponse,
   UpdateCharacterBody,
   UpdateEventBody,
+  UpdateNotificationPrefsBody,
   UpdateSessionBody,
   UpsertRsvpBody,
 } from "./api.schemas";
@@ -422,6 +423,93 @@ export function useGetMyMembership<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Update email notification preferences
+ */
+export const getUpdateNotificationPrefsUrl = () => {
+  return `/api/members/me/notifications`;
+};
+
+export const updateNotificationPrefs = async (
+  updateNotificationPrefsBody: UpdateNotificationPrefsBody,
+  options?: RequestInit,
+): Promise<CampaignMember> => {
+  return customFetch<CampaignMember>(getUpdateNotificationPrefsUrl(), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateNotificationPrefsBody),
+  });
+};
+
+export const getUpdateNotificationPrefsMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNotificationPrefs>>,
+    TError,
+    { data: BodyType<UpdateNotificationPrefsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateNotificationPrefs>>,
+  TError,
+  { data: BodyType<UpdateNotificationPrefsBody> },
+  TContext
+> => {
+  const mutationKey = ["updateNotificationPrefs"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateNotificationPrefs>>,
+    { data: BodyType<UpdateNotificationPrefsBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return updateNotificationPrefs(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateNotificationPrefsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateNotificationPrefs>>
+>;
+export type UpdateNotificationPrefsMutationBody =
+  BodyType<UpdateNotificationPrefsBody>;
+export type UpdateNotificationPrefsMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update email notification preferences
+ */
+export const useUpdateNotificationPrefs = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNotificationPrefs>>,
+    TError,
+    { data: BodyType<UpdateNotificationPrefsBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateNotificationPrefs>>,
+  TError,
+  { data: BodyType<UpdateNotificationPrefsBody> },
+  TContext
+> => {
+  return useMutation(getUpdateNotificationPrefsMutationOptions(options));
+};
 
 /**
  * @summary List all active characters in the campaign

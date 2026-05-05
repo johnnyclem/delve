@@ -118,6 +118,7 @@ export const ListMembersResponseItem = zod.object({
   role: zod.enum(["dm", "player"]),
   displayName: zod.string(),
   avatarUrl: zod.string().nullish(),
+  emailNotifications: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 export const ListMembersResponse = zod.array(ListMembersResponseItem);
@@ -132,6 +133,25 @@ export const GetMyMembershipResponse = zod.object({
   role: zod.enum(["dm", "player"]),
   displayName: zod.string(),
   avatarUrl: zod.string().nullish(),
+  emailNotifications: zod.boolean(),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update email notification preferences
+ */
+export const UpdateNotificationPrefsBody = zod.object({
+  emailNotifications: zod.boolean(),
+});
+
+export const UpdateNotificationPrefsResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  userId: zod.string(),
+  role: zod.enum(["dm", "player"]),
+  displayName: zod.string(),
+  avatarUrl: zod.string().nullish(),
+  emailNotifications: zod.boolean(),
   createdAt: zod.coerce.date(),
 });
 

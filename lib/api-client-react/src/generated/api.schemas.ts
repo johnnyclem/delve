@@ -38,6 +38,7 @@ export interface CampaignMember {
   displayName: string;
   /** @nullable */
   avatarUrl?: string | null;
+  emailNotifications: boolean;
   createdAt: string;
 }
 
@@ -357,4 +358,8 @@ export interface DashboardSummary {
   recapCount: number;
   avgRecapWordCount: number;
   recentRolls: DiceRoll[];
+}
+
+export interface UpdateNotificationPrefsBody {
+  emailNotifications: boolean;
 }
