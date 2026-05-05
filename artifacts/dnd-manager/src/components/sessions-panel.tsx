@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, ShieldAlert } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, ShieldAlert, ChevronDown, ChevronUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import {
   updateSession as updateSessionApi,
 } from "@workspace/api-client-react";
 import { useAutosave } from "@/hooks/use-autosave";
+import { NotesDiffView } from "@/components/notes-diff-view";
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { SessionLog, CampaignMember } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -456,11 +457,21 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     );
   };
 
+  const [showDiff, setShowDiff] = useState(false);
   const [manualSaveConflict, setManualSaveConflict] = useState<{
     localText: string;
     serverNotes: string;
     serverVersion: number;
   } | null>(null);
+
+  const activeConflictKey = manualSaveConflict
+    ? `manual-${manualSaveConflict.serverVersion}`
+    : conflict
+    ? `auto-${conflict.serverVersion}`
+    : null;
+  useEffect(() => {
+    if (!activeConflictKey) setShowDiff(false);
+  }, [activeConflictKey]);
 
   const showNotesSavedUndoToast = (previousNotes: string, savedTitle: string) => {
     toast({
@@ -750,7 +761,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <Button size="sm" variant="outline" className="border-amber-500/40 text-amber-300 hover:bg-amber-500/20" onClick={handleForceOverwrite} disabled={updateSession.isPending} data-testid="button-force-overwrite">
                       <Save className="h-3.5 w-3.5 mr-1" />
                       Keep my changes
@@ -758,7 +769,24 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
                     <Button size="sm" variant="ghost" className="text-amber-300 hover:bg-amber-500/20" onClick={handleDiscardLocal} data-testid="button-discard-local">
                       Load server version
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-amber-300 hover:bg-amber-500/20"
+                      onClick={() => setShowDiff((v) => !v)}
+                      aria-expanded={showDiff}
+                      data-testid="button-toggle-diff"
+                    >
+                      {showDiff ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
+                      {showDiff ? "Hide changes" : "Compare changes"}
+                    </Button>
                   </div>
+                  {showDiff && (
+                    <NotesDiffView
+                      localText={activeConflict.localText}
+                      serverText={activeConflict.serverNotes}
+                    />
+                  )}
                 </div>
               )}
               <Textarea ref={notesRef} value={notes} onChange={(e) => { setNotes(e.target.value); handleNoteChange(e.target.value); }} rows={12} placeholder="Write your session notes in markdown..." className="font-mono text-sm" data-testid="input-edit-notes" />
