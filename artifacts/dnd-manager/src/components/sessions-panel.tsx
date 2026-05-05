@@ -14,6 +14,7 @@ import { useAutosave } from "@/hooks/use-autosave";
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { SessionLog, CampaignMember } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -80,15 +81,8 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
         </div>
       ) : (
         <div className="space-y-3">
-          {(sessions as SessionLog[]).map((s) => (
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              key={s.id}
-              onClick={() => onSelect(s.id)}
-              className="w-full text-left rounded-2xl glass-panel-hover p-4"
-              data-testid={`card-session-${s.id}`}
-            >
+          {(sessions as SessionLog[]).map((s) => {
+            const cardInner = (
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-foreground flex items-center gap-2">
@@ -119,8 +113,23 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
               </div>
-            </motion.button>
-          ))}
+            );
+
+            return (
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                key={s.id}
+                onClick={() => onSelect(s.id)}
+                className={`w-full text-left ${s.hasNewRecap ? "" : "rounded-2xl glass-panel-hover p-4"}`}
+                data-testid={`card-session-${s.id}`}
+              >
+                {s.hasNewRecap ? (
+                  <AnimatedBorder className="p-4">{cardInner}</AnimatedBorder>
+                ) : cardInner}
+              </motion.button>
+            );
+          })}
         </div>
       )}
     </div>

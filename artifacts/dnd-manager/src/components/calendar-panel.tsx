@@ -10,6 +10,7 @@ import {
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { CalendarEvent, CalendarEventWithRsvps, CampaignMember, RsvpWithMember } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,6 +35,7 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
   const isDm = (membership as CampaignMember | undefined)?.role === "dm";
 
   const sorted = events ? [...(events as CalendarEvent[])].sort((a, b) => new Date(a.proposedAt).getTime() - new Date(b.proposedAt).getTime()) : [];
+  const nextEventId = sorted.find(ev => new Date(ev.proposedAt) >= new Date())?.id;
 
   return (
     <div className="space-y-6" data-testid="calendar-panel">
@@ -64,32 +66,40 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
           {sorted.map((ev) => {
             const date = new Date(ev.proposedAt);
             const isPast = date < new Date();
+            const isNext = ev.id === nextEventId;
+
+            const cardInner = (
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-foreground">{ev.title}</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} at {date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  ev.status === "confirmed" ? "bg-emerald-500/10 text-emerald-400" :
+                  ev.status === "cancelled" ? "bg-red-500/10 text-red-400" :
+                  "bg-yellow-500/10 text-yellow-400"
+                }`}>
+                  {ev.status}
+                </span>
+              </div>
+            );
+
             return (
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 key={ev.id}
                 onClick={() => onSelect(ev.id)}
-                className={`w-full text-left rounded-2xl glass-panel-hover p-4 ${
-                  isPast ? "opacity-60" : ""
+                className={`w-full text-left ${
+                  isNext ? "" : `rounded-2xl glass-panel-hover p-4 ${isPast ? "opacity-60" : ""}`
                 }`}
                 data-testid={`card-event-${ev.id}`}
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-foreground">{ev.title}</h3>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} at {date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    ev.status === "confirmed" ? "bg-emerald-500/10 text-emerald-400" :
-                    ev.status === "cancelled" ? "bg-red-500/10 text-red-400" :
-                    "bg-yellow-500/10 text-yellow-400"
-                  }`}>
-                    {ev.status}
-                  </span>
-                </div>
+                {isNext ? (
+                  <AnimatedBorder className="p-4">{cardInner}</AnimatedBorder>
+                ) : cardInner}
               </motion.button>
             );
           })}

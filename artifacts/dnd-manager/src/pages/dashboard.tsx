@@ -285,20 +285,22 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
       </motion.button>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("calendar")} className="text-left rounded-2xl glass-panel-hover p-5">
-          <div className="flex items-center justify-between mb-3">
-            <Calendar className="h-5 w-5 text-primary" />
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <h3 className="font-semibold text-foreground text-sm">Next Session</h3>
-          {dashboard?.nextEvent ? (
-            <p className="text-muted-foreground text-xs mt-1">
-              {new Date(dashboard.nextEvent.proposedAt).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-              {" — "}{dashboard.nextEvent.title}
-            </p>
-          ) : (
-            <p className="text-muted-foreground text-xs mt-1">No upcoming sessions</p>
-          )}
+        <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("calendar")} className="text-left">
+          <AnimatedBorder className="p-5">
+            <div className="flex items-center justify-between mb-3">
+              <Calendar className="h-5 w-5 text-primary" />
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <h3 className="font-semibold text-foreground text-sm">Next Session</h3>
+            {dashboard?.nextEvent ? (
+              <p className="text-muted-foreground text-xs mt-1">
+                {new Date(dashboard.nextEvent.proposedAt).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                {" — "}{dashboard.nextEvent.title}
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-xs mt-1">No upcoming sessions</p>
+            )}
+          </AnimatedBorder>
         </motion.button>
 
         <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("characters")} className="text-left rounded-2xl glass-panel-hover p-5">
