@@ -394,7 +394,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       return;
     }
     updateSession.mutate(
-      { id, data: { sessionNumber: draftSessionNumber } },
+      { id, data: { sessionNumber: draftSessionNumber, expectedVersion: s.version } },
       {
         onSuccess: () => {
           setEditingSessionNumber(false);
@@ -402,8 +402,20 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
           toast({ title: "Session number updated!" });
         },
-        onError: () => {
-          toast({ title: "Failed to update session number", variant: "destructive" });
+        onError: (err: unknown) => {
+          const apiErr = err as { status?: number } | undefined;
+          if (apiErr?.status === 409) {
+            setEditingSessionNumber(false);
+            queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+            queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+            toast({
+              title: "Session number not saved",
+              description: "Another change was made in another tab. Your edit was discarded — please review and try again.",
+              variant: "destructive",
+            });
+          } else {
+            toast({ title: "Failed to update session number", variant: "destructive" });
+          }
         },
       },
     );
