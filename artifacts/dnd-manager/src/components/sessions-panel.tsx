@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, ShieldAlert, ChevronDown, ChevronUp } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useListSessions, useGetSession, useCreateSession, useUpdateSession, useGenerateRecap,
-  useMarkRecapViewed,
+  useMarkRecapViewed, useNotifyRecap,
   getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey,
   updateSession as updateSessionApi,
 } from "@workspace/api-client-react";
@@ -193,6 +193,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const { data: session, isLoading } = useGetSession(id, { query: { queryKey: getGetSessionQueryKey(id) } });
   const { data: membership } = useGetMyMembership();
   const generateRecap = useGenerateRecap();
+  const notifyRecap = useNotifyRecap();
   const markViewed = useMarkRecapViewed();
   const updateSession = useUpdateSession();
   const queryClient = useQueryClient();
@@ -506,7 +507,10 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
-          toast({ title: "Recap generated!" });
+          toast({
+            title: "Recap generated!",
+            description: "Review and edit it below, then notify your players when ready.",
+          });
         },
         onError: () => {
           toast({ title: "Failed to generate recap", variant: "destructive" });
@@ -516,6 +520,24 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   };
 
   const [showDiff, setShowDiff] = useState(false);
+
+  const handleNotifyPlayers = () => {
+    notifyRecap.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          toast({ title: "Players notified!", description: "Recap notification emails are on their way." });
+        },
+        onError: () => {
+          toast({ title: "Failed to notify players", variant: "destructive" });
+        },
+      },
+    );
+  };
+
+
   const [manualSaveConflict, setManualSaveConflict] = useState<{
     localText: string;
     serverNotes: string;
@@ -752,17 +774,37 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
 
       {s.recapMd ? (
         <div className="rounded-2xl glass-panel p-6" style={{ boxShadow: "0 0 25px hsla(270, 100%, 60%, 0.1)" }} data-testid="section-recap">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
             <h3 className="font-semibold text-foreground flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               AI Recap
             </h3>
-            {isDm && isRecapStale && (
-              <span className="flex items-center gap-1 text-xs text-amber-400">
-                <AlertTriangle className="h-3 w-3" />
-                Notes updated since last recap
-              </span>
-            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              {isDm && isRecapStale && (
+                <span className="flex items-center gap-1 text-xs text-amber-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  Notes updated since last recap
+                </span>
+              )}
+              {isDm && (
+                s.notifiedAt && !isRecapStale ? (
+                  <span className="flex items-center gap-1 text-xs text-emerald-400" data-testid="text-notified-status">
+                    <BellRing className="h-3 w-3" />
+                    Players notified {new Date(s.notifiedAt).toLocaleString()}
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={handleNotifyPlayers}
+                    disabled={notifyRecap.isPending}
+                    data-testid="button-notify-players"
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    {notifyRecap.isPending ? "Sending..." : s.notifiedAt ? "Re-notify Players" : "Notify Players"}
+                  </Button>
+                )
+              )}
+            </div>
           </div>
           <div className="prose prose-sm prose-invert max-w-none text-foreground/90" dangerouslySetInnerHTML={{ __html: markdownToHtml(s.recapMd) }} />
         </div>

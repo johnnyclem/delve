@@ -12,6 +12,7 @@ export const sessionLogsTable = pgTable("session_logs", {
   rawNotesMd: text("raw_notes_md"),
   recapMd: text("recap_md"),
   generatedAt: timestamp("generated_at", { withTimezone: true }),
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
   version: integer("version").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

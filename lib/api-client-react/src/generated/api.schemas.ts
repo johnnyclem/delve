@@ -137,6 +137,8 @@ export interface SessionLog {
   recapMd?: string | null;
   /** @nullable */
   generatedAt?: string | null;
+  /** @nullable */
+  notifiedAt?: string | null;
   hasNewRecap?: boolean;
   version: number;
   createdAt: string;
@@ -168,6 +170,11 @@ export interface UpdateSessionBody {
 export interface ConflictError {
   error: string;
   serverSession: SessionLog;
+}
+
+export interface NotifyRecapResult {
+  success: boolean;
+  notifiedAt: string;
 }
 
 export interface GeneratedRecap {

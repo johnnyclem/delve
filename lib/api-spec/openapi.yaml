@@ -298,6 +298,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/GeneratedRecap"
 
+  /sessions/{id}/notify-recap:
+    post:
+      operationId: notifyRecap
+      tags: [recap]
+      summary: Send recap notification emails to players (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Notifications dispatched
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotifyRecapResult"
+
   /sessions/{id}/mark-recap-viewed:
     post:
       operationId: markRecapViewed
@@ -753,6 +772,9 @@ components:
         generatedAt:
           type: ["string", "null"]
           format: date-time
+        notifiedAt:
+          type: ["string", "null"]
+          format: date-time
         hasNewRecap:
           type: boolean
         version:
@@ -816,6 +838,18 @@ components:
       required:
         - error
         - serverSession
+
+    NotifyRecapResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        notifiedAt:
+          type: string
+          format: date-time
+      required:
+        - success
+        - notifiedAt
 
     GeneratedRecap:
       type: object

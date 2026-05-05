@@ -31,6 +31,7 @@ import type {
   ErrorResponse,
   GeneratedRecap,
   HealthStatus,
+  NotifyRecapResult,
   RollDiceBody,
   Rsvp,
   SessionLog,
@@ -1263,6 +1264,90 @@ export const useGenerateRecap = <
   TContext
 > => {
   return useMutation(getGenerateRecapMutationOptions(options));
+};
+
+/**
+ * @summary Send recap notification emails to players (DM only)
+ */
+export const getNotifyRecapUrl = (id: number) => {
+  return `/api/sessions/${id}/notify-recap`;
+};
+
+export const notifyRecap = async (
+  id: number,
+  options?: RequestInit,
+): Promise<NotifyRecapResult> => {
+  return customFetch<NotifyRecapResult>(getNotifyRecapUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getNotifyRecapMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof notifyRecap>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof notifyRecap>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["notifyRecap"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof notifyRecap>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return notifyRecap(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type NotifyRecapMutationResult = NonNullable<
+  Awaited<ReturnType<typeof notifyRecap>>
+>;
+
+export type NotifyRecapMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Send recap notification emails to players (DM only)
+ */
+export const useNotifyRecap = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof notifyRecap>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof notifyRecap>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getNotifyRecapMutationOptions(options));
 };
 
 /**

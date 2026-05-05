@@ -239,21 +239,61 @@ router.post("/sessions/:id/generate-recap", requireAuth, requireCampaignMember, 
 
   await db
     .update(sessionLogsTable)
-    .set({ recapMd: recap, generatedAt: new Date() })
+    .set({ recapMd: recap, generatedAt: new Date(), notifiedAt: null })
     .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
 
   await db
     .delete(recapViewsTable)
     .where(eq(recapViewsTable.sessionLogId, id));
 
-  sendRecapNotifications({
+  res.json({ recap, model: "gpt-4o" });
+});
+
+router.post("/sessions/:id/notify-recap", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can send recap notifications" });
+    return;
+  }
+
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid session ID" });
+    return;
+  }
+
+  const [session] = await db
+    .select()
+    .from(sessionLogsTable)
+    .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (!session.recapMd) {
+    res.status(400).json({ error: "No recap available to notify about" });
+    return;
+  }
+
+  await sendRecapNotifications({
     campaignId,
     sessionNumber: session.sessionNumber,
     sessionTitle: session.title,
     sessionId: id,
-  }).catch(() => {});
+  });
 
-  res.json({ recap, model: "gpt-4o" });
+  const notifiedAt = new Date();
+  await db
+    .update(sessionLogsTable)
+    .set({ notifiedAt })
+    .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
+
+  res.json({ success: true, notifiedAt: notifiedAt.toISOString() });
 });
 
 router.post("/sessions/:id/mark-recap-viewed", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {

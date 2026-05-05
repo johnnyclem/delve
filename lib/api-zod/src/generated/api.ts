@@ -70,6 +70,7 @@ export const GetDashboardResponse = zod.object({
       rawNotesMd: zod.string().nullish(),
       recapMd: zod.string().nullish(),
       generatedAt: zod.coerce.date().nullish(),
+      notifiedAt: zod.coerce.date().nullish(),
       hasNewRecap: zod.boolean().optional(),
       version: zod.number(),
       createdAt: zod.coerce.date(),
@@ -491,6 +492,7 @@ export const ListSessionsResponseItem = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
   version: zod.number(),
   createdAt: zod.coerce.date(),
@@ -524,6 +526,7 @@ export const GetSessionResponse = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
   version: zod.number(),
   createdAt: zod.coerce.date(),
@@ -560,6 +563,7 @@ export const UpdateSessionResponse = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
   version: zod.number(),
   createdAt: zod.coerce.date(),
@@ -576,6 +580,18 @@ export const GenerateRecapParams = zod.object({
 export const GenerateRecapResponse = zod.object({
   recap: zod.string(),
   model: zod.string(),
+});
+
+/**
+ * @summary Send recap notification emails to players (DM only)
+ */
+export const NotifyRecapParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const NotifyRecapResponse = zod.object({
+  success: zod.boolean(),
+  notifiedAt: zod.coerce.date(),
 });
 
 /**
@@ -601,6 +617,7 @@ export const GetLatestRecapResponse = zod.object({
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
+  notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
   version: zod.number(),
   createdAt: zod.coerce.date(),
