@@ -218,11 +218,11 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [draftSessionNumber, setDraftSessionNumber] = useState(0);
   const sessionNumberInputRef = useRef<HTMLInputElement>(null);
 
-  type UndoField = "title" | "playedAt";
-  const FIELD_LABELS: Record<UndoField, string> = { title: "Title", playedAt: "Date" };
+  type UndoField = "title" | "playedAt" | "sessionNumber";
+  const FIELD_LABELS: Record<UndoField, string> = { title: "Title", playedAt: "Date", sessionNumber: "Session number" };
   const BATCH_WINDOW_MS = 5000;
   type UndoBatch = {
-    originals: { title?: string; playedAt?: string | null };
+    originals: { title?: string; playedAt?: string | null; sessionNumber?: number };
     fields: Set<UndoField>;
     toastControl: ReturnType<typeof toast> | null;
     timerId: ReturnType<typeof setTimeout> | null;
@@ -246,9 +246,10 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     if (fields.length === 0) return;
     batch.toastControl?.dismiss();
     resetUndoBatch();
-    const data: { title?: string; playedAt?: string | null } = {};
+    const data: { title?: string; playedAt?: string | null; sessionNumber?: number } = {};
     if ("title" in originals) data.title = originals.title;
     if ("playedAt" in originals) data.playedAt = originals.playedAt ?? null;
+    if ("sessionNumber" in originals && originals.sessionNumber !== undefined) data.sessionNumber = originals.sessionNumber;
     updateSession.mutate(
       { id, data },
       {
@@ -267,11 +268,12 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   }, [id, updateSession, queryClient, toast, resetUndoBatch]);
 
   const queueUndoToast = useCallback(
-    (field: UndoField, originalValue: string | null | undefined) => {
+    (field: UndoField, originalValue: string | number | null | undefined) => {
       const batch = undoBatchRef.current;
       if (!(field in batch.originals)) {
-        if (field === "title") batch.originals.title = originalValue ?? "";
-        else batch.originals.playedAt = originalValue ?? null;
+        if (field === "title") batch.originals.title = (originalValue as string | undefined) ?? "";
+        else if (field === "playedAt") batch.originals.playedAt = (originalValue as string | null | undefined) ?? null;
+        else batch.originals.sessionNumber = originalValue as number;
       }
       batch.fields.add(field);
 
@@ -394,6 +396,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       setEditingSessionNumber(false);
       return;
     }
+    const previousSessionNumber = s.sessionNumber;
     updateSession.mutate(
       { id, data: { sessionNumber: draftSessionNumber, expectedVersion: s.version } },
       {
@@ -401,7 +404,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           setEditingSessionNumber(false);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({ title: "Session number updated!" });
+          queueUndoToast("sessionNumber", previousSessionNumber);
         },
         onError: (err: unknown) => {
           const apiErr = err as { status?: number } | undefined;
@@ -420,7 +423,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         },
       },
     );
-  }, [s, draftSessionNumber, id, updateSession, queryClient, toast]);
+  }, [s, draftSessionNumber, id, updateSession, queryClient, toast, queueUndoToast]);
 
   const handleSaveTitle = useCallback(() => {
     if (!s || !draftTitle.trim() || draftTitle.trim() === s.title) {
