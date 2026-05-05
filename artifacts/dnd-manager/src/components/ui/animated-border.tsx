@@ -1,13 +1,22 @@
 import { cn } from "@/lib/utils";
 import { useEffect, useState, type ReactNode } from "react";
 
+type AnimatedBorderSpeed = "fast" | "normal" | "slow";
+
 interface AnimatedBorderProps {
   children: ReactNode;
   className?: string;
   containerClassName?: string;
   animate?: boolean;
   interactive?: boolean;
+  speed?: AnimatedBorderSpeed;
 }
+
+const speedClassMap: Record<AnimatedBorderSpeed, string> = {
+  fast: "animated-border-gradient--fast",
+  normal: "",
+  slow: "animated-border-gradient--slow",
+};
 
 function usePrefersReducedMotion(): boolean {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => {
@@ -33,6 +42,7 @@ export function AnimatedBorder({
   containerClassName,
   animate = true,
   interactive = false,
+  speed = "normal",
 }: AnimatedBorderProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const shouldAnimate = animate && !prefersReducedMotion;
@@ -48,7 +58,7 @@ export function AnimatedBorder({
       <div
         className={
           shouldAnimate
-            ? "animated-border-gradient pointer-events-none"
+            ? cn("animated-border-gradient pointer-events-none", speedClassMap[speed])
             : "animated-border-static pointer-events-none"
         }
       />

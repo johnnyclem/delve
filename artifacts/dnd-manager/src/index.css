@@ -351,6 +351,22 @@
   );
 }
 
+.animated-border-gradient--fast {
+  animation-duration: 2.5s;
+}
+
+.animated-border-gradient--slow {
+  animation-duration: 8s;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    hsla(270, 100%, 60%, 0.3) 5%,
+    hsla(320, 100%, 50%, 0.25) 10%,
+    transparent 15%,
+    transparent 100%
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animated-border-gradient {
     animation: none;
