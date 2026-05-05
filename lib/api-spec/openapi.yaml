@@ -777,6 +777,9 @@ components:
           format: date-time
         hasNewRecap:
           type: boolean
+        recapWordCount:
+          type: integer
+          description: Word count of the recap text, or 0 if no recap exists.
         version:
           type: integer
         createdAt:

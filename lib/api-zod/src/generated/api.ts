@@ -72,6 +72,10 @@ export const GetDashboardResponse = zod.object({
       generatedAt: zod.coerce.date().nullish(),
       notifiedAt: zod.coerce.date().nullish(),
       hasNewRecap: zod.boolean().optional(),
+      recapWordCount: zod
+        .number()
+        .optional()
+        .describe("Word count of the recap text, or 0 if no recap exists."),
       version: zod.number(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
@@ -494,6 +498,10 @@ export const ListSessionsResponseItem = zod.object({
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  recapWordCount: zod
+    .number()
+    .optional()
+    .describe("Word count of the recap text, or 0 if no recap exists."),
   version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -528,6 +536,10 @@ export const GetSessionResponse = zod.object({
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  recapWordCount: zod
+    .number()
+    .optional()
+    .describe("Word count of the recap text, or 0 if no recap exists."),
   version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -565,6 +577,10 @@ export const UpdateSessionResponse = zod.object({
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  recapWordCount: zod
+    .number()
+    .optional()
+    .describe("Word count of the recap text, or 0 if no recap exists."),
   version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -619,6 +635,10 @@ export const GetLatestRecapResponse = zod.object({
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  recapWordCount: zod
+    .number()
+    .optional()
+    .describe("Word count of the recap text, or 0 if no recap exists."),
   version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),

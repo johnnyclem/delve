@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,10 +100,18 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
                       {s.playedAt ? new Date(s.playedAt).toLocaleDateString() : "Date TBD"}
                     </span>
                     {s.recapMd ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary" data-testid={`badge-recap-available-${s.id}`}>
-                        <CheckCircle2 className="h-3 w-3" />
-                        Recap available
-                      </span>
+                      <>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary" data-testid={`badge-recap-available-${s.id}`}>
+                          <CheckCircle2 className="h-3 w-3" />
+                          Recap available
+                        </span>
+                        {typeof s.recapWordCount === "number" && s.recapWordCount > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid={`badge-recap-words-${s.id}`}>
+                            <FileText className="h-3 w-3" />
+                            <span className="font-mono tabular-nums">{s.recapWordCount.toLocaleString()}</span> words
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid={`badge-recap-pending-${s.id}`}>
                         <Clock className="h-3 w-3" />

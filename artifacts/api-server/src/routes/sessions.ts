@@ -23,10 +23,15 @@ router.get("/sessions", requireAuth, requireCampaignMember, async (req, res): Pr
     .where(eq(sessionLogsTable.campaignId, campaignId))
     .orderBy(desc(sessionLogsTable.sessionNumber));
 
+  const withWordCount = sessions.map(s => ({
+    ...s,
+    recapWordCount: s.recapMd ? s.recapMd.trim().split(/\s+/).filter(Boolean).length : 0,
+  }));
+
   if (member.role === "dm") {
-    res.json(sessions);
+    res.json(withWordCount);
   } else {
-    const sessionIds = sessions.filter(s => s.recapMd).map(s => s.id);
+    const sessionIds = withWordCount.filter(s => s.recapMd).map(s => s.id);
     let viewedIds: Set<number> = new Set();
     if (sessionIds.length > 0) {
       const views = await db
@@ -38,8 +43,9 @@ router.get("/sessions", requireAuth, requireCampaignMember, async (req, res): Pr
         ));
       viewedIds = new Set(views.map(v => v.sessionLogId));
     }
-    res.json(sessions.map(s => ({
+    res.json(withWordCount.map(s => ({
       ...stripDmFields(s),
+      recapWordCount: s.recapWordCount,
       hasNewRecap: !!(s.recapMd && !viewedIds.has(s.id)),
     })));
   }

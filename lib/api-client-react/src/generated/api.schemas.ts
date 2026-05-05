@@ -140,6 +140,8 @@ export interface SessionLog {
   /** @nullable */
   notifiedAt?: string | null;
   hasNewRecap?: boolean;
+  /** Word count of the recap text, or 0 if no recap exists. */
+  recapWordCount?: number;
   version: number;
   createdAt: string;
   updatedAt: string;
