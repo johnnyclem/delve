@@ -6,6 +6,7 @@ interface AnimatedBorderProps {
   className?: string;
   containerClassName?: string;
   animate?: boolean;
+  interactive?: boolean;
 }
 
 function usePrefersReducedMotion(): boolean {
@@ -31,6 +32,7 @@ export function AnimatedBorder({
   className,
   containerClassName,
   animate = true,
+  interactive = false,
 }: AnimatedBorderProps) {
   const prefersReducedMotion = usePrefersReducedMotion();
   const shouldAnimate = animate && !prefersReducedMotion;
@@ -39,6 +41,7 @@ export function AnimatedBorder({
     <div
       className={cn(
         "relative rounded-2xl p-px overflow-hidden",
+        interactive && "animated-border-interactive group",
         containerClassName,
       )}
     >
@@ -49,6 +52,7 @@ export function AnimatedBorder({
             : "animated-border-static pointer-events-none"
         }
       />
+      {interactive && <div className="animated-border-glow pointer-events-none" />}
       <div
         className={cn(
           "relative z-10 rounded-2xl bg-glass backdrop-blur-[20px]",

@@ -98,7 +98,7 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
                 data-testid={`card-event-${ev.id}`}
               >
                 {isNext ? (
-                  <AnimatedBorder className="p-4">{cardInner}</AnimatedBorder>
+                  <AnimatedBorder className="p-4" interactive>{cardInner}</AnimatedBorder>
                 ) : cardInner}
               </motion.button>
             );

@@ -126,7 +126,7 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
                 data-testid={`card-session-${s.id}`}
               >
                 {s.hasNewRecap ? (
-                  <AnimatedBorder className="p-4">{cardInner}</AnimatedBorder>
+                  <AnimatedBorder className="p-4" interactive>{cardInner}</AnimatedBorder>
                 ) : cardInner}
               </motion.button>
             );
