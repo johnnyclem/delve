@@ -217,6 +217,102 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [draftSessionNumber, setDraftSessionNumber] = useState(0);
   const sessionNumberInputRef = useRef<HTMLInputElement>(null);
 
+  type UndoField = "title" | "playedAt";
+  const FIELD_LABELS: Record<UndoField, string> = { title: "Title", playedAt: "Date" };
+  const BATCH_WINDOW_MS = 5000;
+  type UndoBatch = {
+    originals: { title?: string; playedAt?: string | null };
+    fields: Set<UndoField>;
+    toastControl: ReturnType<typeof toast> | null;
+    timerId: ReturnType<typeof setTimeout> | null;
+  };
+  const undoBatchRef = useRef<UndoBatch>({
+    originals: {},
+    fields: new Set(),
+    toastControl: null,
+    timerId: null,
+  });
+
+  const resetUndoBatch = useCallback(() => {
+    if (undoBatchRef.current.timerId) clearTimeout(undoBatchRef.current.timerId);
+    undoBatchRef.current = { originals: {}, fields: new Set(), toastControl: null, timerId: null };
+  }, []);
+
+  const performBatchedUndo = useCallback(() => {
+    const batch = undoBatchRef.current;
+    const originals = batch.originals;
+    const fields = Array.from(batch.fields);
+    if (fields.length === 0) return;
+    batch.toastControl?.dismiss();
+    resetUndoBatch();
+    const data: { title?: string; playedAt?: string | null } = {};
+    if ("title" in originals) data.title = originals.title;
+    if ("playedAt" in originals) data.playedAt = originals.playedAt ?? null;
+    updateSession.mutate(
+      { id, data },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          toast({
+            title: fields.length > 1 ? "Changes reverted" : `${FIELD_LABELS[fields[0]]} reverted`,
+          });
+        },
+        onError: () => {
+          toast({ title: "Failed to undo changes", variant: "destructive" });
+        },
+      },
+    );
+  }, [id, updateSession, queryClient, toast, resetUndoBatch]);
+
+  const queueUndoToast = useCallback(
+    (field: UndoField, originalValue: string | null | undefined) => {
+      const batch = undoBatchRef.current;
+      if (!(field in batch.originals)) {
+        if (field === "title") batch.originals.title = originalValue ?? "";
+        else batch.originals.playedAt = originalValue ?? null;
+      }
+      batch.fields.add(field);
+
+      const fields = Array.from(batch.fields);
+      const title =
+        fields.length > 1 ? `${fields.length} changes saved` : `${FIELD_LABELS[fields[0]]} updated`;
+      const action = (
+        <ToastAction altText="Undo recent changes" onClick={performBatchedUndo}>
+          Undo
+        </ToastAction>
+      );
+
+      if (batch.toastControl) {
+        batch.toastControl.update({
+          id: batch.toastControl.id,
+          title,
+          action,
+          open: true,
+          duration: Infinity,
+        });
+      } else {
+        batch.toastControl = toast({ title, action, duration: Infinity });
+      }
+
+      if (batch.timerId) clearTimeout(batch.timerId);
+      batch.timerId = setTimeout(() => {
+        const current = undoBatchRef.current;
+        current.toastControl?.dismiss();
+        resetUndoBatch();
+      }, BATCH_WINDOW_MS);
+    },
+    [toast, performBatchedUndo, resetUndoBatch],
+  );
+
+  useEffect(() => {
+    return () => {
+      const batch = undoBatchRef.current;
+      if (batch.timerId) clearTimeout(batch.timerId);
+      batch.toastControl?.dismiss();
+    };
+  }, []);
+
   const autosaveSaveFn = useCallback(
     async (text: string, expectedVersion?: number) => {
       const result = await updateSessionApi(id, {
@@ -326,32 +422,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           setEditingTitle(false);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({
-            title: "Title updated",
-            duration: 5000,
-            action: (
-              <ToastAction
-                altText="Undo title change"
-                onClick={() => {
-                  updateSession.mutate(
-                    { id, data: { title: previousTitle } },
-                    {
-                      onSuccess: () => {
-                        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
-                        queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-                        toast({ title: "Title reverted" });
-                      },
-                      onError: () => {
-                        toast({ title: "Failed to undo title change", variant: "destructive" });
-                      },
-                    },
-                  );
-                }}
-              >
-                Undo
-              </ToastAction>
-            ),
-          });
+          queueUndoToast("title", previousTitle);
         },
         onError: (err: unknown) => {
           const apiErr = err as { status?: number } | undefined;
@@ -370,7 +441,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         },
       },
     );
-  }, [s, draftTitle, id, updateSession, queryClient, toast]);
+  }, [s, draftTitle, id, updateSession, queryClient, toast, queueUndoToast]);
 
   const handleSaveDate = useCallback((value: string) => {
     const newPlayedAt = value || null;
@@ -387,32 +458,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           setEditingDate(false);
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({
-            title: "Date updated",
-            duration: 5000,
-            action: (
-              <ToastAction
-                altText="Undo date change"
-                onClick={() => {
-                  updateSession.mutate(
-                    { id, data: { playedAt: previousPlayedAt } },
-                    {
-                      onSuccess: () => {
-                        queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
-                        queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-                        toast({ title: "Date reverted" });
-                      },
-                      onError: () => {
-                        toast({ title: "Failed to undo date change", variant: "destructive" });
-                      },
-                    },
-                  );
-                }}
-              >
-                Undo
-              </ToastAction>
-            ),
-          });
+          queueUndoToast("playedAt", previousPlayedAt);
         },
         onError: (err: unknown) => {
           const apiErr = err as { status?: number } | undefined;
@@ -431,7 +477,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         },
       },
     );
-  }, [s, id, updateSession, queryClient, toast]);
+  }, [s, id, updateSession, queryClient, toast, queueUndoToast]);
 
   const handleBack = () => {
     if (isDirty && !confirm("You have unsaved changes to your notes. Discard them?")) {
