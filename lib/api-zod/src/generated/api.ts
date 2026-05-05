@@ -106,6 +106,12 @@ export const GetDashboardResponse = zod.object({
       rolledAt: zod.coerce.date(),
     }),
   ),
+  sessionTrend: zod.array(
+    zod.object({
+      month: zod.string(),
+      count: zod.number(),
+    }),
+  ),
 });
 
 /**

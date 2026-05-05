@@ -324,6 +324,11 @@ export interface DiceRoll {
   rolledAt: string;
 }
 
+export interface SessionTrendPoint {
+  month: string;
+  count: number;
+}
+
 export type PartyMemberSummaryRole =
   (typeof PartyMemberSummaryRole)[keyof typeof PartyMemberSummaryRole];
 
@@ -358,6 +363,7 @@ export interface DashboardSummary {
   recapCount: number;
   avgRecapWordCount: number;
   recentRolls: DiceRoll[];
+  sessionTrend: SessionTrendPoint[];
 }
 
 export interface UpdateNotificationPrefsBody {

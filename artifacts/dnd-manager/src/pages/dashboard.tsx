@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useGetDashboard, useListSessions, useGetMyMembership, useUpdateNotificationPrefs } from "@workspace/api-client-react";
-import type { DashboardSummary, PartyMemberSummary, DiceRoll } from "@workspace/api-client-react";
+import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
 import CharacterListPanel from "@/components/character-list";
@@ -19,6 +19,7 @@ import { useClerk } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const navItems = [
   { id: "overview", label: "Overview", icon: Shield },
@@ -266,6 +267,66 @@ function JoinCampaignPage() {
   );
 }
 
+function SessionTrendTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#18181B] px-3 py-2 shadow-xl">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold text-foreground font-mono tabular-nums">
+        {payload[0].value} {payload[0].value === 1 ? "session" : "sessions"}
+      </p>
+    </div>
+  );
+}
+
+function SessionTrendChart({ data }: { data: SessionTrendPoint[] }) {
+  const shortLabels = data.map((d) => {
+    const parts = d.month.split(" ");
+    return { ...d, label: parts[0] };
+  });
+
+  return (
+    <div className="mt-4 -mx-1" data-testid="session-trend-chart">
+      <p className="text-xs text-muted-foreground mb-2">Sessions per month</p>
+      <div className="h-[100px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={shortLabels} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+            <defs>
+              <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis
+              dataKey="label"
+              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              width={30}
+            />
+            <Tooltip content={<SessionTrendTooltip />} cursor={false} />
+            <Area
+              type="monotone"
+              dataKey="count"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2}
+              fill="url(#trendFill)"
+              dot={false}
+              activeDot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; onNavigate: (tab: string) => void }) {
   if (isLoading) {
     return (
@@ -326,6 +387,9 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
             </div>
           )}
         </div>
+        {dashboard?.sessionTrend && dashboard.sessionTrend.length > 0 && (
+          <SessionTrendChart data={dashboard.sessionTrend} />
+        )}
       </motion.button>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

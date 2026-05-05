@@ -99,6 +99,30 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
     .orderBy(desc(diceRollsTable.rolledAt))
     .limit(5);
 
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const now2 = new Date();
+  const currentUtcYear = now2.getUTCFullYear();
+  const currentUtcMonth = now2.getUTCMonth();
+
+  const trendBuckets: { key: string; month: string; count: number }[] = [];
+  for (let i = 5; i >= 0; i--) {
+    let y = currentUtcYear;
+    let m = currentUtcMonth - i;
+    if (m < 0) { m += 12; y -= 1; }
+    trendBuckets.push({ key: `${y}-${String(m).padStart(2, "0")}`, month: `${monthNames[m]} ${y}`, count: 0 });
+  }
+
+  for (const s of sessions) {
+    const dateVal = s.playedAt ?? s.createdAt;
+    if (!dateVal) continue;
+    const d = new Date(dateVal);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth()).padStart(2, "0")}`;
+    const entry = trendBuckets.find((t) => t.key === key);
+    if (entry) entry.count++;
+  }
+
+  const sessionTrend = trendBuckets.map(({ month, count }) => ({ month, count }));
+
   const { inviteCode: _code, ...safeCampaign } = campaign;
 
   const response: Record<string, unknown> = {
@@ -110,6 +134,7 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
     recapCount,
     avgRecapWordCount,
     recentRolls,
+    sessionTrend,
   };
 
   if (member.role === "dm") {
