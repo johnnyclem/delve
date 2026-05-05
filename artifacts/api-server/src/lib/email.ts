@@ -1,6 +1,7 @@
 import { db, campaignMembersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { logger } from "./logger";
+import { generateUnsubscribeToken } from "./unsubscribe";
 
 interface RecapNotificationParams {
   campaignId: number;
@@ -71,6 +72,14 @@ export async function sendRecapNotifications(params: RecapNotificationParams): P
           continue;
         }
 
+        let unsubscribeUrl: string | null = null;
+        try {
+          const token = generateUnsubscribeToken(campaignId, player.userId);
+          unsubscribeUrl = `${appUrl}/api/unsubscribe?token=${encodeURIComponent(token)}`;
+        } catch (err) {
+          logger.warn({ err }, "Could not build unsubscribe link — sending email without it");
+        }
+
         await resend.emails.send({
           from: fromEmail,
           to: email,
@@ -80,7 +89,16 @@ export async function sendRecapNotifications(params: RecapNotificationParams): P
             sessionNumber,
             sessionTitle,
             appUrl,
+            unsubscribeUrl,
           }),
+          ...(unsubscribeUrl
+            ? {
+                headers: {
+                  "List-Unsubscribe": `<${unsubscribeUrl}>`,
+                  "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+                },
+              }
+            : {}),
         });
 
         logger.info({ userId: player.userId, email }, "Recap notification email sent");
@@ -98,8 +116,12 @@ function buildRecapEmailHtml(params: {
   sessionNumber: number;
   sessionTitle: string;
   appUrl: string;
+  unsubscribeUrl: string | null;
 }): string {
-  const { playerName, sessionNumber, sessionTitle, appUrl } = params;
+  const { playerName, sessionNumber, sessionTitle, appUrl, unsubscribeUrl } = params;
+  const unsubscribeLine = unsubscribeUrl
+    ? `<a href="${unsubscribeUrl}" style="color:#A78BFA;text-decoration:underline;">Unsubscribe from recap emails</a> for this campaign, or visit Delve to update your preferences.`
+    : `Visit Delve to update your preferences.`;
 
   return `<!DOCTYPE html>
 <html>
@@ -123,9 +145,9 @@ function buildRecapEmailHtml(params: {
           </a>
         </td></tr>
         <tr><td style="padding:16px 32px;border-top:1px solid rgba(255,255,255,0.06);">
-          <p style="margin:0;color:#71717A;font-size:12px;">
+          <p style="margin:0;color:#71717A;font-size:12px;line-height:1.5;">
             You received this because you opted in to email notifications.
-            Visit Delve to update your preferences.
+            ${unsubscribeLine}
           </p>
         </td></tr>
       </table>

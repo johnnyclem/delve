@@ -6,6 +6,7 @@ import charactersRouter from "./characters";
 import sessionsRouter from "./sessions";
 import calendarRouter from "./calendar";
 import diceRouter from "./dice";
+import unsubscribeRouter from "./unsubscribe";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(charactersRouter);
 router.use(sessionsRouter);
 router.use(calendarRouter);
 router.use(diceRouter);
+router.use(unsubscribeRouter);
 
 export default router;
