@@ -266,9 +266,16 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({
-            title: fields.length > 1 ? "Changes reverted" : `${FIELD_LABELS[fields[0]]} reverted`,
-          });
+          const labels = fields.map((f) => FIELD_LABELS[f]);
+          let revertedTitle: string;
+          if (labels.length === 1) {
+            revertedTitle = `${labels[0]} reverted`;
+          } else if (labels.length === 2) {
+            revertedTitle = `${labels[0]} and ${labels[1]} reverted`;
+          } else {
+            revertedTitle = `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]} reverted`;
+          }
+          toast({ title: revertedTitle });
         },
         onError: () => {
           toast({ title: "Failed to undo changes", variant: "destructive" });
