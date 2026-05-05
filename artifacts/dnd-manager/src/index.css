@@ -308,8 +308,28 @@
   will-change: transform;
 }
 
+.animated-border-static {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    hsla(270, 100%, 60%, 0.35),
+    hsla(320, 100%, 50%, 0.25),
+    hsla(270, 100%, 60%, 0.2)
+  );
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animated-border-gradient {
     animation: none;
+    inset: 0;
+    background: linear-gradient(
+      135deg,
+      hsla(270, 100%, 60%, 0.35),
+      hsla(320, 100%, 50%, 0.25),
+      hsla(270, 100%, 60%, 0.2)
+    );
   }
 }
