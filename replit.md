@@ -60,7 +60,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - **Join flow**: Non-members see a "Join Campaign" page with invite code input. DM shares invite code from dashboard.
 - **Dashboard**: Overview with session stats card (total sessions + recap count), next session, party members, latest recap, recent rolls. DM sees invite code.
 - **Characters**: List + detail view with editable 5e character sheets + multi-step creation wizard (basics → ability scores → combat → details)
-- **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes. DM notes have autosave: drafts persist to localStorage immediately on each keystroke, and auto-save to the server via debounced PATCH (30s after last keystroke). Drafts are restored when re-opening edit mode if the server version hasn't changed. Visual status indicators show auto-save progress. Custom hook: `use-autosave.ts`. Players get notified of new recaps via "New" badge + toast; notification clears after viewing.
+- **Sessions**: Create sessions, add DM notes, generate AI recaps. Players see recaps but not raw DM notes. DM notes have autosave: drafts persist to localStorage immediately on each keystroke, and auto-save to the server via debounced PATCH (30s after last keystroke). Drafts are restored when re-opening edit mode if the server version hasn't changed. Visual status indicators show auto-save progress. Custom hook: `use-autosave.ts`. Players get notified of new recaps via "New" badge + toast; notification clears after viewing. **Multi-tab conflict detection**: Uses optimistic concurrency via integer `version` column + `expectedVersion` field in PATCH requests. Atomic `UPDATE ... WHERE version = ?` with auto-increment prevents race conditions. If another tab/window has saved changes, the API returns 409 Conflict with the current server session data. The UI shows an amber conflict banner with "Keep my changes" (force overwrite) and "Load server version" (discard local) options. Single-tab usage is unaffected.
 - **Calendar**: Schedule sessions with RSVP (yes/maybe/no)
 - **Dice Roller**: Roll any dice expression (e.g. 2d6+3) with shared log
 - **Roles**: First user auto-becomes DM; subsequent users join with invite code as players
@@ -91,7 +91,7 @@ Requires campaign membership:
 - GET /sessions — list session logs (rawNotesMd stripped for players; includes hasNewRecap boolean for players)
 - POST /sessions — create session (DM only)
 - GET /sessions/:id — get session detail (rawNotesMd stripped for players)
-- PATCH /sessions/:id — update session (DM only)
+- PATCH /sessions/:id — update session (DM only, supports `expectedVersion` integer for atomic optimistic concurrency → 409 on conflict)
 - POST /sessions/:id/generate-recap — generate AI recap (DM only, clears recap_views so players see it as new)
 - POST /sessions/:id/mark-recap-viewed — mark recap as viewed by current player
 - GET /sessions/latest-recap — get latest recap (rawNotesMd stripped)

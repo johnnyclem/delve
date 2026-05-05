@@ -71,6 +71,7 @@ export const GetDashboardResponse = zod.object({
       recapMd: zod.string().nullish(),
       generatedAt: zod.coerce.date().nullish(),
       hasNewRecap: zod.boolean().optional(),
+      version: zod.number(),
       createdAt: zod.coerce.date(),
       updatedAt: zod.coerce.date(),
     })
@@ -459,6 +460,7 @@ export const ListSessionsResponseItem = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -491,6 +493,7 @@ export const GetSessionResponse = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -508,6 +511,12 @@ export const UpdateSessionBody = zod.object({
   playedAt: zod.coerce.date().nullish(),
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
+  expectedVersion: zod
+    .number()
+    .optional()
+    .describe(
+      "Optimistic concurrency check. If provided, the server rejects the update with 409 when the current version does not match.",
+    ),
 });
 
 export const UpdateSessionResponse = zod.object({
@@ -520,6 +529,7 @@ export const UpdateSessionResponse = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -560,6 +570,7 @@ export const GetLatestRecapResponse = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   hasNewRecap: zod.boolean().optional(),
+  version: zod.number(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });

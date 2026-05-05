@@ -6,7 +6,13 @@ interface DraftData {
   savedAt: number;
 }
 
-export type AutosaveStatus = "idle" | "saving" | "saved" | "error";
+export type AutosaveStatus = "idle" | "saving" | "saved" | "error" | "conflict";
+
+export interface ConflictData {
+  localText: string;
+  serverNotes: string;
+  serverVersion: number;
+}
 
 function getDraftKey(sessionId: number): string {
   return `session-draft-${sessionId}`;
@@ -15,19 +21,28 @@ function getDraftKey(sessionId: number): string {
 export function useAutosave(
   sessionId: number,
   serverNotes: string,
+  serverVersion: number,
   isEditing: boolean,
-  saveFn: (text: string) => Promise<unknown>,
+  saveFn: (text: string, expectedVersion?: number) => Promise<unknown>,
   debounceMs = 30000,
 ) {
   const [status, setStatus] = useState<AutosaveStatus>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [conflict, setConflict] = useState<ConflictData | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveFnRef = useRef(saveFn);
   saveFnRef.current = saveFn;
   const latestTextRef = useRef("");
   const serverNotesRef = useRef(serverNotes);
   serverNotesRef.current = serverNotes;
+  const knownVersionRef = useRef(serverVersion);
   const isSavingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      knownVersionRef.current = serverVersion;
+    }
+  }, [isEditing, serverVersion]);
 
   const clearDraft = useCallback(() => {
     try {
@@ -49,6 +64,38 @@ export function useAutosave(
       return null;
     }
   }, [sessionId, serverNotes]);
+
+  const resolveConflict = useCallback(
+    (action: "overwrite" | "discard") => {
+      if (!conflict) return;
+      if (action === "overwrite") {
+        setConflict(null);
+        setStatus("saving");
+        isSavingRef.current = true;
+        saveFnRef
+          .current(conflict.localText)
+          .then((result) => {
+            setStatus("saved");
+            setLastSavedAt(new Date());
+            clearDraft();
+            if (result && typeof result === "object" && "version" in result) {
+              knownVersionRef.current = (result as { version: number }).version;
+            }
+          })
+          .catch(() => {
+            setStatus("error");
+          })
+          .finally(() => {
+            isSavingRef.current = false;
+          });
+      } else {
+        clearDraft();
+        setConflict(null);
+        setStatus("idle");
+      }
+    },
+    [conflict, clearDraft],
+  );
 
   const handleNoteChange = useCallback(
     (text: string) => {
@@ -78,12 +125,26 @@ export function useAutosave(
         isSavingRef.current = true;
         setStatus("saving");
         try {
-          await saveFnRef.current(current);
+          const result = await saveFnRef.current(current, knownVersionRef.current);
           setStatus("saved");
           setLastSavedAt(new Date());
           clearDraft();
-        } catch {
-          setStatus("error");
+          if (result && typeof result === "object" && "version" in result) {
+            knownVersionRef.current = (result as { version: number }).version;
+          }
+        } catch (err: unknown) {
+          const apiErr = err as { status?: number; data?: unknown } | undefined;
+          if (apiErr?.status === 409 && apiErr?.data) {
+            const data = apiErr.data as { serverSession?: { rawNotesMd?: string; version?: number } };
+            setConflict({
+              localText: current,
+              serverNotes: data.serverSession?.rawNotesMd ?? "",
+              serverVersion: data.serverSession?.version ?? 0,
+            });
+            setStatus("conflict");
+          } else {
+            setStatus("error");
+          }
         } finally {
           isSavingRef.current = false;
         }
@@ -100,6 +161,7 @@ export function useAutosave(
       }
       setStatus("idle");
       setLastSavedAt(null);
+      setConflict(null);
     }
   }, [isEditing]);
 
@@ -109,5 +171,7 @@ export function useAutosave(
     };
   }, []);
 
-  return { status, lastSavedAt, handleNoteChange, getStoredDraft, clearDraft };
+  const getExpectedVersion = useCallback(() => knownVersionRef.current, []);
+
+  return { status, lastSavedAt, conflict, handleNoteChange, getStoredDraft, clearDraft, resolveConflict, getExpectedVersion };
 }

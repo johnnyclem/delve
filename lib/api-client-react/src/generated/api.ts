@@ -22,6 +22,7 @@ import type {
   Campaign,
   CampaignMember,
   Character,
+  ConflictError,
   CreateCharacterBody,
   CreateEventBody,
   CreateSessionBody,
@@ -1026,7 +1027,7 @@ export const updateSession = async (
 };
 
 export const getUpdateSessionMutationOptions = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ConflictError>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<
@@ -1067,13 +1068,13 @@ export type UpdateSessionMutationResult = NonNullable<
   Awaited<ReturnType<typeof updateSession>>
 >;
 export type UpdateSessionMutationBody = BodyType<UpdateSessionBody>;
-export type UpdateSessionMutationError = ErrorType<unknown>;
+export type UpdateSessionMutationError = ErrorType<ConflictError>;
 
 /**
  * @summary Update a session log (DM only)
  */
 export const useUpdateSession = <
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ConflictError>,
   TContext = unknown,
 >(options?: {
   mutation?: UseMutationOptions<

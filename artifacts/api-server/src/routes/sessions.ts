@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, sessionLogsTable, recapViewsTable } from "@workspace/db";
-import { eq, desc, and, isNotNull, inArray } from "drizzle-orm";
+import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
@@ -146,13 +146,33 @@ router.patch("/sessions/:id", requireAuth, requireCampaignMember, async (req, re
   if (parsed.data.rawNotesMd !== undefined) updateData.rawNotesMd = parsed.data.rawNotesMd;
   if (parsed.data.recapMd !== undefined) updateData.recapMd = parsed.data.recapMd;
 
+  const whereConditions = [eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)];
+
+  if (parsed.data.expectedVersion !== undefined) {
+    whereConditions.push(eq(sessionLogsTable.version, parsed.data.expectedVersion));
+  }
+  updateData.version = sql`${sessionLogsTable.version} + 1`;
+
   const [updated] = await db
     .update(sessionLogsTable)
     .set(updateData)
-    .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)))
+    .where(and(...whereConditions))
     .returning();
 
   if (!updated) {
+    if (parsed.data.expectedVersion !== undefined) {
+      const [serverSession] = await db
+        .select()
+        .from(sessionLogsTable)
+        .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
+      if (serverSession) {
+        res.status(409).json({
+          error: "Session was modified by another client",
+          serverSession,
+        });
+        return;
+      }
+    }
     res.status(404).json({ error: "Session not found" });
     return;
   }

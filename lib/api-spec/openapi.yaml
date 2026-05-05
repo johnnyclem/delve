@@ -253,6 +253,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionLog"
+        "409":
+          description: Conflict – the session was modified by another client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConflictError"
 
   /sessions/{id}/generate-recap:
     post:
@@ -727,6 +733,8 @@ components:
           format: date-time
         hasNewRecap:
           type: boolean
+        version:
+          type: integer
         createdAt:
           type: string
           format: date-time
@@ -738,6 +746,7 @@ components:
         - campaignId
         - sessionNumber
         - title
+        - version
         - createdAt
         - updatedAt
 
@@ -771,6 +780,20 @@ components:
           type: ["string", "null"]
         recapMd:
           type: ["string", "null"]
+        expectedVersion:
+          type: integer
+          description: Optimistic concurrency check. If provided, the server rejects the update with 409 when the current version does not match.
+
+    ConflictError:
+      type: object
+      properties:
+        error:
+          type: string
+        serverSession:
+          $ref: "#/components/schemas/SessionLog"
+      required:
+        - error
+        - serverSession
 
     GeneratedRecap:
       type: object

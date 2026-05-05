@@ -137,6 +137,7 @@ export interface SessionLog {
   /** @nullable */
   generatedAt?: string | null;
   hasNewRecap?: boolean;
+  version: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -159,6 +160,13 @@ export interface UpdateSessionBody {
   rawNotesMd?: string | null;
   /** @nullable */
   recapMd?: string | null;
+  /** Optimistic concurrency check. If provided, the server rejects the update with 409 when the current version does not match. */
+  expectedVersion?: number;
+}
+
+export interface ConflictError {
+  error: string;
+  serverSession: SessionLog;
 }
 
 export interface GeneratedRecap {

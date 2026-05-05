@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, ShieldAlert } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -217,17 +217,22 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const sessionNumberInputRef = useRef<HTMLInputElement>(null);
 
   const autosaveSaveFn = useCallback(
-    async (text: string) => {
-      await updateSessionApi(id, { rawNotesMd: text });
+    async (text: string, expectedVersion?: number) => {
+      const result = await updateSessionApi(id, {
+        rawNotesMd: text,
+        ...(expectedVersion !== undefined ? { expectedVersion } : {}),
+      });
       queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+      return result;
     },
     [id, queryClient],
   );
 
-  const { status: autosaveStatus, lastSavedAt: autosaveLastSavedAt, handleNoteChange, getStoredDraft, clearDraft } = useAutosave(
+  const { status: autosaveStatus, lastSavedAt: autosaveLastSavedAt, conflict, handleNoteChange, getStoredDraft, clearDraft, resolveConflict, getExpectedVersion } = useAutosave(
     id,
     s?.rawNotesMd ?? "",
+    s?.version ?? 1,
     editingNotes,
     autosaveSaveFn,
   );
@@ -427,16 +432,53 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     );
   };
 
+  const [manualSaveConflict, setManualSaveConflict] = useState<{
+    localText: string;
+    serverNotes: string;
+    serverVersion: number;
+  } | null>(null);
+
   const handleSaveNotes = () => {
+    const ev = getExpectedVersion();
+    updateSession.mutate(
+      { id, data: { rawNotesMd: notes, expectedVersion: ev } },
+      {
+        onSuccess: () => {
+          clearDraft();
+          setEditingNotes(false);
+          setManualSaveConflict(null);
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          toast({ title: "Notes saved!" });
+        },
+        onError: (err: unknown) => {
+          const apiErr = err as { status?: number; data?: { serverSession?: { rawNotesMd?: string; version?: number } } } | undefined;
+          if (apiErr?.status === 409 && apiErr?.data?.serverSession) {
+            setManualSaveConflict({
+              localText: notes,
+              serverNotes: apiErr.data.serverSession.rawNotesMd ?? "",
+              serverVersion: apiErr.data.serverSession.version ?? 0,
+            });
+          } else {
+            toast({ title: "Failed to save notes", variant: "destructive" });
+          }
+        },
+      },
+    );
+  };
+
+  const handleForceOverwrite = () => {
     updateSession.mutate(
       { id, data: { rawNotesMd: notes } },
       {
         onSuccess: () => {
           clearDraft();
           setEditingNotes(false);
+          setManualSaveConflict(null);
+          if (conflict) resolveConflict("discard");
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
-          toast({ title: "Notes saved!" });
+          toast({ title: "Notes saved (overwritten)!" });
         },
         onError: () => {
           toast({ title: "Failed to save notes", variant: "destructive" });
@@ -444,6 +486,18 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
       },
     );
   };
+
+  const handleDiscardLocal = () => {
+    clearDraft();
+    setManualSaveConflict(null);
+    if (conflict) resolveConflict("discard");
+    queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+    setNotes(manualSaveConflict?.serverNotes ?? conflict?.serverNotes ?? s?.rawNotesMd ?? "");
+    setEditingNotes(false);
+    toast({ title: "Loaded server version" });
+  };
+
+  const activeConflict = manualSaveConflict ?? conflict;
 
   if (isLoading) {
     return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 rounded-2xl" /></div>;
@@ -629,13 +683,35 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           </div>
           {editingNotes ? (
             <div className="space-y-3">
+              {activeConflict && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 space-y-3" data-testid="conflict-banner">
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-amber-300">Conflict detected</p>
+                      <p className="text-xs text-amber-300/80 mt-0.5">
+                        This session was updated from another tab or window. Your local changes may overwrite those updates.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" className="border-amber-500/40 text-amber-300 hover:bg-amber-500/20" onClick={handleForceOverwrite} disabled={updateSession.isPending} data-testid="button-force-overwrite">
+                      <Save className="h-3.5 w-3.5 mr-1" />
+                      Keep my changes
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-amber-300 hover:bg-amber-500/20" onClick={handleDiscardLocal} data-testid="button-discard-local">
+                      Load server version
+                    </Button>
+                  </div>
+                </div>
+              )}
               <Textarea ref={notesRef} value={notes} onChange={(e) => { setNotes(e.target.value); handleNoteChange(e.target.value); }} rows={12} placeholder="Write your session notes in markdown..." className="font-mono text-sm" data-testid="input-edit-notes" />
               <div className="flex items-center gap-2 flex-wrap">
                 <Button size="sm" onClick={handleSaveNotes} disabled={updateSession.isPending || !isDirty} data-testid="button-save-notes">
                   <Save className="h-4 w-4 mr-1" />
                   {updateSession.isPending ? "Saving..." : "Save Notes"}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { if (isDirty && !confirm("Discard unsaved changes?")) return; clearDraft(); setEditingNotes(false); }}>Cancel</Button>
+                <Button variant="ghost" size="sm" onClick={() => { if (isDirty && !confirm("Discard unsaved changes?")) return; clearDraft(); setManualSaveConflict(null); setEditingNotes(false); }}>Cancel</Button>
                 {autosaveStatus === "saving" && (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="autosave-status">
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -648,7 +724,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
                     Auto-saved at {autosaveLastSavedAt.toLocaleTimeString()}
                   </span>
                 )}
-                {autosaveStatus === "error" && (
+                {(autosaveStatus === "error" || autosaveStatus === "conflict") && !activeConflict && (
                   <span className="flex items-center gap-1 text-xs text-destructive" data-testid="autosave-status">
                     <AlertTriangle className="h-3 w-3" />
                     Auto-save failed
