@@ -1028,6 +1028,8 @@ components:
           type: integer
         recapCount:
           type: integer
+        avgRecapWordCount:
+          type: integer
         recentRolls:
           type: array
           items:
@@ -1037,6 +1039,7 @@ components:
         - partyMembers
         - totalSessions
         - recapCount
+        - avgRecapWordCount
         - recentRolls
 
     PartyMemberSummary:

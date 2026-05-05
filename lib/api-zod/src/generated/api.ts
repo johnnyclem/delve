@@ -91,6 +91,7 @@ export const GetDashboardResponse = zod.object({
   ),
   totalSessions: zod.number(),
   recapCount: zod.number(),
+  avgRecapWordCount: zod.number(),
   recentRolls: zod.array(
     zod.object({
       id: zod.number(),

@@ -281,6 +281,12 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
             <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-recap-count">{dashboard?.recapCount ?? 0}</p>
             <p className="text-xs text-muted-foreground mt-0.5">recaps available</p>
           </div>
+          {(dashboard?.recapCount ?? 0) > 0 && (
+            <div>
+              <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-avg-recap-words">{dashboard?.avgRecapWordCount ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">avg words / recap</p>
+            </div>
+          )}
         </div>
       </motion.button>
 

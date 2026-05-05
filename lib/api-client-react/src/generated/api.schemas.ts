@@ -355,5 +355,6 @@ export interface DashboardSummary {
   partyMembers: PartyMemberSummary[];
   totalSessions: number;
   recapCount: number;
+  avgRecapWordCount: number;
   recentRolls: DiceRoll[];
 }

@@ -45,7 +45,11 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
   });
 
   const sessions = await db.select().from(sessionLogsTable).where(eq(sessionLogsTable.campaignId, campaignId));
-  const recapCount = sessions.filter((s) => !!s.recapMd).length;
+  const recapsWithText = sessions.filter((s) => s.recapMd && s.recapMd.trim().length > 0);
+  const recapCount = recapsWithText.length;
+  const avgRecapWordCount = recapCount > 0
+    ? Math.round(recapsWithText.reduce((sum, s) => sum + s.recapMd!.trim().split(/\s+/).length, 0) / recapCount)
+    : 0;
 
   const [latestRecap] = await db
     .select()
@@ -104,6 +108,7 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
     partyMembers,
     totalSessions: sessions.length,
     recapCount,
+    avgRecapWordCount,
     recentRolls,
   };
 
