@@ -357,9 +357,7 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
         </AnimatedBorder>
       )}
 
-      <motion.button
-        whileTap={{ scale: 0.95 }}
-        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+      <button
         onClick={() => onNavigate("sessions")}
         className="w-full text-left rounded-2xl glass-panel-hover p-5"
         data-testid="card-session-stats"
@@ -403,7 +401,7 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
         {dashboard?.sessionTrend && dashboard.sessionTrend.length > 0 && (
           <SessionTrendChart data={dashboard.sessionTrend} />
         )}
-      </motion.button>
+      </button>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("calendar")} className="text-left">
@@ -424,7 +422,7 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
           </AnimatedBorder>
         </motion.button>
 
-        <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("characters")} className="text-left rounded-2xl glass-panel-hover p-5">
+        <button onClick={() => onNavigate("characters")} className="text-left rounded-2xl glass-panel-hover p-5">
           <div className="flex items-center justify-between mb-3">
             <Users className="h-5 w-5 text-primary" />
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -435,9 +433,9 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
               <p key={m.userId}>{m.displayName}{m.characterName ? ` — ${m.characterName}` : ""}</p>
             ))}
           </div>
-        </motion.button>
+        </button>
 
-        <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("sessions")} className="text-left rounded-2xl glass-panel-hover p-5">
+        <button onClick={() => onNavigate("sessions")} className="text-left rounded-2xl glass-panel-hover p-5">
           <div className="flex items-center justify-between mb-3">
             <Sparkles className="h-5 w-5 text-primary" />
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -450,7 +448,7 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
           ) : (
             <p className="text-muted-foreground text-xs mt-1">No recaps yet</p>
           )}
-        </motion.button>
+        </button>
       </div>
 
       {dashboard?.recentRolls && dashboard.recentRolls.length > 0 && (
