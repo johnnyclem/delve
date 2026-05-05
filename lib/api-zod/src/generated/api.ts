@@ -611,6 +611,31 @@ export const NotifyRecapResponse = zod.object({
 });
 
 /**
+ * @summary List recap notification delivery logs for a session (DM only)
+ */
+export const ListSessionNotificationsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ListSessionNotificationsResponseItem = zod.object({
+  id: zod.number(),
+  sessionLogId: zod.number(),
+  campaignId: zod.number(),
+  userId: zod.string(),
+  recipientName: zod.string(),
+  email: zod.string().nullish(),
+  channel: zod.string(),
+  status: zod.enum(["sent", "failed", "skipped"]),
+  reason: zod.string().nullish(),
+  errorMessage: zod.string().nullish(),
+  providerMessageId: zod.string().nullish(),
+  attemptedAt: zod.coerce.date(),
+});
+export const ListSessionNotificationsResponse = zod.array(
+  ListSessionNotificationsResponseItem,
+);
+
+/**
  * @summary Mark a session recap as viewed by the current player
  */
 export const MarkRecapViewedParams = zod.object({

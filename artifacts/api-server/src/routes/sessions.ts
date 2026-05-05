@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, sessionLogsTable, recapViewsTable } from "@workspace/db";
+import { db, sessionLogsTable, recapViewsTable, notificationLogsTable } from "@workspace/db";
 import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
@@ -300,6 +300,41 @@ router.post("/sessions/:id/notify-recap", requireAuth, requireCampaignMember, as
     .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
 
   res.json({ success: true, notifiedAt: notifiedAt.toISOString() });
+});
+
+router.get("/sessions/:id/notifications", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can view notification logs" });
+    return;
+  }
+
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid session ID" });
+    return;
+  }
+
+  const [session] = await db
+    .select({ id: sessionLogsTable.id })
+    .from(sessionLogsTable)
+    .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
+
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const logs = await db
+    .select()
+    .from(notificationLogsTable)
+    .where(eq(notificationLogsTable.sessionLogId, id))
+    .orderBy(desc(notificationLogsTable.attemptedAt));
+
+  res.json(logs);
 });
 
 router.post("/sessions/:id/mark-recap-viewed", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {

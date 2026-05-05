@@ -31,6 +31,7 @@ import type {
   ErrorResponse,
   GeneratedRecap,
   HealthStatus,
+  NotificationLog,
   NotifyRecapResult,
   RollDiceBody,
   Rsvp,
@@ -1349,6 +1350,95 @@ export const useNotifyRecap = <
 > => {
   return useMutation(getNotifyRecapMutationOptions(options));
 };
+
+/**
+ * @summary List recap notification delivery logs for a session (DM only)
+ */
+export const getListSessionNotificationsUrl = (id: number) => {
+  return `/api/sessions/${id}/notifications`;
+};
+
+export const listSessionNotifications = async (
+  id: number,
+  options?: RequestInit,
+): Promise<NotificationLog[]> => {
+  return customFetch<NotificationLog[]>(getListSessionNotificationsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSessionNotificationsQueryKey = (id: number) => {
+  return [`/api/sessions/${id}/notifications`] as const;
+};
+
+export const getListSessionNotificationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSessionNotifications>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSessionNotifications>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSessionNotificationsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSessionNotifications>>
+  > = ({ signal }) =>
+    listSessionNotifications(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSessionNotifications>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSessionNotificationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSessionNotifications>>
+>;
+export type ListSessionNotificationsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List recap notification delivery logs for a session (DM only)
+ */
+
+export function useListSessionNotifications<
+  TData = Awaited<ReturnType<typeof listSessionNotifications>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listSessionNotifications>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSessionNotificationsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Mark a session recap as viewed by the current player

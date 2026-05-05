@@ -179,6 +179,34 @@ export interface NotifyRecapResult {
   notifiedAt: string;
 }
 
+export type NotificationLogStatus =
+  (typeof NotificationLogStatus)[keyof typeof NotificationLogStatus];
+
+export const NotificationLogStatus = {
+  sent: "sent",
+  failed: "failed",
+  skipped: "skipped",
+} as const;
+
+export interface NotificationLog {
+  id: number;
+  sessionLogId: number;
+  campaignId: number;
+  userId: string;
+  recipientName: string;
+  /** @nullable */
+  email?: string | null;
+  channel: string;
+  status: NotificationLogStatus;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  errorMessage?: string | null;
+  /** @nullable */
+  providerMessageId?: string | null;
+  attemptedAt: string;
+}
+
 export interface GeneratedRecap {
   recap: string;
   model: string;

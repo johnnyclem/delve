@@ -6,3 +6,4 @@ export * from "./calendar_events";
 export * from "./rsvps";
 export * from "./dice_rolls";
 export * from "./recap_views";
+export * from "./notification_logs";

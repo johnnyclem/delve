@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,13 +7,15 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   useListSessions, useGetSession, useCreateSession, useUpdateSession, useGenerateRecap,
   useMarkRecapViewed, useNotifyRecap,
+  useListSessionNotifications,
   getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey,
+  getListSessionNotificationsQueryKey,
   updateSession as updateSessionApi,
 } from "@workspace/api-client-react";
 import { useAutosave } from "@/hooks/use-autosave";
 import { NotesDiffView } from "@/components/notes-diff-view";
 import { useGetMyMembership } from "@workspace/api-client-react";
-import type { SessionLog, CampaignMember } from "@workspace/api-client-react";
+import type { SessionLog, CampaignMember, NotificationLog } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
@@ -518,6 +520,9 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: getListSessionNotificationsQueryKey(id) });
+          }, 1500);
           toast({
             title: "Recap generated!",
             description: "Review and edit it below, then notify your players when ready.",
@@ -783,6 +788,8 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         )}
       </div>
 
+      {isDm && s.recapMd && <NotificationStatus sessionId={id} />}
+
       {s.recapMd ? (
         <div className="rounded-2xl glass-panel p-6" style={{ boxShadow: "0 0 25px hsla(270, 100%, 60%, 0.1)" }} data-testid="section-recap">
           <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
@@ -934,6 +941,115 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function NotificationStatus({ sessionId }: { sessionId: number }) {
+  const { data, isLoading, refetch, isFetching } = useListSessionNotifications(sessionId, {
+    query: { queryKey: getListSessionNotificationsQueryKey(sessionId) },
+  });
+  const logs = (data as NotificationLog[] | undefined) ?? [];
+
+  if (isLoading) {
+    return <Skeleton className="h-20 rounded-2xl" />;
+  }
+
+  if (logs.length === 0) {
+    return null;
+  }
+
+  const sentCount = logs.filter((l) => l.status === "sent").length;
+  const failedCount = logs.filter((l) => l.status === "failed").length;
+  const skippedCount = logs.filter((l) => l.status === "skipped").length;
+  const hasFailures = failedCount > 0;
+
+  return (
+    <div
+      className={`rounded-2xl glass-panel p-5 ${hasFailures ? "border border-red-500/30" : ""}`}
+      data-testid="section-notification-status"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-foreground flex items-center gap-2 text-sm">
+          <Mail className="h-4 w-4 text-muted-foreground" />
+          Recap Notifications
+        </h3>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 text-xs">
+            {sentCount > 0 && (
+              <span className="flex items-center gap-1 text-emerald-400" data-testid="notif-count-sent">
+                <CheckCircle2 className="h-3 w-3" />
+                {sentCount} sent
+              </span>
+            )}
+            {failedCount > 0 && (
+              <span className="flex items-center gap-1 text-red-400" data-testid="notif-count-failed">
+                <MailX className="h-3 w-3" />
+                {failedCount} failed
+              </span>
+            )}
+            {skippedCount > 0 && (
+              <span className="flex items-center gap-1 text-amber-400" data-testid="notif-count-skipped">
+                <MailWarning className="h-3 w-3" />
+                {skippedCount} skipped
+              </span>
+            )}
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            data-testid="button-refresh-notifications"
+            title="Refresh"
+          >
+            <Loader2 className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          </Button>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {logs.map((log) => {
+          const statusColor =
+            log.status === "sent"
+              ? "text-emerald-400"
+              : log.status === "failed"
+                ? "text-red-400"
+                : "text-amber-400";
+          const StatusIcon =
+            log.status === "sent" ? CheckCircle2 : log.status === "failed" ? MailX : MailWarning;
+          return (
+            <div
+              key={log.id}
+              className="flex items-start justify-between gap-3 text-xs py-1.5 border-b border-[rgba(255,255,255,0.04)] last:border-0"
+              data-testid={`notif-log-${log.id}`}
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <StatusIcon className={`h-3 w-3 shrink-0 ${statusColor}`} />
+                  <span className="font-medium text-foreground truncate">{log.recipientName}</span>
+                  {log.email && (
+                    <span className="text-muted-foreground truncate">&lt;{log.email}&gt;</span>
+                  )}
+                </div>
+                {(log.errorMessage || log.reason) && (
+                  <p className={`mt-0.5 ml-5 ${statusColor} opacity-80`} data-testid={`notif-detail-${log.id}`}>
+                    {log.errorMessage ?? log.reason}
+                  </p>
+                )}
+              </div>
+              <span className="text-muted-foreground shrink-0 tabular-nums">
+                {new Date(log.attemptedAt).toLocaleString(undefined, {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
