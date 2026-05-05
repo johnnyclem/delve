@@ -7,7 +7,7 @@ import {
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useGetDashboard } from "@workspace/api-client-react";
+import { useGetDashboard, useListSessions, useGetMyMembership } from "@workspace/api-client-react";
 import type { DashboardSummary, PartyMemberSummary, DiceRoll } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
@@ -32,6 +32,12 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("overview");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { data: dashboard, isLoading, error } = useGetDashboard();
+  const { data: sessions } = useListSessions();
+  const { data: membership } = useGetMyMembership();
+  const isDm = membership?.role === "dm";
+  const newRecapCount = membership && !isDm && sessions
+    ? sessions.filter(s => s.hasNewRecap).length
+    : 0;
 
   const handleSignOut = () => {
     signOut();
@@ -66,6 +72,11 @@ export default function DashboardPage() {
             >
               <item.icon className="h-4 w-4" />
               {item.label}
+              {item.id === "sessions" && newRecapCount > 0 && (
+                <span className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-black min-w-[18px]" data-testid="badge-new-recap-count">
+                  {newRecapCount}
+                </span>
+              )}
             </motion.button>
           ))}
         </nav>
@@ -115,6 +126,11 @@ export default function DashboardPage() {
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
+                {item.id === "sessions" && newRecapCount > 0 && (
+                  <span className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-black min-w-[18px]" data-testid="badge-new-recap-count-mobile">
+                    {newRecapCount}
+                  </span>
+                )}
               </motion.button>
             ))}
             <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-2" onClick={handleSignOut}>
