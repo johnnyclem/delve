@@ -248,6 +248,7 @@
   }
 
   .glass-panel-hover {
+    position: relative;
     background: rgba(255, 255, 255, 0.04);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
@@ -255,12 +256,43 @@
     border-top-color: rgba(255, 255, 255, 0.14);
     border-left-color: rgba(255, 255, 255, 0.11);
     box-shadow: 0 0 20px hsla(270, 100%, 60%, 0.08);
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .glass-panel-hover::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(
+      circle at 50% 50%,
+      hsla(285, 100%, 65%, 0.35),
+      hsla(320, 100%, 55%, 0.2) 40%,
+      transparent 70%
+    );
+    filter: blur(12px);
+    transition: opacity 0.3s ease;
+    z-index: -1;
   }
 
   .glass-panel-hover:hover {
-    border-color: hsla(270, 100%, 60%, 0.3);
-    box-shadow: 0 0 30px hsla(270, 100%, 60%, 0.15);
+    border-color: hsla(285, 100%, 65%, 0.45);
+    box-shadow:
+      0 0 30px hsla(270, 100%, 60%, 0.25),
+      0 0 60px hsla(320, 100%, 55%, 0.15);
+  }
+
+  .glass-panel-hover:hover::before {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glass-panel-hover,
+    .glass-panel-hover::before {
+      transition: none;
+    }
   }
 
   .ambient-glow {
