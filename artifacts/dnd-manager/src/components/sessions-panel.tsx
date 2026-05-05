@@ -319,7 +319,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     }
     const previousTitle = s.title;
     updateSession.mutate(
-      { id, data: { title: draftTitle.trim() } },
+      { id, data: { title: draftTitle.trim(), expectedVersion: s.version } },
       {
         onSuccess: () => {
           setEditingTitle(false);
@@ -352,8 +352,20 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
             ),
           });
         },
-        onError: () => {
-          toast({ title: "Failed to update title", variant: "destructive" });
+        onError: (err: unknown) => {
+          const apiErr = err as { status?: number } | undefined;
+          if (apiErr?.status === 409) {
+            setEditingTitle(false);
+            queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+            queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+            toast({
+              title: "Title not saved",
+              description: "Another change was made in another tab. Your edit was discarded — please review and try again.",
+              variant: "destructive",
+            });
+          } else {
+            toast({ title: "Failed to update title", variant: "destructive" });
+          }
         },
       },
     );
@@ -368,7 +380,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     }
     const previousPlayedAt = s?.playedAt ?? null;
     updateSession.mutate(
-      { id, data: { playedAt: newPlayedAt ? new Date(newPlayedAt).toISOString() : null } },
+      { id, data: { playedAt: newPlayedAt ? new Date(newPlayedAt).toISOString() : null, expectedVersion: s?.version } },
       {
         onSuccess: () => {
           setEditingDate(false);
@@ -401,8 +413,20 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
             ),
           });
         },
-        onError: () => {
-          toast({ title: "Failed to update date", variant: "destructive" });
+        onError: (err: unknown) => {
+          const apiErr = err as { status?: number } | undefined;
+          if (apiErr?.status === 409) {
+            setEditingDate(false);
+            queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+            queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+            toast({
+              title: "Date not saved",
+              description: "Another change was made in another tab. Your edit was discarded — please review and try again.",
+              variant: "destructive",
+            });
+          } else {
+            toast({ title: "Failed to update date", variant: "destructive" });
+          }
         },
       },
     );
