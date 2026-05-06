@@ -27,6 +27,9 @@ type Fixture = {
   sessionNumber: number;
   title: string;
   rawNotesMd: string;
+  /** Short note explaining the kind of fabrication this fixture is designed
+   *  to catch, so a future maintainer knows why the case exists. */
+  targets: string;
   /** Allowlisted proper nouns the model is welcome to use (player handles,
    *  party name, etc.) even though they don't literally appear in the notes. */
   allowedExtraEntities?: string[];
@@ -39,6 +42,7 @@ const FIXTURES: Fixture[] = [
     sessionNumber: 1,
     title: "Tavern brawl",
     rawNotesMd: "Party met at the Crooked Crow tavern. Brawl with two thugs. Got a map.",
+    targets: "Sparse notes invite the model to invent NPC names, tavern patrons, or details about the map.",
   },
   {
     name: "medium-cave",
@@ -50,6 +54,7 @@ Encountered a goblin scout named Skritch who fled after taking 6 damage.
 Inside the cave they found a shrine to Vohra and a locked iron chest.
 Mira picked the lock; chest contained 40gp and a silver pendant.
 Session ended as they heard drums deeper in the cave.`,
+    targets: "Mid-density notes can drift into invented NPC details (Skritch's tribe, the chest's previous owner) or fabricated god lore around Vohra.",
   },
   {
     name: "dense-court",
@@ -64,7 +69,69 @@ They visited the mill that night. Found bloodstains and a torn banner bearing a 
 Combat: 3 cultists ambushed them. Tavi dropped to 4 HP before Mira healed her. All cultists killed; one captured alive.
 The captive refused to speak but had a tattoo matching the banner.
 Session ended back at the keep, planning to question the prisoner at dawn.`,
+    targets: "Dense political notes encourage invented courtiers, fake guard names, or extra cultist faction lore beyond what the notes establish.",
     allowedExtraEntities: ["DM"],
+  },
+  {
+    name: "numeric-combat",
+    density: "dense",
+    sessionNumber: 12,
+    title: "Bridge ambush",
+    rawNotesMd: `Ambush on the Greystone Bridge at dusk. Initiative: Tavi 18, Mira 15, Borin 11, ogre 9, 2 bandits 6.
+Round 1: Tavi crit for 22 slashing on the ogre (down to 38/60 HP). Mira cast Bless. Borin hit bandit A for 9 (dead).
+Round 2: Ogre hit Borin for 17 (Borin at 14/31). Bandit B threw a dagger at Mira, missed. Tavi rapier 11 dmg on ogre (27/60).
+Round 3: Mira healing word on Borin (+8, now 22/31). Ogre missed Tavi (AC 17). Borin axe crit on bandit B for 19 (dead).
+Round 4: Tavi sneak attack 16 on ogre (11/60). Ogre swung at Mira, hit for 13 (Mira at 9/24). Borin axe 8 (3/60).
+Round 5: Mira cantrip 5 dmg killed the ogre.
+Loot: 73gp, a +1 handaxe, and a sealed letter addressed to "M.V." in Stagholm.
+Party rested 1 hour, used 2 hit dice each, then pushed on toward Stagholm.`,
+    targets: "Numeric-heavy notes (HP, AC, damage, gp) tempt the model to invent additional combat beats, round counts, or loot quantities that drift from the recorded numbers.",
+  },
+  {
+    name: "partial-name-intro",
+    density: "medium",
+    sessionNumber: 6,
+    title: "The merchant's offer",
+    rawNotesMd: `Party returned to Pinehollow. Met a new merchant — only introduced herself as "Yssa" (no surname given).
+Yssa offered 200gp for safe escort to the next town. Tavi haggled to 275gp.
+Yssa mentioned she had a brother who "went missing on the eastern road last spring" — did not give his name.
+Party agreed. Departing in the morning.`,
+    targets: "Partial-name introductions often get auto-completed by the model — e.g. inventing a surname for Yssa or a name for her missing brother.",
+  },
+  {
+    name: "shorthand-abbrev",
+    density: "medium",
+    sessionNumber: 14,
+    title: "Crypt run",
+    rawNotesMd: `Sess started @ crypt entr. T + M + B in. 2 skeles down quick (T crit, B cleave).
+Hall trap: pit, B failed dex (took 8 fall). M help up. Found sarc w/ inscription — couldn't read, took rubbing.
+2nd cham: ghoul + 3 skeles. Long fight. M down to 4hp, T used potion on her. Ghoul killed by B.
+Loot: ring (unid), 120gp, holy symbol (sun?). End sess @ stairs going down.`,
+    targets: "Shorthand and abbreviations leave gaps the model loves to fill with invented spell names, expanded NPC names, or specific deities for the holy symbol.",
+  },
+  {
+    name: "ambiguous-pronouns",
+    density: "medium",
+    sessionNumber: 8,
+    title: "The two strangers",
+    rawNotesMd: `Two travelers approached the camp. One wore a green cloak, the other carried a longbow.
+The one with the bow asked about the road north. She warned them about wolves.
+He offered to trade rations for arrows. The party agreed.
+Later, she slipped away during the second watch. He stayed until morning, then left without a word.
+The party never learned either of their names.`,
+    targets: "Ambiguous pronouns with no proper names tempt the model to assign names, backstories, or factions to 'the two strangers' that the notes deliberately withhold.",
+  },
+  {
+    name: "rumor-mill",
+    density: "medium",
+    sessionNumber: 11,
+    title: "Tavern rumors",
+    rawNotesMd: `Downtime in town. Party split up to gather rumors at three taverns.
+Tavi heard: a noble's daughter eloped, and the city watch is being doubled next week.
+Mira heard: prices on grain are up, and someone saw "lights in the old tower" three nights running.
+Borin heard: a caravan from the south is overdue by a week.
+No names attached to any of the rumors. Party reconvened at the inn to compare notes.`,
+    targets: "Rumor-only sessions with deliberately nameless gossip invite the model to invent the noble's name, the daughter's suitor, the caravan master, or the tower's owner.",
   },
 ];
 
@@ -196,6 +263,7 @@ function printReport(results: FixtureResult[]): void {
     }
     console.log(`      entities checked: ${r.entities.length}`);
     if (!r.passed) {
+      console.log(`${dim}      targets: ${r.fixture.targets}${reset}`);
       console.log(`      ${red}ungrounded:${reset} ${r.ungrounded.join(", ")}`);
       console.log(`${dim}      ---- recap ----${reset}`);
       for (const line of r.recap.split("\n")) console.log(`${dim}      ${line}${reset}`);
