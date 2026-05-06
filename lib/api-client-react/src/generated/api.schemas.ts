@@ -332,6 +332,11 @@ export interface EventInviteLog {
   attemptedAt: string;
 }
 
+export interface ResendEventInviteResult {
+  success: boolean;
+  log?: EventInviteLog | null;
+}
+
 export interface ResendEventInvitesResult {
   success: boolean;
   resentCount: number;

@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import {
   useListEvents, useGetEvent, useCreateEvent, useUpsertRsvp, useDeleteEvent,
-  useGetEventInviteLogs, useResendEventInvites,
+  useGetEventInviteLogs, useResendEventInvites, useResendEventInvite,
   getListEventsQueryKey, getGetEventQueryKey, getGetDashboardQueryKey,
   getGetEventInviteLogsQueryKey,
 } from "@workspace/api-client-react";
@@ -381,9 +381,45 @@ function inviteStatusVisual(status: string): { color: string; bg: string; Icon: 
 function InviteDeliveryPanel({ eventId }: { eventId: number }) {
   const { data, isLoading, refetch, isFetching } = useGetEventInviteLogs(eventId);
   const resendMutation = useResendEventInvites();
+  const resendOneMutation = useResendEventInvite();
+  const [pendingLogId, setPendingLogId] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const logs = (data as EventInviteLog[] | undefined) ?? [];
+
+  const handleResendOne = (log: EventInviteLog) => {
+    setPendingLogId(log.id);
+    resendOneMutation.mutate(
+      { id: eventId, logId: log.id },
+      {
+        onSuccess: (result) => {
+          queryClient.invalidateQueries({ queryKey: getGetEventInviteLogsQueryKey(eventId) });
+          const newLog = (result as { log?: { status?: string } | null } | undefined)?.log;
+          const status = newLog?.status;
+          if (status === "sent") {
+            toast({ title: `Invite resent to ${log.recipientName}` });
+          } else if (status === "failed") {
+            toast({
+              title: `Could not deliver to ${log.recipientName}`,
+              description: "The email provider rejected the message. Check the row for details.",
+            });
+          } else {
+            toast({
+              title: `Invite skipped for ${log.recipientName}`,
+              description: "No deliverable email or notifications are unavailable.",
+            });
+          }
+        },
+        onError: (err) => {
+          toast({
+            title: `Could not resend to ${log.recipientName}`,
+            description: err instanceof Error ? err.message : String(err),
+          });
+        },
+        onSettled: () => setPendingLogId(null),
+      },
+    );
+  };
 
   const handleResend = () => {
     resendMutation.mutate(
@@ -478,11 +514,22 @@ function InviteDeliveryPanel({ eventId }: { eventId: number }) {
                     </p>
                   )}
                 </div>
-                <div className="text-right shrink-0">
+                <div className="text-right shrink-0 flex flex-col items-end gap-1">
                   <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full ${v.bg} ${v.color}`}>
                     <v.Icon className="h-3 w-3" /> {v.label}
                   </span>
-                  <p className="text-[10px] text-muted-foreground mt-1 tabular-nums">{when}</p>
+                  <p className="text-[10px] text-muted-foreground tabular-nums">{when}</p>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleResendOne(log)}
+                    disabled={resendOneMutation.isPending || resendMutation.isPending}
+                    className={`h-6 text-[11px] px-2 gap-1 ${log.status === "failed" ? "text-red-300 hover:text-red-200" : "text-muted-foreground"}`}
+                    data-testid={`button-retry-invite-${log.id}`}
+                  >
+                    <RefreshCw className={`h-3 w-3 ${pendingLogId === log.id ? "animate-spin" : ""}`} />
+                    {pendingLogId === log.id ? "Retrying…" : "Retry"}
+                  </Button>
                 </div>
               </li>
             );

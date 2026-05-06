@@ -893,6 +893,33 @@ export const GetEventInviteLogsResponse = zod.array(
 );
 
 /**
+ * @summary Resend a single event invite to one recipient (DM only)
+ */
+export const ResendEventInviteParams = zod.object({
+  id: zod.coerce.number(),
+  logId: zod.coerce.number(),
+});
+
+export const ResendEventInviteResponse = zod.object({
+  success: zod.boolean(),
+  log: zod
+    .union([
+      zod.object({
+        id: zod.number(),
+        userId: zod.string(),
+        recipientName: zod.string(),
+        email: zod.string().nullish(),
+        status: zod.string(),
+        reason: zod.string().nullish(),
+        errorMessage: zod.string().nullish(),
+        attemptedAt: zod.coerce.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+
+/**
  * @summary Resend event invite emails to all opted-in players (DM only)
  */
 export const ResendEventInvitesParams = zod.object({

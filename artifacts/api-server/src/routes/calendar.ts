@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateEventBody, UpdateEventBody, UpsertRsvpBody } from "@workspace/api-zod";
-import { sendEventInvitesForEvents } from "../lib/email";
+import { sendEventInvitesForEvents, sendEventInviteForOne } from "../lib/email";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -308,6 +308,58 @@ router.get("/calendar/:id/notifications", requireAuth, requireCampaignMember, as
     .orderBy(desc(notificationLogsTable.attemptedAt));
 
   res.json(logs);
+});
+
+router.post("/calendar/:id/notifications/:logId/resend", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can resend invites" });
+    return;
+  }
+
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const rawLogId = Array.isArray(req.params.logId) ? req.params.logId[0] : req.params.logId;
+  const id = parseInt(rawId, 10);
+  const logId = parseInt(rawLogId, 10);
+  if (isNaN(id) || isNaN(logId)) {
+    res.status(400).json({ error: "Invalid event or log ID" });
+    return;
+  }
+
+  const [event] = await db
+    .select()
+    .from(calendarEventsTable)
+    .where(and(eq(calendarEventsTable.id, id), eq(calendarEventsTable.campaignId, campaignId)));
+  if (!event) {
+    res.status(404).json({ error: "Event not found" });
+    return;
+  }
+
+  const [originalLog] = await db
+    .select()
+    .from(notificationLogsTable)
+    .where(and(
+      eq(notificationLogsTable.id, logId),
+      eq(notificationLogsTable.calendarEventId, id),
+      eq(notificationLogsTable.campaignId, campaignId),
+      eq(notificationLogsTable.kind, "event_invite"),
+    ));
+
+  if (!originalLog) {
+    res.status(404).json({ error: "Invite log not found" });
+    return;
+  }
+
+  const newLog = await sendEventInviteForOne({
+    campaignId,
+    eventId: id,
+    userId: originalLog.userId,
+    displayName: originalLog.recipientName,
+  });
+
+  res.json({ success: true, log: newLog });
 });
 
 router.post("/calendar/:id/resend-invites", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {

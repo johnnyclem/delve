@@ -577,6 +577,42 @@ paths:
                 items:
                   $ref: "#/components/schemas/EventInviteLog"
 
+  /calendar/{id}/notifications/{logId}/resend:
+    post:
+      operationId: resendEventInvite
+      tags: [calendar]
+      summary: Resend a single event invite to one recipient (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resend attempted; returns the new invite delivery row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendEventInviteResult"
+        "403":
+          description: Only the DM can resend invites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Event or invite log not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /calendar/{id}/resend-invites:
     post:
       operationId: resendEventInvites
@@ -1220,6 +1256,18 @@ components:
       required:
         - title
         - proposedAt
+
+    ResendEventInviteResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        log:
+          oneOf:
+            - $ref: "#/components/schemas/EventInviteLog"
+            - type: "null"
+      required:
+        - success
 
     ResendEventInvitesResult:
       type: object

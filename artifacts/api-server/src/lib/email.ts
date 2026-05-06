@@ -456,6 +456,67 @@ export async function sendEventInviteToRecipient(
   }
 }
 
+async function loadInviteContext(campaignId: number): Promise<{
+  campaign: typeof campaignsTable.$inferSelect;
+  excerpt: string | null;
+  lastSessionTitle: string | null;
+  lastSessionNumber: number | null;
+} | null> {
+  const [campaign] = await db
+    .select()
+    .from(campaignsTable)
+    .where(eq(campaignsTable.id, campaignId));
+  if (!campaign) return null;
+
+  const [latestRecap] = await db
+    .select()
+    .from(sessionLogsTable)
+    .where(and(eq(sessionLogsTable.campaignId, campaignId), isNotNull(sessionLogsTable.recapMd)))
+    .orderBy(desc(sessionLogsTable.sessionNumber))
+    .limit(1);
+
+  return {
+    campaign,
+    excerpt: recapExcerpt(latestRecap?.recapMd),
+    lastSessionTitle: latestRecap?.title ?? null,
+    lastSessionNumber: latestRecap?.sessionNumber ?? null,
+  };
+}
+
+export async function sendEventInviteForOne(params: {
+  campaignId: number;
+  eventId: number;
+  userId: string;
+  displayName: string;
+}): Promise<typeof notificationLogsTable.$inferSelect | null> {
+  const { campaignId, eventId, userId, displayName } = params;
+
+  const inviteCtx = await loadInviteContext(campaignId);
+  if (!inviteCtx) return null;
+
+  const [ev] = await db
+    .select()
+    .from(calendarEventsTable)
+    .where(and(eq(calendarEventsTable.id, eventId), eq(calendarEventsTable.campaignId, campaignId)));
+  if (!ev) return null;
+
+  const ctx = await buildRecipientContext();
+
+  return sendEventInviteToRecipient(ctx, {
+    campaignId,
+    campaignName: inviteCtx.campaign.name,
+    eventId: ev.id,
+    eventTitle: ev.title,
+    proposedAt: ev.proposedAt,
+    location: ev.location,
+    recapExcerpt: inviteCtx.excerpt,
+    lastSessionTitle: inviteCtx.lastSessionTitle,
+    lastSessionNumber: inviteCtx.lastSessionNumber,
+    userId,
+    displayName,
+  });
+}
+
 export async function sendEventInvitesForEvents(params: {
   campaignId: number;
   eventIds: number[];
@@ -464,11 +525,8 @@ export async function sendEventInvitesForEvents(params: {
   if (eventIds.length === 0) return;
 
   try {
-    const [campaign] = await db
-      .select()
-      .from(campaignsTable)
-      .where(eq(campaignsTable.id, campaignId));
-    if (!campaign) return;
+    const inviteCtx = await loadInviteContext(campaignId);
+    if (!inviteCtx) return;
 
     const members = await db
       .select()
@@ -485,17 +543,6 @@ export async function sendEventInvitesForEvents(params: {
       return;
     }
 
-    const [latestRecap] = await db
-      .select()
-      .from(sessionLogsTable)
-      .where(and(eq(sessionLogsTable.campaignId, campaignId), isNotNull(sessionLogsTable.recapMd)))
-      .orderBy(desc(sessionLogsTable.sessionNumber))
-      .limit(1);
-
-    const excerpt = recapExcerpt(latestRecap?.recapMd);
-    const lastSessionTitle = latestRecap?.title ?? null;
-    const lastSessionNumber = latestRecap?.sessionNumber ?? null;
-
     const events = await db
       .select()
       .from(calendarEventsTable)
@@ -510,14 +557,14 @@ export async function sendEventInvitesForEvents(params: {
       for (const player of players) {
         await sendEventInviteToRecipient(ctx, {
           campaignId,
-          campaignName: campaign.name,
+          campaignName: inviteCtx.campaign.name,
           eventId: ev.id,
           eventTitle: ev.title,
           proposedAt: ev.proposedAt,
           location: ev.location,
-          recapExcerpt: excerpt,
-          lastSessionTitle,
-          lastSessionNumber,
+          recapExcerpt: inviteCtx.excerpt,
+          lastSessionTitle: inviteCtx.lastSessionTitle,
+          lastSessionNumber: inviteCtx.lastSessionNumber,
           userId: player.userId,
           displayName: player.displayName,
         });
