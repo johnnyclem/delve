@@ -107,8 +107,7 @@ Requires campaign membership:
 
 Public (no auth — HMAC-signed tokens):
 - GET /unsubscribe?token=… — recap email opt-out
-- GET /rsvp/:token?response=yes|no|maybe — confirmation page (no state change)
-- POST /rsvp/:token — commits RSVP (split GET/POST avoids email-prefetch auto-clicks)
+- GET /rsvp/:token?response=yes|no|maybe — idempotently records the RSVP and renders a themed confirmation page (idempotent + HMAC-signed → email-prefetch is harmless)
 - POST /dice/roll — roll dice
 - GET /dice/recent — recent rolls
 

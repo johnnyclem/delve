@@ -190,10 +190,14 @@ function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id
     return d;
   }, [pickedDate, timeStr]);
 
+  // Check ALL non-cancelled events (not just the truncated upcoming list) so a conflict
+  // on a far-future date is still flagged.
   const conflict = useMemo(() => {
     if (!combinedDate) return null;
-    return upcoming.find((e) => sameLocalDay(new Date(e.proposedAt), combinedDate)) ?? null;
-  }, [combinedDate, upcoming]);
+    return allEvents.find((e) =>
+      e.status !== "cancelled" && sameLocalDay(new Date(e.proposedAt), combinedDate),
+    ) ?? null;
+  }, [combinedDate, allEvents]);
 
   const today = startOfDay(new Date());
 
