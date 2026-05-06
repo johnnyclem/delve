@@ -250,6 +250,8 @@ export interface RecurrenceRule {
 export interface EventDeliveryStatus {
   hasFailures: boolean;
   failedCount: number;
+  /** Highest attempt count among the currently-failing recipients. 1 means the initial send failed and a background retry is pending; values >1 mean the system has already retried. */
+  maxAttempts: number;
 }
 
 export type CalendarEventStatus =
@@ -346,6 +348,8 @@ export interface EventInviteLog {
   reason?: string | null;
   /** @nullable */
   errorMessage?: string | null;
+  /** Number of send attempts represented by this row. 1 = initial send or manual resend (counter resets); higher values are background retries. */
+  attemptCount: number;
   attemptedAt: string;
 }
 

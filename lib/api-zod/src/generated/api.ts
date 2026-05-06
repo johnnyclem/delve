@@ -105,6 +105,11 @@ export const GetDashboardResponse = zod.object({
         .object({
           hasFailures: zod.boolean(),
           failedCount: zod.number(),
+          maxAttempts: zod
+            .number()
+            .describe(
+              "Highest attempt count among the currently-failing recipients. 1 means the initial send failed and a background retry is pending; values >1 mean the system has already retried.",
+            ),
         })
         .optional()
         .describe(
@@ -806,6 +811,11 @@ export const ListEventsResponseItem = zod.object({
     .object({
       hasFailures: zod.boolean(),
       failedCount: zod.number(),
+      maxAttempts: zod
+        .number()
+        .describe(
+          "Highest attempt count among the currently-failing recipients. 1 means the initial send failed and a background retry is pending; values >1 mean the system has already retried.",
+        ),
     })
     .optional()
     .describe(
@@ -874,6 +884,11 @@ export const GetEventResponse = zod.object({
     .object({
       hasFailures: zod.boolean(),
       failedCount: zod.number(),
+      maxAttempts: zod
+        .number()
+        .describe(
+          "Highest attempt count among the currently-failing recipients. 1 means the initial send failed and a background retry is pending; values >1 mean the system has already retried.",
+        ),
     })
     .optional()
     .describe(
@@ -918,6 +933,11 @@ export const UpdateEventResponse = zod.object({
     .object({
       hasFailures: zod.boolean(),
       failedCount: zod.number(),
+      maxAttempts: zod
+        .number()
+        .describe(
+          "Highest attempt count among the currently-failing recipients. 1 means the initial send failed and a background retry is pending; values >1 mean the system has already retried.",
+        ),
     })
     .optional()
     .describe(
@@ -955,6 +975,11 @@ export const GetEventInviteLogsResponseItem = zod.object({
   status: zod.string(),
   reason: zod.string().nullish(),
   errorMessage: zod.string().nullish(),
+  attemptCount: zod
+    .number()
+    .describe(
+      "Number of send attempts represented by this row. 1 = initial send or manual resend (counter resets); higher values are background retries.",
+    ),
   attemptedAt: zod.coerce.date(),
 });
 export const GetEventInviteLogsResponse = zod.array(
@@ -981,6 +1006,11 @@ export const ResendEventInviteResponse = zod.object({
         status: zod.string(),
         reason: zod.string().nullish(),
         errorMessage: zod.string().nullish(),
+        attemptCount: zod
+          .number()
+          .describe(
+            "Number of send attempts represented by this row. 1 = initial send or manual resend (counter resets); higher values are background retries.",
+          ),
         attemptedAt: zod.coerce.date(),
       }),
       zod.null(),
@@ -1007,6 +1037,11 @@ export const ResendEventInvitesResponse = zod.object({
       status: zod.string(),
       reason: zod.string().nullish(),
       errorMessage: zod.string().nullish(),
+      attemptCount: zod
+        .number()
+        .describe(
+          "Number of send attempts represented by this row. 1 = initial send or manual resend (counter resets); higher values are background retries.",
+        ),
       attemptedAt: zod.coerce.date(),
     }),
   ),

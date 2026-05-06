@@ -1,5 +1,5 @@
 import { db, campaignMembersTable, notificationLogsTable, sessionLogsTable, campaignsTable, calendarEventsTable } from "@workspace/db";
-import { eq, and, isNotNull, desc } from "drizzle-orm";
+import { eq, and, isNotNull, desc, gt } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateUnsubscribeToken } from "./unsubscribe";
 import { generateRsvpToken } from "./rsvp-token";
@@ -35,6 +35,7 @@ async function recordLog(entry: {
   reason?: string | null;
   errorMessage?: string | null;
   providerMessageId?: string | null;
+  attemptCount?: number;
 }): Promise<typeof notificationLogsTable.$inferSelect | null> {
   try {
     const [row] = await db.insert(notificationLogsTable).values({
@@ -50,6 +51,7 @@ async function recordLog(entry: {
       reason: entry.reason ?? null,
       errorMessage: entry.errorMessage ?? null,
       providerMessageId: entry.providerMessageId ?? null,
+      attemptCount: entry.attemptCount ?? 1,
     }).returning();
     return row ?? null;
   } catch (err) {
@@ -329,9 +331,10 @@ interface EventInviteParams {
 
 export async function sendEventInviteToRecipient(
   ctx: RecipientContext,
-  params: EventInviteParams & { userId: string; displayName: string },
+  params: EventInviteParams & { userId: string; displayName: string; attemptCount?: number },
 ): Promise<typeof notificationLogsTable.$inferSelect | null> {
   const { campaignId, eventId, userId, displayName } = params;
+  const attemptCount = params.attemptCount ?? 1;
 
   if (ctx.skipReason || !ctx.resend || !ctx.clerkClient) {
     return recordLog({
@@ -343,6 +346,7 @@ export async function sendEventInviteToRecipient(
       kind: "event_invite",
       status: "skipped",
       reason: ctx.skipReason ?? "Notification provider unavailable",
+      attemptCount,
     });
   }
 
@@ -361,6 +365,7 @@ export async function sendEventInviteToRecipient(
         kind: "event_invite",
         status: "skipped",
         reason: "No email address on file",
+        attemptCount,
       });
     }
 
@@ -390,6 +395,7 @@ export async function sendEventInviteToRecipient(
         kind: "event_invite",
         status: "failed",
         errorMessage: "Failed to sign RSVP token",
+        attemptCount,
       });
     }
 
@@ -429,10 +435,11 @@ export async function sendEventInviteToRecipient(
         kind: "event_invite",
         status: "failed",
         errorMessage: message,
+        attemptCount,
       });
     }
 
-    logger.info({ userId, email, eventId }, "Event invite email sent");
+    logger.info({ userId, email, eventId, attemptCount }, "Event invite email sent");
     return recordLog({
       calendarEventId: eventId,
       campaignId,
@@ -442,6 +449,7 @@ export async function sendEventInviteToRecipient(
       kind: "event_invite",
       status: "sent",
       providerMessageId: result?.data?.id ?? null,
+      attemptCount,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -455,6 +463,7 @@ export async function sendEventInviteToRecipient(
       kind: "event_invite",
       status: "failed",
       errorMessage: message,
+      attemptCount,
     });
   }
 }
@@ -656,4 +665,191 @@ function buildEventInviteHtml(params: EventInviteParams & {
   </table>
 </body>
 </html>`;
+}
+
+// ---------------------------------------------------------------------------
+// Background retry for failed event invites
+// ---------------------------------------------------------------------------
+
+// Total attempts allowed (initial send + retries). After MAX_INVITE_ATTEMPTS
+// failures we give up and the DM has to manually resend.
+export const MAX_INVITE_ATTEMPTS = 3;
+
+// Backoff between attempts. Index N is the wait after the Nth attempt before
+// trying attempt N+1. e.g. attempt 1 fails -> wait 60s -> attempt 2.
+const RETRY_BACKOFF_MS = [60_000, 5 * 60_000];
+
+export function backoffMsForAttempt(attemptCount: number): number {
+  const idx = Math.max(0, attemptCount - 1);
+  return RETRY_BACKOFF_MS[idx] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
+}
+
+interface RetryCandidate {
+  id: number;
+  campaignId: number;
+  calendarEventId: number;
+  userId: string;
+  recipientName: string;
+  attemptCount: number;
+  attemptedAt: Date;
+}
+
+/**
+ * Find event invite logs whose latest attempt per (event,user) is `failed`,
+ * is below the attempt cap, has waited the required backoff, and whose event
+ * is still in the future. Returns the original log row so the caller can use
+ * its recipient metadata to retry.
+ */
+export async function findRetryCandidates(now: Date = new Date()): Promise<RetryCandidate[]> {
+  const rows = await db
+    .select({
+      id: notificationLogsTable.id,
+      campaignId: notificationLogsTable.campaignId,
+      calendarEventId: notificationLogsTable.calendarEventId,
+      userId: notificationLogsTable.userId,
+      recipientName: notificationLogsTable.recipientName,
+      status: notificationLogsTable.status,
+      attemptCount: notificationLogsTable.attemptCount,
+      attemptedAt: notificationLogsTable.attemptedAt,
+      proposedAt: calendarEventsTable.proposedAt,
+    })
+    .from(notificationLogsTable)
+    .innerJoin(
+      calendarEventsTable,
+      eq(notificationLogsTable.calendarEventId, calendarEventsTable.id),
+    )
+    .where(
+      and(
+        eq(notificationLogsTable.kind, "event_invite"),
+        gt(calendarEventsTable.proposedAt, now),
+      ),
+    );
+
+  // Pick the latest attempt per (eventId, userId).
+  const latest = new Map<string, typeof rows[number]>();
+  for (const r of rows) {
+    if (r.calendarEventId == null) continue;
+    const key = `${r.calendarEventId}:${r.userId}`;
+    const prev = latest.get(key);
+    if (!prev || new Date(r.attemptedAt).getTime() > new Date(prev.attemptedAt).getTime()) {
+      latest.set(key, r);
+    }
+  }
+
+  const candidates: RetryCandidate[] = [];
+  for (const r of latest.values()) {
+    if (r.status !== "failed") continue;
+    if (r.attemptCount >= MAX_INVITE_ATTEMPTS) continue;
+    const waited = now.getTime() - new Date(r.attemptedAt).getTime();
+    if (waited < backoffMsForAttempt(r.attemptCount)) continue;
+    if (r.calendarEventId == null) continue;
+    candidates.push({
+      id: r.id,
+      campaignId: r.campaignId,
+      calendarEventId: r.calendarEventId,
+      userId: r.userId,
+      recipientName: r.recipientName,
+      attemptCount: r.attemptCount,
+      attemptedAt: new Date(r.attemptedAt),
+    });
+  }
+  return candidates;
+}
+
+/**
+ * Single pass of the retry job: look up bounded retry candidates and send each.
+ * Each retry creates a new notification_logs row with attempt_count = previous + 1.
+ */
+export async function retryFailedEventInvites(): Promise<{ retried: number; failed: number }> {
+  let retried = 0;
+  let failed = 0;
+  let candidates: RetryCandidate[];
+  try {
+    candidates = await findRetryCandidates();
+  } catch (err) {
+    logger.error({ err }, "Failed to query event invite retry candidates");
+    return { retried: 0, failed: 0 };
+  }
+  if (candidates.length === 0) return { retried: 0, failed: 0 };
+
+  // Group candidates by campaign so we only build one RecipientContext + invite
+  // context per campaign per pass.
+  const byCampaign = new Map<number, RetryCandidate[]>();
+  for (const c of candidates) {
+    const arr = byCampaign.get(c.campaignId) ?? [];
+    arr.push(c);
+    byCampaign.set(c.campaignId, arr);
+  }
+
+  const ctx = await buildRecipientContext();
+
+  for (const [campaignId, group] of byCampaign) {
+    const inviteCtx = await loadInviteContext(campaignId);
+    if (!inviteCtx) continue;
+
+    const eventIds = Array.from(new Set(group.map((g) => g.calendarEventId)));
+    const events = await db
+      .select()
+      .from(calendarEventsTable)
+      .where(eq(calendarEventsTable.campaignId, campaignId));
+    const byId = new Map(events.filter((e) => eventIds.includes(e.id)).map((e) => [e.id, e]));
+
+    for (const cand of group) {
+      const ev = byId.get(cand.calendarEventId);
+      if (!ev) continue;
+      const result = await sendEventInviteToRecipient(ctx, {
+        campaignId,
+        campaignName: inviteCtx.campaign.name,
+        campaignTimezone: inviteCtx.campaign.timezone ?? "UTC",
+        eventId: ev.id,
+        eventTitle: ev.title,
+        proposedAt: ev.proposedAt,
+        location: ev.location,
+        recapExcerpt: inviteCtx.excerpt,
+        lastSessionTitle: inviteCtx.lastSessionTitle,
+        lastSessionNumber: inviteCtx.lastSessionNumber,
+        userId: cand.userId,
+        displayName: cand.recipientName,
+        attemptCount: cand.attemptCount + 1,
+      });
+      if (result?.status === "sent") retried += 1;
+      else if (result?.status === "failed") failed += 1;
+    }
+  }
+
+  if (retried > 0 || failed > 0) {
+    logger.info({ retried, failed }, "Background event invite retry pass complete");
+  }
+  return { retried, failed };
+}
+
+let retryTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Start a recurring background job that retries failed event invites.
+ * Safe to call multiple times — only the first call starts the timer.
+ * Returns a no-op when disabled (NODE_ENV=test or RESEND_API_KEY missing).
+ */
+export function startInviteRetryScheduler(intervalMs: number = 60_000): void {
+  if (retryTimer) return;
+  if (process.env.NODE_ENV === "test") return;
+  if (!process.env.RESEND_API_KEY) {
+    logger.info("Skipping invite retry scheduler — RESEND_API_KEY not configured");
+    return;
+  }
+  retryTimer = setInterval(() => {
+    retryFailedEventInvites().catch((err) => {
+      logger.error({ err }, "Invite retry pass threw");
+    });
+  }, intervalMs);
+  // Allow process to exit naturally; the scheduler shouldn't keep it alive.
+  retryTimer.unref?.();
+  logger.info({ intervalMs }, "Started background invite retry scheduler");
+}
+
+export function stopInviteRetryScheduler(): void {
+  if (retryTimer) {
+    clearInterval(retryTimer);
+    retryTimer = null;
+  }
 }

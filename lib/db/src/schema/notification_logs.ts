@@ -17,6 +17,7 @@ export const notificationLogsTable = pgTable("notification_logs", {
   reason: text("reason"),
   errorMessage: text("error_message"),
   providerMessageId: text("provider_message_id"),
+  attemptCount: integer("attempt_count").notNull().default(1),
   attemptedAt: timestamp("attempted_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   index("idx_notification_logs_session").on(table.sessionLogId),

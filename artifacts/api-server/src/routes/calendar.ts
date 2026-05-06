@@ -69,7 +69,13 @@ export function generateOccurrenceDates(
   return dates;
 }
 
-export type EventDeliveryStatus = { hasFailures: boolean; failedCount: number };
+export type EventDeliveryStatus = {
+  hasFailures: boolean;
+  failedCount: number;
+  // Highest attempt count seen across the failing recipients. Lets the UI
+  // distinguish "failed once, retry pending" from "still failing after retries".
+  maxAttempts: number;
+};
 
 /**
  * For each event id, compute whether the latest invite attempt per recipient
@@ -88,6 +94,7 @@ export async function getDeliveryStatusForEvents(
       calendarEventId: notificationLogsTable.calendarEventId,
       userId: notificationLogsTable.userId,
       status: notificationLogsTable.status,
+      attemptCount: notificationLogsTable.attemptCount,
       attemptedAt: notificationLogsTable.attemptedAt,
     })
     .from(notificationLogsTable)
@@ -100,22 +107,28 @@ export async function getDeliveryStatusForEvents(
     );
 
   // Group: pick latest log per (eventId, userId)
-  const latest = new Map<string, { eventId: number; status: string; attemptedAt: Date }>();
+  const latest = new Map<string, { eventId: number; status: string; attemptCount: number; attemptedAt: Date }>();
   for (const log of logs) {
     if (log.calendarEventId == null) continue;
     const key = `${log.calendarEventId}:${log.userId}`;
     const prev = latest.get(key);
     const at = new Date(log.attemptedAt);
     if (!prev || at.getTime() > prev.attemptedAt.getTime()) {
-      latest.set(key, { eventId: log.calendarEventId, status: log.status, attemptedAt: at });
+      latest.set(key, {
+        eventId: log.calendarEventId,
+        status: log.status,
+        attemptCount: log.attemptCount,
+        attemptedAt: at,
+      });
     }
   }
 
-  for (const { eventId, status } of latest.values()) {
-    const cur = result.get(eventId) ?? { hasFailures: false, failedCount: 0 };
+  for (const { eventId, status, attemptCount } of latest.values()) {
+    const cur = result.get(eventId) ?? { hasFailures: false, failedCount: 0, maxAttempts: 0 };
     if (status === "failed") {
       cur.hasFailures = true;
       cur.failedCount += 1;
+      if (attemptCount > cur.maxAttempts) cur.maxAttempts = attemptCount;
     }
     result.set(eventId, cur);
   }
@@ -389,6 +402,7 @@ router.get("/calendar/:id/notifications", requireAuth, requireCampaignMember, as
       status: notificationLogsTable.status,
       reason: notificationLogsTable.reason,
       errorMessage: notificationLogsTable.errorMessage,
+      attemptCount: notificationLogsTable.attemptCount,
       attemptedAt: notificationLogsTable.attemptedAt,
     })
     .from(notificationLogsTable)
@@ -494,6 +508,7 @@ router.post("/calendar/:id/resend-invites", requireAuth, requireCampaignMember, 
       status: notificationLogsTable.status,
       reason: notificationLogsTable.reason,
       errorMessage: notificationLogsTable.errorMessage,
+      attemptCount: notificationLogsTable.attemptCount,
       attemptedAt: notificationLogsTable.attemptedAt,
     })
     .from(notificationLogsTable)

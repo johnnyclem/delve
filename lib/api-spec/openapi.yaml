@@ -1208,9 +1208,13 @@ components:
           type: boolean
         failedCount:
           type: integer
+        maxAttempts:
+          type: integer
+          description: Highest attempt count among the currently-failing recipients. 1 means the initial send failed and a background retry is pending; values >1 mean the system has already retried.
       required:
         - hasFailures
         - failedCount
+        - maxAttempts
 
     CalendarEvent:
       type: object
@@ -1358,6 +1362,9 @@ components:
           type: ["string", "null"]
         errorMessage:
           type: ["string", "null"]
+        attemptCount:
+          type: integer
+          description: Number of send attempts represented by this row. 1 = initial send or manual resend (counter resets); higher values are background retries.
         attemptedAt:
           type: string
           format: date-time
@@ -1366,6 +1373,7 @@ components:
         - userId
         - recipientName
         - status
+        - attemptCount
         - attemptedAt
 
     UpdateEventBody:
