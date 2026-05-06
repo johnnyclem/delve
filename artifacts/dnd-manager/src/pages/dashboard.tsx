@@ -8,8 +8,8 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { useGetDashboard, useListSessions, useGetMyMembership, useUpdateNotificationPrefs } from "@workspace/api-client-react";
-import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint } from "@workspace/api-client-react";
+import { useGetDashboard, useListSessions, useListEvents, useGetMyMembership, useUpdateNotificationPrefs } from "@workspace/api-client-react";
+import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint, CalendarEvent } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
 import CharacterListPanel from "@/components/character-list";
@@ -50,8 +50,14 @@ export default function DashboardPage() {
   const updateNotificationPrefs = useUpdateNotificationPrefs();
   const queryClient = useQueryClient();
   const isDm = membership?.role === "dm";
+  const { data: events } = useListEvents({ query: { enabled: !!isDm, queryKey: ["/api/calendar"] } });
   const newRecapCount = membership && !isDm && sessions
     ? sessions.filter(s => s.hasNewRecap).length
+    : 0;
+  const upcomingDeliveryFailureCount = isDm && events
+    ? (events as Array<CalendarEvent & { deliveryStatus?: { hasFailures?: boolean } }>)
+        .filter(ev => ev.status !== "cancelled" && new Date(ev.proposedAt) >= new Date() && ev.deliveryStatus?.hasFailures)
+        .length
     : 0;
 
   const handleSignOut = () => {
@@ -101,6 +107,15 @@ export default function DashboardPage() {
               {item.id === "sessions" && newRecapCount > 0 && (
                 <span className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-black min-w-[18px]" data-testid="badge-new-recap-count">
                   {newRecapCount}
+                </span>
+              )}
+              {item.id === "calendar" && upcomingDeliveryFailureCount > 0 && (
+                <span
+                  className="ml-auto inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white min-w-[18px]"
+                  title={`${upcomingDeliveryFailureCount} upcoming session${upcomingDeliveryFailureCount === 1 ? "" : "s"} with invite delivery failures`}
+                  data-testid="badge-delivery-failure-count"
+                >
+                  {upcomingDeliveryFailureCount}
                 </span>
               )}
             </motion.button>
@@ -167,6 +182,15 @@ export default function DashboardPage() {
                 {item.id === "sessions" && newRecapCount > 0 && (
                   <span className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-black min-w-[18px]" data-testid="badge-new-recap-count-mobile">
                     {newRecapCount}
+                  </span>
+                )}
+                {item.id === "calendar" && upcomingDeliveryFailureCount > 0 && (
+                  <span
+                    className="ml-auto inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white min-w-[18px]"
+                    title={`${upcomingDeliveryFailureCount} upcoming session${upcomingDeliveryFailureCount === 1 ? "" : "s"} with invite delivery failures`}
+                    data-testid="badge-delivery-failure-count-mobile"
+                  >
+                    {upcomingDeliveryFailureCount}
                   </span>
                 )}
               </motion.button>
