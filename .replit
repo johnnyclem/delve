@@ -40,6 +40,7 @@ externalPort = 3000
 [userenv.shared]
 VITE_CLERK_PUBLISHABLE_KEY = "pk_test_c3VpdGVkLXZpcGVyLTY2LmNsZXJrLmFjY291bnRzLmRldiQ"
 EMAIL_FROM = "Delve <delve@mail.onlywizards.website>"
+ADMIN_RESET_TOKEN = "rcozWgq8qdvikUh9eRqbPevIq1qm3uQb"
 
 [nix]
 channel = "stable-25_05"
