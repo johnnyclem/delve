@@ -10,8 +10,8 @@ import {
   getListEventsQueryKey, getGetEventQueryKey, getGetDashboardQueryKey,
   getGetEventInviteLogsQueryKey,
 } from "@workspace/api-client-react";
-import { useGetMyMembership } from "@workspace/api-client-react";
-import type { CalendarEvent, CalendarEventWithRsvps, CampaignMember, RsvpWithMember, EventInviteLog } from "@workspace/api-client-react";
+import { useGetMyMembership, useListMembers, useGetCampaign } from "@workspace/api-client-react";
+import type { CalendarEvent, CalendarEventWithRsvps, CampaignMember, RsvpWithMember, EventInviteLog, Campaign } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
@@ -64,6 +64,60 @@ function startOfDay(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
   return x;
+}
+
+function formatTimeInZone(date: Date, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: tz,
+      timeZoneName: "short",
+    }).format(date);
+  } catch {
+    return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+}
+
+function PlayerLocalTimes({ when }: { when: Date }) {
+  const { data: members } = useListMembers();
+  const { data: campaign } = useGetCampaign();
+  const list = (members as CampaignMember[] | undefined) ?? [];
+  const campaignTz = (campaign as Campaign | undefined)?.timezone ?? null;
+
+  if (list.length === 0) return null;
+
+  const sorted = [...list].sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+  return (
+    <div className="rounded-lg bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)] px-3 py-2 max-w-md" data-testid="player-local-times">
+      <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1">
+        <Clock className="h-3 w-3" /> Players' local time
+      </p>
+      <ul className="space-y-0.5 text-xs">
+        {sorted.map((m) => {
+          const hasTz = !!m.timezone;
+          const label = hasTz
+            ? formatTimeInZone(when, m.timezone as string)
+            : campaignTz
+              ? `${formatTimeInZone(when, campaignTz)} (campaign time)`
+              : "campaign time";
+          return (
+            <li
+              key={m.id}
+              className="flex items-center justify-between gap-3"
+              data-testid={`player-local-time-${m.id}`}
+            >
+              <span className="text-foreground truncate">{m.displayName}</span>
+              <span className={`tabular-nums shrink-0 ${hasTz ? "text-muted-foreground" : "text-muted-foreground/70 italic"}`}>
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 function EventList({ onSelect, onCreate }: { onSelect: (id: number, opts?: { scrollToDelivery?: boolean }) => void; onCreate: () => void }) {
@@ -328,6 +382,8 @@ function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id
               <span>You already have <span className="font-semibold">{conflict.title}</span> on this day. Schedule anyway if intentional.</span>
             </div>
           )}
+
+          {combinedDate && <PlayerLocalTimes when={combinedDate} />}
 
           <div className="max-w-md">
             <label className="text-sm font-medium text-foreground mb-1 block">Repeats</label>
@@ -711,6 +767,8 @@ function EventDetail({ id, onBack, scrollToDelivery }: { id: number; onBack: () 
         </p>
         {ev.location && <p className="text-sm text-muted-foreground mt-1">Location: {ev.location}</p>}
       </div>
+
+      <PlayerLocalTimes when={date} />
 
       <div className="rounded-2xl glass-panel p-5">
         <h3 className="font-semibold text-foreground text-sm mb-3">Your RSVP</h3>
