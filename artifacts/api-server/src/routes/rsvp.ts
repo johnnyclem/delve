@@ -4,8 +4,11 @@ import { and, eq } from "drizzle-orm";
 import { verifyRsvpToken } from "../lib/rsvp-token";
 import { upsertRsvp } from "./calendar";
 import { logger } from "../lib/logger";
+import { publicIpRateLimit, rsvpTokenRateLimit } from "../middlewares/publicRateLimit";
 
 const router: IRouter = Router();
+
+router.use("/rsvp/:token", publicIpRateLimit, rsvpTokenRateLimit);
 
 const RESPONSES = ["yes", "no", "maybe"] as const;
 type RsvpResponse = typeof RESPONSES[number];

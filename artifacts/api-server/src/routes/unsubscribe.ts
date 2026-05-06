@@ -3,8 +3,16 @@ import { db, campaignMembersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { verifyUnsubscribeToken } from "../lib/unsubscribe";
 import { logger } from "../lib/logger";
+import {
+  publicIpJsonRateLimit,
+  publicIpRateLimit,
+  unsubscribeTokenRateLimit,
+} from "../middlewares/publicRateLimit";
 
 const router: IRouter = Router();
+
+router.get("/unsubscribe", publicIpRateLimit, unsubscribeTokenRateLimit);
+router.post("/unsubscribe", publicIpJsonRateLimit, unsubscribeTokenRateLimit);
 
 async function applyUnsubscribe(token: string): Promise<
   | { ok: true; alreadyUnsubscribed: boolean }

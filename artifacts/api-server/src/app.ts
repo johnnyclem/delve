@@ -11,6 +11,11 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Trust the first proxy hop (Replit's edge proxy) so req.ip reflects the
+// real client address. Required for express-rate-limit's per-IP keying on
+// public endpoints like /api/rsvp/:token and /api/unsubscribe.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,
