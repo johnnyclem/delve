@@ -320,7 +320,7 @@ function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id
                   data-testid="calendar-recurrence-until"
                 />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">Up to 26 occurrences. Invites will be sent for the first 8.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Up to 26 occurrences. Players will get an RSVP email for each one.</p>
             </div>
           )}
 

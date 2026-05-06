@@ -124,8 +124,10 @@ router.post("/calendar", requireAuth, requireCampaignMember, async (req, res): P
 
   const first = inserted[0];
 
-  // Send invites in the background; cap at first 8 occurrences to avoid email blast for long series.
-  const inviteIds = inserted.slice(0, 8).map((e) => e.id);
+  // Send invites for every newly-scheduled occurrence. Dispatch is sequential per-recipient
+  // inside sendEventInvitesForEvents (await between sends) so Resend rate limits aren't hit
+  // even for 26-occurrence series.
+  const inviteIds = inserted.map((e) => e.id);
   void sendEventInvitesForEvents({ campaignId, eventIds: inviteIds }).catch((err) => {
     logger.error({ err }, "Background event invite send failed");
   });
