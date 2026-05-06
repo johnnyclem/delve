@@ -2,18 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { useGetDashboard, useListSessions, useListEvents, useGetMyMembership, useUpdateNotificationPrefs } from "@workspace/api-client-react";
-import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint, CalendarEvent } from "@workspace/api-client-react";
+import { useGetDashboard, useListSessions, useListEvents, useGetMyMembership, useUpdateNotificationPrefs, useListCharacters } from "@workspace/api-client-react";
+import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint, CalendarEvent, Character } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
 import TimezoneCombobox from "@/components/timezone-combobox";
 import CharacterListPanel from "@/components/character-list";
+import MyCharacterPanel from "@/components/my-character-panel";
 import SessionsPanel from "@/components/sessions-panel";
 import CalendarPanel from "@/components/calendar-panel";
 import { useClerk } from "@clerk/react";
@@ -22,18 +23,40 @@ import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-const navItems = [
-  { id: "overview", label: "Overview", icon: Shield },
-  { id: "characters", label: "Characters", icon: BookOpen },
-  { id: "sessions", label: "Sessions", icon: ScrollText },
-  { id: "calendar", label: "Schedule", icon: Calendar },
-  { id: "dice", label: "Dice", icon: Dice5 },
-];
+type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "dice";
+
+interface NavItem {
+  id: NavId;
+  label: string;
+  icon: typeof Shield;
+  hidden?: boolean;
+}
+
+function buildNavItems(opts: { showMyCharacter: boolean }): NavItem[] {
+  const items: NavItem[] = [];
+  if (opts.showMyCharacter) {
+    items.push({ id: "my-character", label: "My Character", icon: User });
+  }
+  items.push(
+    { id: "overview", label: "Overview", icon: Shield },
+    { id: "characters", label: "Characters", icon: BookOpen },
+    { id: "sessions", label: "Sessions", icon: ScrollText },
+    { id: "calendar", label: "Schedule", icon: Calendar },
+    { id: "dice", label: "Dice", icon: Dice5 },
+  );
+  return items;
+}
 
 export default function DashboardPage() {
   const { user } = useUser();
   const { signOut } = useClerk();
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTabState] = useState<NavId>("overview");
+  const [hasAutoLanded, setHasAutoLanded] = useState(false);
+  // Wraps setActiveTab so any user-initiated navigation locks out the auto-land effect.
+  const setActiveTab = (next: NavId) => {
+    setHasAutoLanded(true);
+    setActiveTabState(next);
+  };
   const [calendarDeepLink, setCalendarDeepLink] = useState<{ eventId: number; scrollToDelivery?: boolean } | null>(null);
   // Clear the deep-link when the user navigates away from Calendar so that a later
   // return to the Calendar tab shows the list view rather than auto-reopening the
@@ -48,9 +71,25 @@ export default function DashboardPage() {
   const { data: dashboard, isLoading, error } = useGetDashboard();
   const { data: sessions } = useListSessions();
   const { data: membership } = useGetMyMembership();
+  const { data: characters } = useListCharacters({ query: { enabled: !!membership, queryKey: ["/api/characters"] } });
   const updateNotificationPrefs = useUpdateNotificationPrefs();
   const queryClient = useQueryClient();
   const isDm = membership?.role === "dm";
+  const hasOwnCharacter = !!user && !!characters && (characters as Character[]).some((c) => c.ownerUserId === user.id);
+  const showMyCharacterTab = !!membership && !isDm;
+  const navItems = useMemo(() => buildNavItems({ showMyCharacter: showMyCharacterTab }), [showMyCharacterTab]);
+
+  // On first successful load, land non-DM players who own a character on "My Character".
+  // Uses the raw setter (not the wrapped setActiveTab) so this doesn't itself flip the lock
+  // before the membership/characters queries resolve.
+  useEffect(() => {
+    if (hasAutoLanded) return;
+    if (!membership || !characters) return;
+    if (showMyCharacterTab && hasOwnCharacter) {
+      setActiveTabState("my-character");
+    }
+    setHasAutoLanded(true);
+  }, [hasAutoLanded, membership, characters, showMyCharacterTab, hasOwnCharacter]);
   const { data: events } = useListEvents({ query: { enabled: !!isDm, queryKey: ["/api/calendar"] } });
   const newRecapCount = membership && !isDm && sessions
     ? sessions.filter(s => s.hasNewRecap).length
@@ -127,7 +166,7 @@ export default function DashboardPage() {
               whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => setActiveTab(item.id as NavId)}
               data-testid={`nav-${item.id}`}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === item.id
@@ -215,7 +254,7 @@ export default function DashboardPage() {
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 key={item.id}
-                onClick={() => { setActiveTab(item.id); setMobileMenuOpen(false); }}
+                onClick={() => { setActiveTab(item.id as NavId); setMobileMenuOpen(false); }}
                 data-testid={`mobile-nav-${item.id}`}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === item.id
@@ -285,6 +324,9 @@ export default function DashboardPage() {
                 setActiveTab("calendar");
               }}
             />
+          )}
+          {activeTab === "my-character" && (
+            <MyCharacterPanel onNavigateToCharacters={() => setActiveTab("characters")} />
           )}
           {activeTab === "characters" && <CharacterListPanel />}
           {activeTab === "sessions" && <SessionsPanel />}
@@ -490,7 +532,7 @@ function SessionTrendChart({ data }: { data: SessionTrendPoint[] }) {
   );
 }
 
-function OverviewPanel({ dashboard, isLoading, isDm, onNavigate, onOpenEvent }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; isDm: boolean; onNavigate: (tab: string) => void; onOpenEvent: (eventId: number, opts?: { scrollToDelivery?: boolean }) => void }) {
+function OverviewPanel({ dashboard, isLoading, isDm, onNavigate, onOpenEvent }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; isDm: boolean; onNavigate: (tab: NavId) => void; onOpenEvent: (eventId: number, opts?: { scrollToDelivery?: boolean }) => void }) {
   if (isLoading) {
     return (
       <div className="space-y-6" data-testid="overview-loading">

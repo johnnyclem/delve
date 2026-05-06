@@ -2,8 +2,9 @@ import { Router, type IRouter } from "express";
 import { db, charactersTable, campaignMembersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
-import { getOrCreateCampaign } from "../lib/campaign";
+import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { UpdateCharacterBody, CreateCharacterBody } from "@workspace/api-zod";
+import { fillCharacterSheetPdf } from "../lib/character-pdf";
 
 const router: IRouter = Router();
 
@@ -134,6 +135,55 @@ router.patch("/characters/:id", requireAuth, requireCampaignMember, async (req, 
   const owner = members.find((m) => m.userId === updated.ownerUserId);
 
   res.json({ ...updated, ownerDisplayName: owner?.displayName ?? "Unknown" });
+});
+
+router.get("/characters/:id/pdf", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid character ID" });
+    return;
+  }
+
+  const campaignId = await getOrCreateCampaign();
+  const [char] = await db
+    .select()
+    .from(charactersTable)
+    .where(and(eq(charactersTable.id, id), eq(charactersTable.campaignId, campaignId)));
+
+  if (!char) {
+    res.status(404).json({ error: "Character not found" });
+    return;
+  }
+
+  const userIsDm = await isDm(campaignId, userId);
+  if (char.ownerUserId !== userId && !userIsDm) {
+    res.status(403).json({ error: "Not your character" });
+    return;
+  }
+
+  const members = await db.select().from(campaignMembersTable).where(eq(campaignMembersTable.campaignId, campaignId));
+  const owner = members.find((m) => m.userId === char.ownerUserId);
+
+  let pdfBytes: Uint8Array;
+  try {
+    pdfBytes = await fillCharacterSheetPdf({ ...char, ownerDisplayName: owner?.displayName ?? "Unknown" });
+  } catch (err) {
+    console.error("PDF generation failed", err);
+    res.status(500).json({ error: "Failed to generate PDF" });
+    return;
+  }
+
+  const safeName = char.name.replace(/[^a-z0-9-_ ]/gi, "_").replace(/\s+/g, "_") || `character-${char.id}`;
+  const filename = `${safeName}-character-sheet.pdf`;
+  const disposition = req.query.download === "1" ? "attachment" : "inline";
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);
+  res.setHeader("Content-Length", String(pdfBytes.length));
+  res.setHeader("Cache-Control", "private, no-store");
+  res.end(Buffer.from(pdfBytes));
 });
 
 export default router;
