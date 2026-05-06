@@ -12,6 +12,7 @@ import { useGetDashboard, useListSessions, useListEvents, useGetMyMembership, us
 import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint, CalendarEvent } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
+import TimezoneCombobox from "@/components/timezone-combobox";
 import CharacterListPanel from "@/components/character-list";
 import SessionsPanel from "@/components/sessions-panel";
 import CalendarPanel from "@/components/calendar-panel";
@@ -181,17 +182,13 @@ export default function DashboardPage() {
               <Globe className="h-4 w-4" />
               Your timezone
             </span>
-            <select
+            <TimezoneCombobox
               value={currentTimezone}
-              onChange={(e) => handleChangeTimezone(e.target.value)}
+              onChange={handleChangeTimezone}
+              options={supportedTimezones}
               disabled={updateNotificationPrefs.isPending}
-              className="bg-transparent text-xs text-foreground rounded px-1 py-0.5 max-w-[140px] truncate focus:outline-none focus:ring-1 focus:ring-primary"
-              data-testid="select-timezone"
-            >
-              {supportedTimezones.map((tz) => (
-                <option key={tz} value={tz} className="bg-[#18181B] text-foreground">{tz}</option>
-              ))}
-            </select>
+              testId="select-timezone"
+            />
           </label>
           <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={handleSignOut} data-testid="button-sign-out">
             <LogOut className="h-4 w-4 mr-2" />
@@ -255,23 +252,20 @@ export default function DashboardPage() {
                 disabled={updateNotificationPrefs.isPending}
               />
             </label>
-            <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors">
               <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
                 <Globe className="h-4 w-4" />
                 Your timezone
               </span>
-              <select
+              <TimezoneCombobox
                 value={currentTimezone}
-                onChange={(e) => handleChangeTimezone(e.target.value)}
+                onChange={handleChangeTimezone}
+                options={supportedTimezones}
                 disabled={updateNotificationPrefs.isPending}
-                className="bg-transparent text-xs text-foreground rounded px-1 py-0.5 max-w-[160px] truncate focus:outline-none focus:ring-1 focus:ring-primary"
-                data-testid="select-timezone-mobile"
-              >
-                {supportedTimezones.map((tz) => (
-                  <option key={tz} value={tz} className="bg-[#18181B] text-foreground">{tz}</option>
-                ))}
-              </select>
-            </label>
+                triggerClassName="max-w-[160px]"
+                testId="select-timezone-mobile"
+              />
+            </div>
             <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-1" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-2" />
               Sign Out
