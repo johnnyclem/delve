@@ -9,12 +9,23 @@ interface Props {
   disabled?: boolean;
 }
 
+function extFor(mime: string): string {
+  if (mime.includes("mp4") || mime.includes("m4a")) return "m4a";
+  if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("wav")) return "wav";
+  if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
+  return "webm";
+}
+
 async function transcribeChunk(chunk: RecordedChunk): Promise<string> {
+  const mime = chunk.mimeType || "audio/webm";
+  const form = new FormData();
+  const file = new File([chunk.blob], `recording.${extFor(mime)}`, { type: mime });
+  form.append("audio", file);
   const res = await fetch(`${import.meta.env.BASE_URL}api/sessions/transcribe`, {
     method: "POST",
     credentials: "include",
-    headers: { "Content-Type": chunk.mimeType || "audio/webm" },
-    body: chunk.blob,
+    body: form,
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -39,25 +50,39 @@ export function VoiceRecordButton({ onTranscribed, disabled }: Props) {
     const chunks = await recorder.stop();
     if (chunks.length === 0) return;
     setTranscribing(true);
+    let committedAny = false;
+    let failedAt = -1;
+    let failMsg = "";
     try {
-      const parts: string[] = [];
-      for (const chunk of chunks) {
-        const text = await transcribeChunk(chunk);
-        if (text) parts.push(text);
+      for (let i = 0; i < chunks.length; i++) {
+        try {
+          const text = await transcribeChunk(chunks[i]);
+          if (text) {
+            // Commit each successful chunk immediately so partial text persists
+            // even if a later chunk fails.
+            onTranscribed(text);
+            committedAny = true;
+          }
+        } catch (err) {
+          failedAt = i;
+          failMsg = err instanceof Error ? err.message : "Try again";
+          break;
+        }
       }
-      const combined = parts.join(" ").trim();
-      if (combined) {
-        onTranscribed(combined);
+      if (failedAt >= 0) {
+        toast({
+          title:
+            committedAny
+              ? `Transcription failed on chunk ${failedAt + 1}/${chunks.length} (earlier text kept)`
+              : "Transcription failed",
+          description: failMsg,
+          variant: "destructive",
+        });
+      } else if (committedAny) {
         toast({ title: "Transcription added to notes" });
       } else {
         toast({ title: "No speech detected", variant: "destructive" });
       }
-    } catch (err) {
-      toast({
-        title: "Transcription failed",
-        description: err instanceof Error ? err.message : "Try again",
-        variant: "destructive",
-      });
     } finally {
       setTranscribing(false);
     }

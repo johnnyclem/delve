@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction, type ErrorRequestHandler } from "express";
 import express from "express";
+import multer from "multer";
 import { toFile } from "openai";
 import { db, sessionLogsTable, recapViewsTable, notificationLogsTable } from "@workspace/db";
 import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
@@ -35,15 +36,24 @@ const EXT_BY_TYPE: Record<string, string> = {
   "audio/m4a": "m4a",
 };
 
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_AUDIO_BYTES, files: 1 },
+});
+
 router.post(
   "/sessions/transcribe",
   requireAuth,
   requireCampaignMember,
-  express.raw({ type: () => true, limit: MAX_AUDIO_BYTES }),
+  audioUpload.single("audio"),
   ((err: unknown, _req: Request, res: Response, next: NextFunction) => {
-    const e = err as { type?: string; status?: number } | null;
-    if (e && (e.type === "entity.too.large" || e.status === 413)) {
+    const e = err as { code?: string; message?: string } | null;
+    if (e && (e.code === "LIMIT_FILE_SIZE")) {
       res.status(413).json({ error: `Audio too large (max ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)}MB)` });
+      return;
+    }
+    if (e && e.code && typeof e.code === "string" && e.code.startsWith("LIMIT_")) {
+      res.status(400).json({ error: e.message ?? "Invalid upload" });
       return;
     }
     next(err);
@@ -57,19 +67,15 @@ router.post(
       return;
     }
 
-    const contentType = (req.headers["content-type"] ?? "").toString().split(";")[0].trim().toLowerCase();
-    if (!ALLOWED_AUDIO_TYPES.has(contentType)) {
-      res.status(415).json({ error: `Unsupported audio type: ${contentType || "(missing)"}` });
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      res.status(400).json({ error: "No audio file received (expected multipart field 'audio')" });
       return;
     }
 
-    const body = req.body;
-    if (!Buffer.isBuffer(body) || body.length === 0) {
-      res.status(400).json({ error: "No audio data received" });
-      return;
-    }
-    if (body.length > MAX_AUDIO_BYTES) {
-      res.status(413).json({ error: `Audio chunk too large (max ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)}MB)` });
+    const contentType = (file.mimetype ?? "").split(";")[0].trim().toLowerCase();
+    if (!ALLOWED_AUDIO_TYPES.has(contentType)) {
+      res.status(415).json({ error: `Unsupported audio type: ${contentType || "(missing)"}` });
       return;
     }
 
@@ -83,16 +89,16 @@ router.post(
 
     const ext = EXT_BY_TYPE[contentType] ?? "webm";
     try {
-      const file = await toFile(body, `recording.${ext}`, { type: contentType });
+      const oaFile = await toFile(file.buffer, `recording.${ext}`, { type: contentType });
       const result = await openai.audio.transcriptions.create({
-        file,
-        model: "gpt-4o-mini-transcribe",
+        file: oaFile,
+        model: "gpt-4o-transcribe",
         response_format: "json",
       });
       const text = (result as { text?: string }).text ?? "";
       res.json({ text });
     } catch (err) {
-      logger.error({ err, bytes: body.length, contentType }, "Transcription failed");
+      logger.error({ err, bytes: file.buffer.length, contentType }, "Transcription failed");
       res.status(502).json({ error: "Transcription failed" });
     }
   },

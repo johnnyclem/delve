@@ -55,6 +55,7 @@ export function useAudioRecorder(): UseAudioRecorder {
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const finishedChunksRef = useRef<RecordedChunk[]>([]);
   const startedAtRef = useRef<number>(0);
@@ -90,12 +91,35 @@ export function useAudioRecorder(): UseAudioRecorder {
     streamRef.current = null;
   }, []);
 
+  const acquireWakeLock = useCallback(async () => {
+    try {
+      const nav = navigator as Navigator & {
+        wakeLock?: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+      };
+      if (!nav.wakeLock) return;
+      wakeLockRef.current = await nav.wakeLock.request("screen");
+    } catch {
+      // Wake Lock is best-effort; ignore failures.
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    const lock = wakeLockRef.current;
+    wakeLockRef.current = null;
+    if (lock) {
+      lock.release().catch(() => {
+        // ignore
+      });
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       stopTicker();
       releaseStream();
+      releaseWakeLock();
     };
-  }, [stopTicker, releaseStream]);
+  }, [stopTicker, releaseStream, releaseWakeLock]);
 
   const finalizeCurrentChunk = useCallback((mimeType: string, durationMs: number) => {
     if (chunksRef.current.length === 0) return;
@@ -185,6 +209,7 @@ export function useAudioRecorder(): UseAudioRecorder {
 
       stopTicker();
       releaseStream();
+      releaseWakeLock();
       const resolve = stopResolveRef.current;
       stopResolveRef.current = null;
       const out = finishedChunksRef.current;
@@ -200,7 +225,8 @@ export function useAudioRecorder(): UseAudioRecorder {
     startedAtRef.current = Date.now();
     setState("recording");
     startTicker();
-  }, [isSupported, releaseStream, finalizeCurrentChunk, startTicker, stopTicker]);
+    void acquireWakeLock();
+  }, [isSupported, releaseStream, finalizeCurrentChunk, startTicker, stopTicker, acquireWakeLock]);
 
   const pause = useCallback(() => {
     const r = recorderRef.current;
@@ -242,6 +268,7 @@ export function useAudioRecorder(): UseAudioRecorder {
           stopResolveRef.current = null;
           stopTicker();
           releaseStream();
+          releaseWakeLock();
           const out = finishedChunksRef.current;
           finishedChunksRef.current = [];
           setState("idle");
@@ -253,7 +280,7 @@ export function useAudioRecorder(): UseAudioRecorder {
         resolve([]);
       }
     });
-  }, [releaseStream, stopTicker]);
+  }, [releaseStream, stopTicker, releaseWakeLock]);
 
   const cancel = useCallback(() => {
     const r = recorderRef.current;
@@ -269,10 +296,11 @@ export function useAudioRecorder(): UseAudioRecorder {
     }
     stopTicker();
     releaseStream();
+    releaseWakeLock();
     setState("idle");
     setElapsedMs(0);
     accumulatedRef.current = 0;
-  }, [releaseStream, stopTicker]);
+  }, [releaseStream, stopTicker, releaseWakeLock]);
 
   return { state, elapsedMs, error, isSupported, start, stop, pause, resume, cancel };
 }
