@@ -1,5 +1,4 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction, type ErrorRequestHandler } from "express";
-import express from "express";
 import multer from "multer";
 import { toFile } from "openai";
 import { db, sessionLogsTable, recapViewsTable, notificationLogsTable } from "@workspace/db";
