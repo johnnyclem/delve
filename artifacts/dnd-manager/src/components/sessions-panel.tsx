@@ -15,6 +15,7 @@ import {
 } from "@workspace/api-client-react";
 import { useAutosave } from "@/hooks/use-autosave";
 import { NotesDiffView } from "@/components/notes-diff-view";
+import { VoiceRecordButton } from "@/components/voice-record-button";
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { SessionLog, CampaignMember, NotificationLog } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -189,7 +190,15 @@ function CreateSession({ onBack, onCreated }: { onBack: () => void; onCreated: (
           </div>
         </div>
         <div>
-          <label className="text-sm font-medium text-foreground mb-1 block">DM Notes (Markdown)</label>
+          <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+            <label className="text-sm font-medium text-foreground">DM Notes (Markdown)</label>
+            <VoiceRecordButton
+              onTranscribed={(text) =>
+                setNotes((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${text}` : text))
+              }
+              disabled={createMutation.isPending}
+            />
+          </div>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={8} placeholder="What happened this session..." data-testid="input-session-notes" />
         </div>
         <Button onClick={handleCreate} disabled={createMutation.isPending || !title.trim()} data-testid="button-save-session">
@@ -915,6 +924,31 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
                   )}
                 </div>
               )}
+              <div className="flex justify-end">
+                <VoiceRecordButton
+                  onTranscribed={(text) => {
+                    const ta = notesRef.current;
+                    let next: string;
+                    if (ta) {
+                      const start = ta.selectionStart ?? notes.length;
+                      const end = ta.selectionEnd ?? notes.length;
+                      const before = notes.slice(0, start);
+                      const after = notes.slice(end);
+                      const sep = before && !before.endsWith("\n") ? "\n\n" : "";
+                      next = `${before}${sep}${text}${after}`;
+                      requestAnimationFrame(() => {
+                        const pos = before.length + sep.length + text.length;
+                        try { ta.focus(); ta.setSelectionRange(pos, pos); } catch { /* ignore */ }
+                      });
+                    } else {
+                      next = notes.trim() ? `${notes.trimEnd()}\n\n${text}` : text;
+                    }
+                    setNotes(next);
+                    handleNoteChange(next);
+                  }}
+                  disabled={updateSession.isPending}
+                />
+              </div>
               <Textarea ref={notesRef} value={notes} onChange={(e) => { setNotes(e.target.value); handleNoteChange(e.target.value); }} rows={12} placeholder="Write your session notes in markdown..." className="font-mono text-sm" data-testid="input-edit-notes" />
               <div className="flex items-center gap-2 flex-wrap">
                 <Button size="sm" onClick={handleSaveNotes} disabled={updateSession.isPending || !isDirty} data-testid="button-save-notes">

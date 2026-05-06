@@ -1,12 +1,102 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction, type ErrorRequestHandler } from "express";
+import express from "express";
+import { toFile } from "openai";
 import { db, sessionLogsTable, recapViewsTable, notificationLogsTable } from "@workspace/db";
 import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
 import { sendRecapNotifications, buildRecipientContext, sendRecapEmailToRecipient } from "../lib/email";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+const ALLOWED_AUDIO_TYPES = new Set([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/x-m4a",
+  "audio/m4a",
+]);
+const EXT_BY_TYPE: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/ogg": "ogg",
+  "audio/mp4": "m4a",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/x-m4a": "m4a",
+  "audio/m4a": "m4a",
+};
+
+router.post(
+  "/sessions/transcribe",
+  requireAuth,
+  requireCampaignMember,
+  express.raw({ type: () => true, limit: MAX_AUDIO_BYTES }),
+  ((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+    const e = err as { type?: string; status?: number } | null;
+    if (e && (e.type === "entity.too.large" || e.status === 413)) {
+      res.status(413).json({ error: `Audio too large (max ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)}MB)` });
+      return;
+    }
+    next(err);
+  }) as ErrorRequestHandler,
+  async (req: Request, res: Response): Promise<void> => {
+    const userId = getUserId(req);
+    const campaignId = await getOrCreateCampaign();
+
+    if (!(await isDm(campaignId, userId))) {
+      res.status(403).json({ error: "Only the DM can transcribe audio" });
+      return;
+    }
+
+    const contentType = (req.headers["content-type"] ?? "").toString().split(";")[0].trim().toLowerCase();
+    if (!ALLOWED_AUDIO_TYPES.has(contentType)) {
+      res.status(415).json({ error: `Unsupported audio type: ${contentType || "(missing)"}` });
+      return;
+    }
+
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      res.status(400).json({ error: "No audio data received" });
+      return;
+    }
+    if (body.length > MAX_AUDIO_BYTES) {
+      res.status(413).json({ error: `Audio chunk too large (max ${Math.round(MAX_AUDIO_BYTES / 1024 / 1024)}MB)` });
+      return;
+    }
+
+    let openai;
+    try {
+      openai = (await import("@workspace/integrations-openai-ai-server")).openai;
+    } catch {
+      res.status(503).json({ error: "AI service is not configured" });
+      return;
+    }
+
+    const ext = EXT_BY_TYPE[contentType] ?? "webm";
+    try {
+      const file = await toFile(body, `recording.${ext}`, { type: contentType });
+      const result = await openai.audio.transcriptions.create({
+        file,
+        model: "gpt-4o-mini-transcribe",
+        response_format: "json",
+      });
+      const text = (result as { text?: string }).text ?? "";
+      res.json({ text });
+    } catch (err) {
+      logger.error({ err, bytes: body.length, contentType }, "Transcription failed");
+      res.status(502).json({ error: "Transcription failed" });
+    }
+  },
+);
 
 function stripDmFields(session: typeof sessionLogsTable.$inferSelect): Record<string, unknown> {
   const { rawNotesMd: _raw, ...safe } = session;
