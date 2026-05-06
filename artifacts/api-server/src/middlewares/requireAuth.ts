@@ -6,13 +6,14 @@ import { getOrCreateCampaign } from "../lib/campaign";
 
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   const auth = getAuth(req);
-  const userId = auth?.sessionClaims?.userId || auth?.userId;
-  if (!userId) {
+  const claimsUserId = auth?.sessionClaims?.userId;
+  const userId = typeof claimsUserId === "string" ? claimsUserId : auth?.userId;
+  if (!userId || typeof userId !== "string") {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
   (req as AuthenticatedRequest).userId = userId;
-  (req as AuthenticatedRequest).sessionClaims = auth?.sessionClaims;
+  (req as AuthenticatedRequest).sessionClaims = (auth?.sessionClaims ?? {}) as Record<string, unknown>;
   next();
 };
 
@@ -44,6 +45,18 @@ interface AuthenticatedRequest extends Request {
   campaignMember?: typeof campaignMembersTable.$inferSelect;
 }
 
+interface SessionClaimsLike {
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  name?: string;
+  email?: string;
+  imageUrl?: string;
+  image_url?: string;
+  profileImageUrl?: string;
+  [key: string]: unknown;
+}
+
 export function getUserId(req: Request): string {
   return (req as AuthenticatedRequest).userId;
 }
@@ -53,16 +66,16 @@ export function getCampaignMember(req: Request): typeof campaignMembersTable.$in
 }
 
 export function getUserDisplayName(req: Request): string {
-  const claims = (req as AuthenticatedRequest).sessionClaims;
+  const claims = (req as AuthenticatedRequest).sessionClaims as SessionClaimsLike;
   if (claims?.firstName && claims?.lastName) return `${claims.firstName} ${claims.lastName}`;
   if (claims?.firstName) return String(claims.firstName);
   if (claims?.fullName) return String(claims.fullName);
   if (claims?.name) return String(claims.name);
-  if (claims?.email) return String(claims.email).split("@")[0];
+  if (claims?.email) return String(claims.email).split("@")[0] ?? "Adventurer";
   return "Adventurer";
 }
 
 export function getUserAvatarUrl(req: Request): string | null {
-  const claims = (req as AuthenticatedRequest).sessionClaims;
+  const claims = (req as AuthenticatedRequest).sessionClaims as SessionClaimsLike;
   return (claims?.imageUrl ?? claims?.image_url ?? claims?.profileImageUrl ?? null) as string | null;
 }
