@@ -24,7 +24,8 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
   const isDm = membership?.role === "dm";
-  const canExport = (isOwner || isDm) && !editing && !!char;
+  const canExport = (isOwner || isDm) && !!char;
+  const exportDisabled = editing;
   const sheet: CharacterSheet | undefined = editing ? (editSheet ?? undefined) : char?.sheetJson;
 
   const startEditing = () => {
@@ -86,28 +87,30 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
         {canExport && (
           <div className="ml-auto flex items-center gap-2">
             <Button
-              asChild
               variant="outline"
               size="sm"
+              disabled={exportDisabled}
               data-testid={`button-print-character-pdf-${id}`}
-              onClick={() => toast({ title: "Building your sheet…" })}
+              onClick={() => {
+                toast({ title: "Building your sheet…" });
+                window.open(`${pdfUrl}?inline=1`, "_blank", "noopener,noreferrer");
+              }}
             >
-              <a href={`${pdfUrl}?inline=1`} target="_blank" rel="noopener noreferrer">
-                <Printer className="h-4 w-4 mr-1" />
-                Print
-              </a>
+              <Printer className="h-4 w-4 mr-1" />
+              Print
             </Button>
             <Button
-              asChild
               variant="outline"
               size="sm"
+              disabled={exportDisabled}
               data-testid={`button-download-character-pdf-${id}`}
-              onClick={() => toast({ title: "Building your sheet…" })}
+              onClick={() => {
+                toast({ title: "Building your sheet…" });
+                window.location.assign(pdfUrl);
+              }}
             >
-              <a href={pdfUrl} download>
-                <Download className="h-4 w-4 mr-1" />
-                Download PDF
-              </a>
+              <Download className="h-4 w-4 mr-1" />
+              Download PDF
             </Button>
           </div>
         )}
