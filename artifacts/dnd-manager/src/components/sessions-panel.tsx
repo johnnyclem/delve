@@ -841,6 +841,11 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
               )}
             </div>
           </div>
+          {isDm && (
+            <p className="mb-3 text-xs text-muted-foreground italic" data-testid="text-recap-dm-disclaimer">
+              AI recap — based only on your DM notes. Skim before sharing.
+            </p>
+          )}
           <div className="prose prose-sm prose-invert max-w-none text-foreground/90" dangerouslySetInnerHTML={{ __html: markdownToHtml(s.recapMd) }} />
         </div>
       ) : !isDm ? (
