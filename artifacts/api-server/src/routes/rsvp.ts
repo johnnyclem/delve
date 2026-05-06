@@ -10,10 +10,22 @@ const router: IRouter = Router();
 const RESPONSES = ["yes", "no", "maybe"] as const;
 type RsvpResponse = typeof RESPONSES[number];
 
-const LABELS: Record<RsvpResponse, { word: string; color: string }> = {
-  yes:   { word: "Yes",   color: "#34D399" },
-  maybe: { word: "Maybe", color: "#FBBF24" },
-  no:    { word: "No",    color: "#F87171" },
+const LABELS: Record<RsvpResponse, { word: string; color: string; line: (title: string, when: string) => string }> = {
+  yes: {
+    word: "Yes",
+    color: "#34D399",
+    line: (t, w) => `You're locked in for ${t} on ${w}.`,
+  },
+  maybe: {
+    word: "Maybe",
+    color: "#FBBF24",
+    line: (t, w) => `We'll keep your spot tentative for ${t} on ${w}.`,
+  },
+  no: {
+    word: "No",
+    color: "#F87171",
+    line: (t, w) => `You're marked as not attending ${t} on ${w}.`,
+  },
 };
 
 function escapeHtml(s: string): string {
@@ -25,12 +37,7 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-function shellPage(opts: {
-  title: string;
-  heading: string;
-  bodyHtml: string;
-  badgeColor?: string;
-}): string {
+function shellPage(opts: { title: string; heading: string; bodyHtml: string; badgeColor?: string }): string {
   const accent = opts.badgeColor ?? "#A78BFA";
   return `<!DOCTYPE html>
 <html lang="en">
@@ -62,159 +69,86 @@ function parseResponse(raw: unknown): RsvpResponse | null {
   return (RESPONSES as readonly string[]).includes(v) ? (v as RsvpResponse) : null;
 }
 
-type LoadResult =
-  | { ok: true; decoded: NonNullable<ReturnType<typeof verifyRsvpToken>>; event: typeof calendarEventsTable.$inferSelect; member: typeof campaignMembersTable.$inferSelect }
-  | { ok: false; status: number; heading: string; body: string };
+function errorPage(status: number, heading: string, body: string) {
+  return {
+    status,
+    html: shellPage({
+      title: "RSVP — Delve",
+      heading,
+      bodyHtml: `<p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">${escapeHtml(body)}</p>`,
+    }),
+  };
+}
 
-async function loadEventAndMember(token: string): Promise<LoadResult> {
+async function handleRsvp(token: string | undefined, response: RsvpResponse | null): Promise<{ status: number; html: string }> {
+  if (!token || !response) {
+    return errorPage(400, "Invalid link", "Open the original email and tap Yes, Maybe, or No.");
+  }
+
   const decoded = verifyRsvpToken(token);
-  if (!decoded) return { ok: false, status: 400, heading: "Invalid or expired link", body: "This RSVP link could not be verified. Please open Delve to RSVP directly." };
+  if (!decoded) {
+    return errorPage(400, "Invalid or expired link", "This RSVP link could not be verified. Please open Delve to RSVP directly.");
+  }
 
   const [event] = await db
     .select()
     .from(calendarEventsTable)
-    .where(
-      and(
-        eq(calendarEventsTable.id, decoded.eventId),
-        eq(calendarEventsTable.campaignId, decoded.campaignId),
-      ),
-    );
+    .where(and(eq(calendarEventsTable.id, decoded.eventId), eq(calendarEventsTable.campaignId, decoded.campaignId)));
   if (!event) {
-    return { ok: false, status: 404, heading: "Session not found", body: "This session has been removed or rescheduled. Open Delve to see the latest schedule." };
+    return errorPage(404, "Session not found", "This session has been removed or rescheduled. Open Delve to see the latest schedule.");
   }
 
   const [member] = await db
     .select()
     .from(campaignMembersTable)
-    .where(
-      and(
-        eq(campaignMembersTable.campaignId, decoded.campaignId),
-        eq(campaignMembersTable.userId, decoded.userId),
-      ),
-    );
+    .where(and(eq(campaignMembersTable.campaignId, decoded.campaignId), eq(campaignMembersTable.userId, decoded.userId)));
   if (!member) {
-    return { ok: false, status: 403, heading: "Not a campaign member", body: "We couldn't find your membership in this campaign." };
+    return errorPage(403, "Not a campaign member", "We couldn't find your membership in this campaign.");
   }
 
-  return { ok: true, decoded, event, member };
-}
+  // Idempotent write: setting the same RSVP twice yields the same final state, so accidental
+  // email-prefetches by scanners or link previewers are harmless — the player's actual click
+  // applies the same value they intended. The HMAC token also ensures only the correct
+  // recipient can change their own RSVP.
+  await upsertRsvp({
+    eventId: decoded.eventId,
+    userId: decoded.userId,
+    status: response,
+    note: null,
+  });
 
-// GET renders a confirmation page. We never mutate state on GET so that email clients,
-// preview/scanner bots, and link prefetchers (which auto-fetch URLs) cannot accidentally
-// change a player's RSVP. The page POSTs back to the same URL to commit the response.
-router.get("/rsvp/:token", async (req, res): Promise<void> => {
-  const tokenRaw = req.params.token;
-  const token = Array.isArray(tokenRaw) ? tokenRaw[0] : tokenRaw;
-  const response = parseResponse(req.query.response);
-
-  if (!token) {
-    res.status(400).type("html").send(shellPage({
-      title: "RSVP — Delve",
-      heading: "Invalid link",
-      bodyHtml: `<p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">This RSVP link is missing required information.</p>`,
-    }));
-    return;
-  }
-  if (!response) {
-    res.status(400).type("html").send(shellPage({
-      title: "RSVP — Delve",
-      heading: "Choose a response",
-      bodyHtml: `<p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">Open the original email and tap Yes, Maybe, or No.</p>`,
-    }));
-    return;
-  }
-
-  const loaded = await loadEventAndMember(token);
-  if (!loaded.ok) {
-    res.status(loaded.status).type("html").send(shellPage({
-      title: "RSVP — Delve",
-      heading: loaded.heading,
-      bodyHtml: `<p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">${escapeHtml(loaded.body)}</p>`,
-    }));
-    return;
-  }
-
-  const date = new Date(loaded.event.proposedAt);
+  const date = new Date(event.proposedAt);
   const dateStr = date.toLocaleString("en-US", {
     weekday: "long", month: "long", day: "numeric",
     hour: "numeric", minute: "2-digit",
   });
   const label = LABELS[response];
-  const formAction = `/api/rsvp/${encodeURIComponent(token)}`;
 
-  res.status(200).type("html").send(shellPage({
-    title: "Confirm RSVP — Delve",
-    heading: `Confirm: ${label.word}`,
-    badgeColor: label.color,
-    bodyHtml: `
-      <p style="margin:0 0 8px;color:#D4D4D8;font-size:15px;font-weight:500;">${escapeHtml(loaded.event.title)}</p>
-      <p style="margin:0 0 24px;color:#A1A1AA;font-size:13px;">${escapeHtml(dateStr)}</p>
-      <form method="POST" action="${formAction}" style="margin:0;">
-        <input type="hidden" name="response" value="${response}">
-        <button type="submit" style="display:inline-block;background-color:${label.color};color:#09090B;border:0;cursor:pointer;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;">
-          Confirm "${label.word}"
-        </button>
-      </form>
-      <p style="margin:20px 0 0;color:#71717A;font-size:12px;line-height:1.5;">Or open Delve directly to RSVP and see who else is coming.</p>
-    `,
-  }));
-});
-
-async function applyRsvp(token: string, response: RsvpResponse): Promise<{ ok: true; eventTitle: string; date: Date } | { ok: false; status: number; heading: string; body: string }> {
-  const loaded = await loadEventAndMember(token);
-  if (!loaded.ok) {
-    return { ok: false, status: loaded.status, heading: loaded.heading, body: loaded.body };
-  }
-  await upsertRsvp({
-    eventId: loaded.decoded.eventId,
-    userId: loaded.decoded.userId,
-    status: response,
-    note: null,
-  });
-  return { ok: true, eventTitle: loaded.event.title, date: new Date(loaded.event.proposedAt) };
-}
-
-router.post("/rsvp/:token", async (req, res): Promise<void> => {
-  const tokenRaw = req.params.token;
-  const token = Array.isArray(tokenRaw) ? tokenRaw[0] : tokenRaw;
-  const response = parseResponse(req.body?.response ?? req.query.response);
-
-  if (!token || !response) {
-    res.status(400).type("html").send(shellPage({
-      title: "RSVP — Delve",
-      heading: "Invalid request",
-      bodyHtml: `<p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">Open the original email and tap Yes, Maybe, or No.</p>`,
-    }));
-    return;
-  }
-
-  try {
-    const result = await applyRsvp(token, response);
-    if (!result.ok) {
-      res.status(result.status).type("html").send(shellPage({
-        title: "RSVP — Delve",
-        heading: result.heading,
-        bodyHtml: `<p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">${escapeHtml(result.body)}</p>`,
-      }));
-      return;
-    }
-
-    const dateStr = result.date.toLocaleString("en-US", {
-      weekday: "long", month: "long", day: "numeric",
-      hour: "numeric", minute: "2-digit",
-    });
-    const label = LABELS[response];
-    const lines: Record<RsvpResponse, string> = {
-      yes: `You're locked in for ${result.eventTitle} — ${dateStr}.`,
-      maybe: `We'll keep your spot open for ${result.eventTitle} — ${dateStr}.`,
-      no: `You're marked as not attending ${result.eventTitle} — ${dateStr}.`,
-    };
-    res.status(200).type("html").send(shellPage({
+  return {
+    status: 200,
+    html: shellPage({
       title: "RSVP saved — Delve",
       heading: response === "yes" ? "You're in!" : response === "no" ? "Sorry to hear it." : "Marked as maybe.",
       badgeColor: label.color,
-      bodyHtml: `<p style="margin:0;color:#A1A1AA;font-size:14px;line-height:1.6;">${escapeHtml(lines[response])} Open Delve anytime to change your response or leave a note.</p>`,
-    }));
+      bodyHtml: `
+        <p style="margin:0 0 8px;color:#D4D4D8;font-size:15px;font-weight:500;">${escapeHtml(event.title)}</p>
+        <p style="margin:0 0 16px;color:#A1A1AA;font-size:13px;">${escapeHtml(dateStr)}</p>
+        <div style="display:inline-block;background-color:${label.color};color:#09090B;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:600;margin:0 0 20px;">
+          Your RSVP: ${label.word}
+        </div>
+        <p style="margin:0;color:#A1A1AA;font-size:13px;line-height:1.6;">${escapeHtml(label.line(event.title, dateStr))} Open Delve anytime to change your response or leave a note.</p>
+      `,
+    }),
+  };
+}
+
+router.get("/rsvp/:token", async (req, res): Promise<void> => {
+  const tokenRaw = req.params.token;
+  const token = Array.isArray(tokenRaw) ? tokenRaw[0] : tokenRaw;
+  const response = parseResponse(req.query.response);
+  try {
+    const out = await handleRsvp(token, response);
+    res.status(out.status).type("html").send(out.html);
   } catch (err) {
     logger.error({ err }, "Failed to record RSVP from email link");
     res.status(500).type("html").send(shellPage({
