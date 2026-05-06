@@ -3,6 +3,7 @@ import { db, campaignMembersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getUserDisplayName, getUserAvatarUrl } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, getMember, syncMemberProfile, joinWithInviteCode } from "../lib/campaign";
+import { isValidTimeZone } from "../lib/timezone";
 
 const router: IRouter = Router();
 
@@ -39,15 +40,36 @@ router.patch("/members/me/notifications", requireAuth, async (req, res): Promise
     return;
   }
 
-  const { emailNotifications } = req.body ?? {};
-  if (typeof emailNotifications !== "boolean") {
-    res.status(400).json({ error: "emailNotifications must be a boolean" });
+  const { emailNotifications, timezone } = req.body ?? {};
+  const updates: { emailNotifications?: boolean; timezone?: string | null } = {};
+
+  if (emailNotifications !== undefined) {
+    if (typeof emailNotifications !== "boolean") {
+      res.status(400).json({ error: "emailNotifications must be a boolean" });
+      return;
+    }
+    updates.emailNotifications = emailNotifications;
+  }
+
+  if (timezone !== undefined) {
+    if (timezone === null) {
+      updates.timezone = null;
+    } else if (typeof timezone !== "string" || !isValidTimeZone(timezone)) {
+      res.status(400).json({ error: "timezone must be a valid IANA timezone or null" });
+      return;
+    } else {
+      updates.timezone = timezone;
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No valid fields to update" });
     return;
   }
 
   const [updated] = await db
     .update(campaignMembersTable)
-    .set({ emailNotifications })
+    .set(updates)
     .where(
       and(
         eq(campaignMembersTable.campaignId, campaignId),

@@ -46,6 +46,11 @@ export interface CampaignMember {
   /** @nullable */
   avatarUrl?: string | null;
   emailNotifications: boolean;
+  /**
+   * IANA timezone identifier the recipient prefers for invite emails. Falls back to the campaign timezone when null.
+   * @nullable
+   */
+  timezone?: string | null;
   createdAt: string;
 }
 
@@ -489,7 +494,12 @@ export interface DashboardSummary {
 }
 
 export interface UpdateNotificationPrefsBody {
-  emailNotifications: boolean;
+  emailNotifications?: boolean;
+  /**
+   * IANA timezone identifier (e.g. "America/Los_Angeles"). Pass null to clear and fall back to the campaign timezone.
+   * @nullable
+   */
+  timezone?: string | null;
 }
 
 export type DeleteEventParams = {

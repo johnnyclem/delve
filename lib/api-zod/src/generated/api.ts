@@ -192,6 +192,12 @@ export const ListMembersResponseItem = zod.object({
   displayName: zod.string(),
   avatarUrl: zod.string().nullish(),
   emailNotifications: zod.boolean(),
+  timezone: zod
+    .string()
+    .nullish()
+    .describe(
+      "IANA timezone identifier the recipient prefers for invite emails. Falls back to the campaign timezone when null.",
+    ),
   createdAt: zod.coerce.date(),
 });
 export const ListMembersResponse = zod.array(ListMembersResponseItem);
@@ -207,6 +213,12 @@ export const GetMyMembershipResponse = zod.object({
   displayName: zod.string(),
   avatarUrl: zod.string().nullish(),
   emailNotifications: zod.boolean(),
+  timezone: zod
+    .string()
+    .nullish()
+    .describe(
+      "IANA timezone identifier the recipient prefers for invite emails. Falls back to the campaign timezone when null.",
+    ),
   createdAt: zod.coerce.date(),
 });
 
@@ -214,7 +226,13 @@ export const GetMyMembershipResponse = zod.object({
  * @summary Update email notification preferences
  */
 export const UpdateNotificationPrefsBody = zod.object({
-  emailNotifications: zod.boolean(),
+  emailNotifications: zod.boolean().optional(),
+  timezone: zod
+    .string()
+    .nullish()
+    .describe(
+      'IANA timezone identifier (e.g. \"America\/Los_Angeles\"). Pass null to clear and fall back to the campaign timezone.',
+    ),
 });
 
 export const UpdateNotificationPrefsResponse = zod.object({
@@ -225,6 +243,12 @@ export const UpdateNotificationPrefsResponse = zod.object({
   displayName: zod.string(),
   avatarUrl: zod.string().nullish(),
   emailNotifications: zod.boolean(),
+  timezone: zod
+    .string()
+    .nullish()
+    .describe(
+      "IANA timezone identifier the recipient prefers for invite emails. Falls back to the campaign timezone when null.",
+    ),
   createdAt: zod.coerce.date(),
 });
 

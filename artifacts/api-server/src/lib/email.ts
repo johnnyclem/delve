@@ -1,5 +1,6 @@
 import { db, campaignMembersTable, notificationLogsTable, sessionLogsTable, campaignsTable, calendarEventsTable } from "@workspace/db";
 import { eq, and, isNotNull, desc, gt } from "drizzle-orm";
+import { getMember } from "./campaign";
 import { logger } from "./logger";
 import { generateUnsubscribeToken } from "./unsubscribe";
 import { generateRsvpToken } from "./rsvp-token";
@@ -320,6 +321,7 @@ interface EventInviteParams {
   campaignId: number;
   campaignName: string;
   campaignTimezone: string;
+  recipientTimezone?: string | null;
   eventId: number;
   eventTitle: string;
   proposedAt: Date;
@@ -399,6 +401,11 @@ export async function sendEventInviteToRecipient(
       });
     }
 
+    const fallbackTz = isValidTimeZone(params.campaignTimezone) ? params.campaignTimezone : "UTC";
+    const recipientTz = params.recipientTimezone && isValidTimeZone(params.recipientTimezone)
+      ? params.recipientTimezone
+      : fallbackTz;
+
     const result = await ctx.resend.emails.send({
       from: ctx.fromEmail,
       to: email,
@@ -406,7 +413,7 @@ export async function sendEventInviteToRecipient(
       html: buildEventInviteHtml({
         playerName: displayName,
         ...params,
-        campaignTimezone: isValidTimeZone(params.campaignTimezone) ? params.campaignTimezone : "UTC",
+        campaignTimezone: recipientTz,
         yesUrl,
         noUrl,
         maybeUrl,
@@ -512,12 +519,15 @@ export async function sendEventInviteForOne(params: {
     .where(and(eq(calendarEventsTable.id, eventId), eq(calendarEventsTable.campaignId, campaignId)));
   if (!ev) return null;
 
+  const member = await getMember(campaignId, userId);
+
   const ctx = await buildRecipientContext();
 
   return sendEventInviteToRecipient(ctx, {
     campaignId,
     campaignName: inviteCtx.campaign.name,
     campaignTimezone: inviteCtx.campaign.timezone ?? "UTC",
+    recipientTimezone: member?.timezone ?? null,
     eventId: ev.id,
     eventTitle: ev.title,
     proposedAt: ev.proposedAt,
@@ -572,6 +582,7 @@ export async function sendEventInvitesForEvents(params: {
           campaignId,
           campaignName: inviteCtx.campaign.name,
           campaignTimezone: inviteCtx.campaign.timezone ?? "UTC",
+          recipientTimezone: player.timezone ?? null,
           eventId: ev.id,
           eventTitle: ev.title,
           proposedAt: ev.proposedAt,

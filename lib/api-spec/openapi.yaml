@@ -799,6 +799,9 @@ components:
           type: ["string", "null"]
         emailNotifications:
           type: boolean
+        timezone:
+          type: ["string", "null"]
+          description: IANA timezone identifier the recipient prefers for invite emails. Falls back to the campaign timezone when null.
         createdAt:
           type: string
           format: date-time
@@ -1569,8 +1572,9 @@ components:
       properties:
         emailNotifications:
           type: boolean
-      required:
-        - emailNotifications
+        timezone:
+          type: ["string", "null"]
+          description: IANA timezone identifier (e.g. "America/Los_Angeles"). Pass null to clear and fall back to the campaign timezone.
 
     PartyMemberSummary:
       type: object

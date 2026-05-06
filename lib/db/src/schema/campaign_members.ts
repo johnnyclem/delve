@@ -11,6 +11,7 @@ export const campaignMembersTable = pgTable("campaign_members", {
   displayName: text("display_name").notNull(),
   avatarUrl: text("avatar_url"),
   emailNotifications: boolean("email_notifications").notNull().default(false),
+  timezone: text("timezone"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("uq_campaign_member").on(table.campaignId, table.userId),

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,38 @@ export default function DashboardPage() {
     );
   };
 
+  const handleChangeTimezone = (tz: string) => {
+    updateNotificationPrefs.mutate(
+      { data: { emailNotifications: membership?.emailNotifications ?? false, timezone: tz } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/members/me"] });
+        },
+      },
+    );
+  };
+
+  const browserTimezone = useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    [],
+  );
+  const supportedTimezones = useMemo<string[]>(() => {
+    try {
+      const fn = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf;
+      if (typeof fn === "function") return fn("timeZone");
+    } catch { /* ignore */ }
+    return [browserTimezone, "UTC"];
+  }, [browserTimezone]);
+
+  useEffect(() => {
+    if (membership && membership.timezone == null && !updateNotificationPrefs.isPending) {
+      handleChangeTimezone(browserTimezone);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membership?.id, membership?.timezone]);
+
+  const currentTimezone = membership?.timezone ?? browserTimezone;
+
   const needsInvite = error && (error as { status?: number }).status === 403;
 
   if (needsInvite) {
@@ -144,6 +176,23 @@ export default function DashboardPage() {
               data-testid="switch-email-notifications"
             />
           </label>
+          <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors" data-testid="label-timezone">
+            <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+              <Globe className="h-4 w-4" />
+              Your timezone
+            </span>
+            <select
+              value={currentTimezone}
+              onChange={(e) => handleChangeTimezone(e.target.value)}
+              disabled={updateNotificationPrefs.isPending}
+              className="bg-transparent text-xs text-foreground rounded px-1 py-0.5 max-w-[140px] truncate focus:outline-none focus:ring-1 focus:ring-primary"
+              data-testid="select-timezone"
+            >
+              {supportedTimezones.map((tz) => (
+                <option key={tz} value={tz} className="bg-[#18181B] text-foreground">{tz}</option>
+              ))}
+            </select>
+          </label>
           <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={handleSignOut} data-testid="button-sign-out">
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
@@ -205,6 +254,23 @@ export default function DashboardPage() {
                 onCheckedChange={handleToggleEmailNotifications}
                 disabled={updateNotificationPrefs.isPending}
               />
+            </label>
+            <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+                <Globe className="h-4 w-4" />
+                Your timezone
+              </span>
+              <select
+                value={currentTimezone}
+                onChange={(e) => handleChangeTimezone(e.target.value)}
+                disabled={updateNotificationPrefs.isPending}
+                className="bg-transparent text-xs text-foreground rounded px-1 py-0.5 max-w-[160px] truncate focus:outline-none focus:ring-1 focus:ring-primary"
+                data-testid="select-timezone-mobile"
+              >
+                {supportedTimezones.map((tz) => (
+                  <option key={tz} value={tz} className="bg-[#18181B] text-foreground">{tz}</option>
+                ))}
+              </select>
             </label>
             <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-1" onClick={handleSignOut}>
               <LogOut className="h-4 w-4 mr-2" />
