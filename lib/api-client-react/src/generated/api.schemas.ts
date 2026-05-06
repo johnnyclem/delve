@@ -369,6 +369,15 @@ export interface ResendEventInvitesResult {
   logs: EventInviteLog[];
 }
 
+export interface ReanchorSeriesResult {
+  seriesId: string;
+  campaignId: number;
+  timezone: string;
+  deletedFutureCount: number;
+  insertedFutureCount: number;
+  preservedPastCount: number;
+}
+
 export type UpdateEventBodyStatus =
   (typeof UpdateEventBodyStatus)[keyof typeof UpdateEventBodyStatus];
 

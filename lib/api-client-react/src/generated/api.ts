@@ -36,6 +36,7 @@ import type {
   HealthStatus,
   NotificationLog,
   NotifyRecapResult,
+  ReanchorSeriesResult,
   ResendEventInviteResult,
   ResendEventInvitesResult,
   ResendFailedResult,
@@ -2552,6 +2553,90 @@ export const useResendEventInvites = <
   TContext
 > => {
   return useMutation(getResendEventInvitesMutationOptions(options));
+};
+
+/**
+ * @summary Re-anchor a recurring series to the campaign timezone (DM only)
+ */
+export const getReanchorSeriesUrl = (seriesId: string) => {
+  return `/api/calendar/series/${seriesId}/reanchor`;
+};
+
+export const reanchorSeries = async (
+  seriesId: string,
+  options?: RequestInit,
+): Promise<ReanchorSeriesResult> => {
+  return customFetch<ReanchorSeriesResult>(getReanchorSeriesUrl(seriesId), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getReanchorSeriesMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reanchorSeries>>,
+    TError,
+    { seriesId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof reanchorSeries>>,
+  TError,
+  { seriesId: string },
+  TContext
+> => {
+  const mutationKey = ["reanchorSeries"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof reanchorSeries>>,
+    { seriesId: string }
+  > = (props) => {
+    const { seriesId } = props ?? {};
+
+    return reanchorSeries(seriesId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ReanchorSeriesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof reanchorSeries>>
+>;
+
+export type ReanchorSeriesMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Re-anchor a recurring series to the campaign timezone (DM only)
+ */
+export const useReanchorSeries = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof reanchorSeries>>,
+    TError,
+    { seriesId: string },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof reanchorSeries>>,
+  TError,
+  { seriesId: string },
+  TContext
+> => {
+  return useMutation(getReanchorSeriesMutationOptions(options));
 };
 
 /**

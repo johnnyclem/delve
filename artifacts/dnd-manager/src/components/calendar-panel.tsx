@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw, Anchor } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Calendar } from "@/components/ui/calendar";
 import {
   useListEvents, useGetEvent, useCreateEvent, useUpsertRsvp, useDeleteEvent,
   useGetEventInviteLogs, useResendEventInvites, useResendEventInvite,
+  useReanchorSeries,
   getListEventsQueryKey, getGetEventQueryKey, getGetDashboardQueryKey,
   getGetEventInviteLogsQueryKey,
 } from "@workspace/api-client-react";
@@ -689,6 +690,7 @@ function EventDetail({ id, onBack, scrollToDelivery }: { id: number; onBack: () 
   const { data: event, isLoading } = useGetEvent(id, { query: { queryKey: getGetEventQueryKey(id) } });
   const upsertRsvp = useUpsertRsvp();
   const deleteMutation = useDeleteEvent();
+  const reanchorMutation = useReanchorSeries();
   const { data: membership } = useGetMyMembership();
   const isDm = (membership as CampaignMember | undefined)?.role === "dm";
   const queryClient = useQueryClient();
@@ -710,6 +712,35 @@ function EventDetail({ id, onBack, scrollToDelivery }: { id: number; onBack: () 
           queryClient.invalidateQueries({ queryKey: getGetEventQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
           toast({ title: `RSVP'd: ${status}` });
+        },
+      },
+    );
+  };
+
+  const handleReanchor = () => {
+    if (!ev?.seriesId) return;
+    if (!window.confirm(
+      "Re-anchor this series to the campaign timezone? Future occurrences will be rewritten to keep the original local time, and RSVPs on those future occurrences will be cleared. Past sessions are unaffected.",
+    )) return;
+    reanchorMutation.mutate(
+      { seriesId: ev.seriesId },
+      {
+        onSuccess: (data) => {
+          queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetEventQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+          const n = data.insertedFutureCount;
+          toast({
+            title: n === 0
+              ? "Series already anchored — nothing to rewrite"
+              : `Re-anchored ${n} future occurrence${n === 1 ? "" : "s"}`,
+            description: data.preservedPastCount > 0
+              ? `${data.preservedPastCount} past session${data.preservedPastCount === 1 ? " was" : "s were"} preserved.`
+              : undefined,
+          });
+        },
+        onError: (err) => {
+          toast({ title: "Could not re-anchor series", description: err instanceof Error ? err.message : String(err) });
         },
       },
     );
@@ -806,6 +837,30 @@ function EventDetail({ id, onBack, scrollToDelivery }: { id: number; onBack: () 
       )}
 
       {isDm && <InviteDeliveryPanel eventId={id} scrollIntoView={scrollToDelivery} />}
+
+      {isDm && ev.seriesId && (
+        <div className="rounded-2xl glass-panel p-4 space-y-2" data-testid="reanchor-series-card">
+          <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+            <Anchor className="h-4 w-4 text-primary" /> Recurring series tools
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            If a timezone change or DST shift moved future occurrences off their original local time, re-anchor the series to fix it. Past sessions are preserved.
+          </p>
+          <div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleReanchor}
+              disabled={reanchorMutation.isPending}
+              data-testid="button-reanchor-series"
+              className="gap-1"
+            >
+              <Anchor className={`h-3 w-3 ${reanchorMutation.isPending ? "animate-pulse" : ""}`} />
+              {reanchorMutation.isPending ? "Re-anchoring…" : "Re-anchor series"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {isDm && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 space-y-2">

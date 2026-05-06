@@ -1072,6 +1072,22 @@ export const ResendEventInvitesResponse = zod.object({
 });
 
 /**
+ * @summary Re-anchor a recurring series to the campaign timezone (DM only)
+ */
+export const ReanchorSeriesParams = zod.object({
+  seriesId: zod.coerce.string(),
+});
+
+export const ReanchorSeriesResponse = zod.object({
+  seriesId: zod.string(),
+  campaignId: zod.number(),
+  timezone: zod.string(),
+  deletedFutureCount: zod.number(),
+  insertedFutureCount: zod.number(),
+  preservedPastCount: zod.number(),
+});
+
+/**
  * @summary Set or update RSVP for an event
  */
 export const UpsertRsvpParams = zod.object({

@@ -673,6 +673,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /calendar/series/{seriesId}/reanchor:
+    post:
+      operationId: reanchorSeries
+      tags: [calendar]
+      summary: Re-anchor a recurring series to the campaign timezone (DM only)
+      parameters:
+        - name: seriesId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Re-anchor result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReanchorSeriesResult"
+        "403":
+          description: Only the DM can re-anchor a series
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Series not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /calendar/{eventId}/rsvp:
     put:
       operationId: upsertRsvp
@@ -1347,6 +1378,29 @@ components:
         - success
         - resentCount
         - logs
+
+    ReanchorSeriesResult:
+      type: object
+      properties:
+        seriesId:
+          type: string
+        campaignId:
+          type: integer
+        timezone:
+          type: string
+        deletedFutureCount:
+          type: integer
+        insertedFutureCount:
+          type: integer
+        preservedPastCount:
+          type: integer
+      required:
+        - seriesId
+        - campaignId
+        - timezone
+        - deletedFutureCount
+        - insertedFutureCount
+        - preservedPastCount
 
     EventInviteLog:
       type: object
