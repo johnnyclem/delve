@@ -205,6 +205,48 @@ export async function reanchorSeries(params: {
   const pastExisting = events.filter((e) => e.proposedAt.getTime() <= now.getTime());
   const futureExistingIds = futureExisting.map((e) => e.id);
 
+  const ruleSerialized = { freq: rule.freq, until: until.toISOString() };
+  const newFutureDates = regenerated.filter((d) => d.getTime() > now.getTime());
+
+  // Fast path: when the regenerated future occurrence count matches the
+  // existing one, update `proposed_at` in place by ordinal position. This
+  // preserves RSVPs and notification logs across DST re-anchors where dates
+  // shift by only an hour or so.
+  if (
+    futureExisting.length > 0 &&
+    futureExisting.length === newFutureDates.length
+  ) {
+    let updatedCount = 0;
+    for (let i = 0; i < futureExisting.length; i++) {
+      const existing = futureExisting[i]!;
+      const newDate = newFutureDates[i]!;
+      if (existing.proposedAt.getTime() !== newDate.getTime()) {
+        await db
+          .update(calendarEventsTable)
+          .set({ proposedAt: newDate, recurrenceRule: ruleSerialized })
+          .where(eq(calendarEventsTable.id, existing.id));
+        updatedCount++;
+      } else if (
+        JSON.stringify(existing.recurrenceRule) !== JSON.stringify(ruleSerialized)
+      ) {
+        await db
+          .update(calendarEventsTable)
+          .set({ recurrenceRule: ruleSerialized })
+          .where(eq(calendarEventsTable.id, existing.id));
+      }
+    }
+    return {
+      seriesId,
+      campaignId,
+      timezone,
+      deletedFutureCount: 0,
+      insertedFutureCount: updatedCount,
+      preservedPastCount: pastExisting.length,
+    };
+  }
+
+  // Fallback: counts differ, so the series shape changed. Delete future
+  // occurrences (and their RSVPs) and re-insert from scratch.
   if (futureExistingIds.length > 0) {
     await db.delete(rsvpsTable).where(inArray(rsvpsTable.calendarEventId, futureExistingIds));
     await db
@@ -213,9 +255,6 @@ export async function reanchorSeries(params: {
       .where(inArray(notificationLogsTable.calendarEventId, futureExistingIds));
     await db.delete(calendarEventsTable).where(inArray(calendarEventsTable.id, futureExistingIds));
   }
-
-  const ruleSerialized = { freq: rule.freq, until: until.toISOString() };
-  const newFutureDates = regenerated.filter((d) => d.getTime() > now.getTime());
 
   let insertedCount = 0;
   if (newFutureDates.length > 0) {
