@@ -636,6 +636,65 @@ export const ListSessionNotificationsResponse = zod.array(
 );
 
 /**
+ * @summary Resend a single failed recap notification (DM only)
+ */
+export const ResendNotificationParams = zod.object({
+  id: zod.coerce.number(),
+  logId: zod.coerce.number(),
+});
+
+export const ResendNotificationResponse = zod.object({
+  success: zod.boolean(),
+  log: zod
+    .union([
+      zod.object({
+        id: zod.number(),
+        sessionLogId: zod.number(),
+        campaignId: zod.number(),
+        userId: zod.string(),
+        recipientName: zod.string(),
+        email: zod.string().nullish(),
+        channel: zod.string(),
+        status: zod.enum(["sent", "failed", "skipped"]),
+        reason: zod.string().nullish(),
+        errorMessage: zod.string().nullish(),
+        providerMessageId: zod.string().nullish(),
+        attemptedAt: zod.coerce.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
+});
+
+/**
+ * @summary Resend all currently-failed recap notifications for a session (DM only)
+ */
+export const ResendFailedNotificationsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResendFailedNotificationsResponse = zod.object({
+  success: zod.boolean(),
+  resentCount: zod.number(),
+  logs: zod.array(
+    zod.object({
+      id: zod.number(),
+      sessionLogId: zod.number(),
+      campaignId: zod.number(),
+      userId: zod.string(),
+      recipientName: zod.string(),
+      email: zod.string().nullish(),
+      channel: zod.string(),
+      status: zod.enum(["sent", "failed", "skipped"]),
+      reason: zod.string().nullish(),
+      errorMessage: zod.string().nullish(),
+      providerMessageId: zod.string().nullish(),
+      attemptedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
  * @summary Mark a session recap as viewed by the current player
  */
 export const MarkRecapViewedParams = zod.object({

@@ -12,6 +12,14 @@ interface RecapNotificationParams {
 
 type NotificationStatus = "sent" | "failed" | "skipped";
 
+export interface RecipientContext {
+  resend?: import("resend").Resend;
+  clerkClient?: Awaited<ReturnType<() => Promise<typeof import("@clerk/express").clerkClient>>>;
+  appUrl: string;
+  fromEmail: string;
+  skipReason: string | null;
+}
+
 async function recordLog(entry: {
   sessionLogId: number;
   campaignId: number;
@@ -22,9 +30,9 @@ async function recordLog(entry: {
   reason?: string | null;
   errorMessage?: string | null;
   providerMessageId?: string | null;
-}): Promise<void> {
+}): Promise<typeof notificationLogsTable.$inferSelect | null> {
   try {
-    await db.insert(notificationLogsTable).values({
+    const [row] = await db.insert(notificationLogsTable).values({
       sessionLogId: entry.sessionLogId,
       campaignId: entry.campaignId,
       userId: entry.userId,
@@ -35,9 +43,159 @@ async function recordLog(entry: {
       reason: entry.reason ?? null,
       errorMessage: entry.errorMessage ?? null,
       providerMessageId: entry.providerMessageId ?? null,
-    });
+    }).returning();
+    return row ?? null;
   } catch (err) {
     logger.error({ err }, "Failed to write notification log");
+    return null;
+  }
+}
+
+export async function buildRecipientContext(): Promise<RecipientContext> {
+  const appUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : process.env.APP_URL ?? "http://localhost:5173";
+  const fromEmail = process.env.EMAIL_FROM ?? "Delve <notifications@resend.dev>";
+
+  let resend: import("resend").Resend | undefined;
+  let skipReason: string | null = null;
+
+  try {
+    const { Resend } = await import("resend");
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      skipReason = "RESEND_API_KEY not configured";
+      logger.info("RESEND_API_KEY not configured — skipping email notifications");
+    } else {
+      resend = new Resend(apiKey);
+    }
+  } catch {
+    skipReason = "Resend package not available";
+    logger.warn("Resend package not available — skipping email notifications");
+  }
+
+  let clerkClient: RecipientContext["clerkClient"];
+  if (!skipReason) {
+    try {
+      const clerkModule = await import("@clerk/express");
+      clerkClient = clerkModule.clerkClient;
+    } catch {
+      skipReason = "Clerk client not available";
+      logger.warn("Clerk client not available — skipping email notifications");
+    }
+  }
+
+  return { resend, clerkClient, appUrl, fromEmail, skipReason };
+}
+
+export async function sendRecapEmailToRecipient(
+  ctx: RecipientContext,
+  params: {
+    sessionLogId: number;
+    campaignId: number;
+    userId: string;
+    displayName: string;
+    sessionNumber: number;
+    sessionTitle: string;
+  },
+): Promise<typeof notificationLogsTable.$inferSelect | null> {
+  const { sessionLogId, campaignId, userId, displayName, sessionNumber, sessionTitle } = params;
+
+  if (ctx.skipReason || !ctx.resend || !ctx.clerkClient) {
+    return recordLog({
+      sessionLogId,
+      campaignId,
+      userId,
+      recipientName: displayName,
+      email: null,
+      status: "skipped",
+      reason: ctx.skipReason ?? "Notification provider unavailable",
+    });
+  }
+
+  let email: string | null = null;
+  try {
+    const client = await ctx.clerkClient;
+    const user = await client.users.getUser(userId);
+    email = user.emailAddresses?.[0]?.emailAddress ?? null;
+    if (!email) {
+      logger.info({ userId }, "No email found for user — skipping");
+      return recordLog({
+        sessionLogId,
+        campaignId,
+        userId,
+        recipientName: displayName,
+        email: null,
+        status: "skipped",
+        reason: "No email address on file",
+      });
+    }
+
+    let unsubscribeUrl: string | null = null;
+    try {
+      const token = generateUnsubscribeToken(campaignId, userId);
+      unsubscribeUrl = `${ctx.appUrl}/api/unsubscribe?token=${encodeURIComponent(token)}`;
+    } catch (err) {
+      logger.warn({ err }, "Could not build unsubscribe link — sending email without it");
+    }
+
+    const result = await ctx.resend.emails.send({
+      from: ctx.fromEmail,
+      to: email,
+      subject: `New Recap: Session ${sessionNumber} — ${sessionTitle}`,
+      html: buildRecapEmailHtml({
+        playerName: displayName,
+        sessionNumber,
+        sessionTitle,
+        appUrl: ctx.appUrl,
+        unsubscribeUrl,
+      }),
+      ...(unsubscribeUrl
+        ? {
+            headers: {
+              "List-Unsubscribe": `<${unsubscribeUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+          }
+        : {}),
+    });
+
+    if (result?.error) {
+      const message = result.error.message ?? "Unknown provider error";
+      logger.error({ userId, err: result.error }, "Resend returned error for recap email");
+      return recordLog({
+        sessionLogId,
+        campaignId,
+        userId,
+        recipientName: displayName,
+        email,
+        status: "failed",
+        errorMessage: message,
+      });
+    }
+
+    logger.info({ userId, email }, "Recap notification email sent");
+    return recordLog({
+      sessionLogId,
+      campaignId,
+      userId,
+      recipientName: displayName,
+      email,
+      status: "sent",
+      providerMessageId: result?.data?.id ?? null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error({ err, userId }, "Failed to send recap notification email");
+    return recordLog({
+      sessionLogId,
+      campaignId,
+      userId,
+      recipientName: displayName,
+      email,
+      status: "failed",
+      errorMessage: message,
+    });
   }
 }
 
@@ -61,142 +219,17 @@ export async function sendRecapNotifications(params: RecapNotificationParams): P
       return;
     }
 
-    let resend: import("resend").Resend | undefined;
-    let skipReason: string | null = null;
-
-    try {
-      const { Resend } = await import("resend");
-      const apiKey = process.env.RESEND_API_KEY;
-      if (!apiKey) {
-        skipReason = "RESEND_API_KEY not configured";
-        logger.info(
-          { playerCount: players.length },
-          "RESEND_API_KEY not configured — skipping email notifications",
-        );
-      } else {
-        resend = new Resend(apiKey);
-      }
-    } catch {
-      skipReason = "Resend package not available";
-      logger.warn("Resend package not available — skipping email notifications");
-    }
-
-    let clerkClient;
-    if (!skipReason) {
-      try {
-        const clerkModule = await import("@clerk/express");
-        clerkClient = clerkModule.clerkClient;
-      } catch {
-        skipReason = "Clerk client not available";
-        logger.warn("Clerk client not available — skipping email notifications");
-      }
-    }
-
-    const appUrl = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
-      : process.env.APP_URL ?? "http://localhost:5173";
-
-    const fromEmail = process.env.EMAIL_FROM ?? "Delve <notifications@resend.dev>";
+    const ctx = await buildRecipientContext();
 
     for (const player of players) {
-      if (skipReason || !resend || !clerkClient) {
-        await recordLog({
-          sessionLogId: sessionId,
-          campaignId,
-          userId: player.userId,
-          recipientName: player.displayName,
-          email: null,
-          status: "skipped",
-          reason: skipReason ?? "Notification provider unavailable",
-        });
-        continue;
-      }
-
-      let email: string | null = null;
-      try {
-        const client = await clerkClient;
-        const user = await client.users.getUser(player.userId);
-        email = user.emailAddresses?.[0]?.emailAddress ?? null;
-        if (!email) {
-          logger.info({ userId: player.userId }, "No email found for user — skipping");
-          await recordLog({
-            sessionLogId: sessionId,
-            campaignId,
-            userId: player.userId,
-            recipientName: player.displayName,
-            email: null,
-            status: "skipped",
-            reason: "No email address on file",
-          });
-          continue;
-        }
-
-        let unsubscribeUrl: string | null = null;
-        try {
-          const token = generateUnsubscribeToken(campaignId, player.userId);
-          unsubscribeUrl = `${appUrl}/api/unsubscribe?token=${encodeURIComponent(token)}`;
-        } catch (err) {
-          logger.warn({ err }, "Could not build unsubscribe link — sending email without it");
-        }
-
-        const result = await resend.emails.send({
-          from: fromEmail,
-          to: email,
-          subject: `New Recap: Session ${sessionNumber} — ${sessionTitle}`,
-          html: buildRecapEmailHtml({
-            playerName: player.displayName,
-            sessionNumber,
-            sessionTitle,
-            appUrl,
-            unsubscribeUrl,
-          }),
-          ...(unsubscribeUrl
-            ? {
-                headers: {
-                  "List-Unsubscribe": `<${unsubscribeUrl}>`,
-                  "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-                },
-              }
-            : {}),
-        });
-
-        if (result?.error) {
-          const message = result.error.message ?? "Unknown provider error";
-          logger.error({ userId: player.userId, err: result.error }, "Resend returned error for recap email");
-          await recordLog({
-            sessionLogId: sessionId,
-            campaignId,
-            userId: player.userId,
-            recipientName: player.displayName,
-            email,
-            status: "failed",
-            errorMessage: message,
-          });
-        } else {
-          logger.info({ userId: player.userId, email }, "Recap notification email sent");
-          await recordLog({
-            sessionLogId: sessionId,
-            campaignId,
-            userId: player.userId,
-            recipientName: player.displayName,
-            email,
-            status: "sent",
-            providerMessageId: result?.data?.id ?? null,
-          });
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error({ err, userId: player.userId }, "Failed to send recap notification email");
-        await recordLog({
-          sessionLogId: sessionId,
-          campaignId,
-          userId: player.userId,
-          recipientName: player.displayName,
-          email,
-          status: "failed",
-          errorMessage: message,
-        });
-      }
+      await sendRecapEmailToRecipient(ctx, {
+        sessionLogId: sessionId,
+        campaignId,
+        userId: player.userId,
+        displayName: player.displayName,
+        sessionNumber,
+        sessionTitle,
+      });
     }
   } catch (err) {
     logger.error({ err }, "Failed to send recap notifications");

@@ -8,6 +8,7 @@ import {
   useListSessions, useGetSession, useCreateSession, useUpdateSession, useGenerateRecap,
   useMarkRecapViewed, useNotifyRecap,
   useListSessionNotifications,
+  useResendNotification, useResendFailedNotifications,
   getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey,
   getListSessionNotificationsQueryKey,
   updateSession as updateSessionApi,
@@ -956,20 +957,87 @@ function NotificationStatus({ sessionId }: { sessionId: number }) {
   const { data, isLoading, refetch, isFetching } = useListSessionNotifications(sessionId, {
     query: { queryKey: getListSessionNotificationsQueryKey(sessionId) },
   });
-  const logs = (data as NotificationLog[] | undefined) ?? [];
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const resendOne = useResendNotification();
+  const resendAll = useResendFailedNotifications();
+  const allLogs = (data as NotificationLog[] | undefined) ?? [];
+
+  const invalidateLogs = () => {
+    queryClient.invalidateQueries({ queryKey: getListSessionNotificationsQueryKey(sessionId) });
+  };
+
+  const handleResendOne = (logId: number, recipientName: string) => {
+    resendOne.mutate(
+      { id: sessionId, logId },
+      {
+        onSuccess: (result) => {
+          invalidateLogs();
+          const status = (result as { log?: { status?: string } } | undefined)?.log?.status;
+          if (status === "sent") {
+            toast({ title: `Resent to ${recipientName}` });
+          } else if (status === "failed") {
+            toast({ title: `Resend to ${recipientName} failed again`, variant: "destructive" });
+          } else {
+            toast({ title: `Resend skipped for ${recipientName}` });
+          }
+        },
+        onError: () => {
+          toast({ title: "Failed to resend notification", variant: "destructive" });
+        },
+      },
+    );
+  };
+
+  const handleResendAllFailed = () => {
+    resendAll.mutate(
+      { id: sessionId },
+      {
+        onSuccess: (result) => {
+          invalidateLogs();
+          const r = result as { resentCount?: number; logs?: { status: string }[] } | undefined;
+          const newLogs = r?.logs ?? [];
+          const sent = newLogs.filter((l) => l.status === "sent").length;
+          const stillFailed = newLogs.filter((l) => l.status === "failed").length;
+          if (stillFailed > 0) {
+            toast({
+              title: `Resent ${sent}, ${stillFailed} still failed`,
+              variant: "destructive",
+            });
+          } else {
+            toast({ title: `Resent ${r?.resentCount ?? newLogs.length} notification${newLogs.length === 1 ? "" : "s"}` });
+          }
+        },
+        onError: () => {
+          toast({ title: "Failed to resend notifications", variant: "destructive" });
+        },
+      },
+    );
+  };
 
   if (isLoading) {
     return <Skeleton className="h-20 rounded-2xl" />;
   }
 
-  if (logs.length === 0) {
+  if (allLogs.length === 0) {
     return null;
+  }
+
+  // Show only the most recent log per recipient so retries supersede the failed entry.
+  const seenUsers = new Set<string>();
+  const logs: NotificationLog[] = [];
+  for (const log of allLogs) {
+    if (seenUsers.has(log.userId)) continue;
+    seenUsers.add(log.userId);
+    logs.push(log);
   }
 
   const sentCount = logs.filter((l) => l.status === "sent").length;
   const failedCount = logs.filter((l) => l.status === "failed").length;
   const skippedCount = logs.filter((l) => l.status === "skipped").length;
   const hasFailures = failedCount > 0;
+  const showBulkResend = failedCount >= 2;
+  const isResending = resendOne.isPending || resendAll.isPending;
 
   return (
     <div
@@ -1002,6 +1070,23 @@ function NotificationStatus({ sessionId }: { sessionId: number }) {
               </span>
             )}
           </div>
+          {showBulkResend && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={handleResendAllFailed}
+              disabled={isResending}
+              data-testid="button-resend-all-failed"
+            >
+              {resendAll.isPending ? (
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              ) : (
+                <Send className="h-3 w-3 mr-1" />
+              )}
+              Resend all failed
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -1045,14 +1130,33 @@ function NotificationStatus({ sessionId }: { sessionId: number }) {
                   </p>
                 )}
               </div>
-              <span className="text-muted-foreground shrink-0 tabular-nums">
-                {new Date(log.attemptedAt).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                {log.status === "failed" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => handleResendOne(log.id, log.recipientName)}
+                    disabled={isResending}
+                    data-testid={`button-resend-${log.id}`}
+                  >
+                    {resendOne.isPending && resendOne.variables?.logId === log.id ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : (
+                      <Send className="h-3 w-3 mr-1" />
+                    )}
+                    Resend
+                  </Button>
+                )}
+                <span className="text-muted-foreground tabular-nums">
+                  {new Date(log.attemptedAt).toLocaleString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              </div>
             </div>
           );
         })}

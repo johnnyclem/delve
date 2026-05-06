@@ -207,6 +207,17 @@ export interface NotificationLog {
   attemptedAt: string;
 }
 
+export interface ResendNotificationResult {
+  success: boolean;
+  log?: NotificationLog | null;
+}
+
+export interface ResendFailedResult {
+  success: boolean;
+  resentCount: number;
+  logs: NotificationLog[];
+}
+
 export interface GeneratedRecap {
   recap: string;
   model: string;

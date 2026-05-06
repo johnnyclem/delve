@@ -33,6 +33,8 @@ import type {
   HealthStatus,
   NotificationLog,
   NotifyRecapResult,
+  ResendFailedResult,
+  ResendNotificationResult,
   RollDiceBody,
   Rsvp,
   SessionLog,
@@ -1439,6 +1441,178 @@ export function useListSessionNotifications<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Resend a single failed recap notification (DM only)
+ */
+export const getResendNotificationUrl = (id: number, logId: number) => {
+  return `/api/sessions/${id}/notifications/${logId}/resend`;
+};
+
+export const resendNotification = async (
+  id: number,
+  logId: number,
+  options?: RequestInit,
+): Promise<ResendNotificationResult> => {
+  return customFetch<ResendNotificationResult>(
+    getResendNotificationUrl(id, logId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getResendNotificationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendNotification>>,
+    TError,
+    { id: number; logId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendNotification>>,
+  TError,
+  { id: number; logId: number },
+  TContext
+> => {
+  const mutationKey = ["resendNotification"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendNotification>>,
+    { id: number; logId: number }
+  > = (props) => {
+    const { id, logId } = props ?? {};
+
+    return resendNotification(id, logId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendNotificationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendNotification>>
+>;
+
+export type ResendNotificationMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Resend a single failed recap notification (DM only)
+ */
+export const useResendNotification = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendNotification>>,
+    TError,
+    { id: number; logId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendNotification>>,
+  TError,
+  { id: number; logId: number },
+  TContext
+> => {
+  return useMutation(getResendNotificationMutationOptions(options));
+};
+
+/**
+ * @summary Resend all currently-failed recap notifications for a session (DM only)
+ */
+export const getResendFailedNotificationsUrl = (id: number) => {
+  return `/api/sessions/${id}/notifications/resend-failed`;
+};
+
+export const resendFailedNotifications = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ResendFailedResult> => {
+  return customFetch<ResendFailedResult>(getResendFailedNotificationsUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResendFailedNotificationsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendFailedNotifications>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendFailedNotifications>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["resendFailedNotifications"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendFailedNotifications>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return resendFailedNotifications(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendFailedNotificationsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendFailedNotifications>>
+>;
+
+export type ResendFailedNotificationsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Resend all currently-failed recap notifications for a session (DM only)
+ */
+export const useResendFailedNotifications = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendFailedNotifications>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendFailedNotifications>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getResendFailedNotificationsMutationOptions(options));
+};
 
 /**
  * @summary Mark a session recap as viewed by the current player

@@ -350,6 +350,73 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /sessions/{id}/notifications/{logId}/resend:
+    post:
+      operationId: resendNotification
+      tags: [recap]
+      summary: Resend a single failed recap notification (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: logId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resend attempted; returns the new notification log row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendNotificationResult"
+        "403":
+          description: Only the DM can resend notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session or notification log not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{id}/notifications/resend-failed:
+    post:
+      operationId: resendFailedNotifications
+      tags: [recap]
+      summary: Resend all currently-failed recap notifications for a session (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resend attempted for failed entries; returns the new notification log rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendFailedResult"
+        "403":
+          description: Only the DM can resend notifications
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /sessions/{id}/mark-recap-viewed:
     post:
       operationId: markRecapViewed
@@ -886,6 +953,34 @@ components:
       required:
         - success
         - notifiedAt
+
+    ResendNotificationResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        log:
+          oneOf:
+            - $ref: "#/components/schemas/NotificationLog"
+            - type: "null"
+      required:
+        - success
+
+    ResendFailedResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        resentCount:
+          type: integer
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationLog"
+      required:
+        - success
+        - resentCount
+        - logs
 
     NotificationLog:
       type: object

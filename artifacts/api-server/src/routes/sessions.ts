@@ -4,7 +4,7 @@ import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
-import { sendRecapNotifications } from "../lib/email";
+import { sendRecapNotifications, buildRecipientContext, sendRecapEmailToRecipient } from "../lib/email";
 
 const router: IRouter = Router();
 
@@ -335,6 +335,140 @@ router.get("/sessions/:id/notifications", requireAuth, requireCampaignMember, as
     .orderBy(desc(notificationLogsTable.attemptedAt));
 
   res.json(logs);
+});
+
+async function loadSessionForResend(campaignId: number, sessionId: number) {
+  const [session] = await db
+    .select()
+    .from(sessionLogsTable)
+    .where(and(eq(sessionLogsTable.id, sessionId), eq(sessionLogsTable.campaignId, campaignId)));
+  return session;
+}
+
+router.post("/sessions/:id/notifications/:logId/resend", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can resend notifications" });
+    return;
+  }
+
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const rawLogId = Array.isArray(req.params.logId) ? req.params.logId[0] : req.params.logId;
+  const id = parseInt(rawId, 10);
+  const logId = parseInt(rawLogId, 10);
+  if (isNaN(id) || isNaN(logId)) {
+    res.status(400).json({ error: "Invalid session or log ID" });
+    return;
+  }
+
+  const session = await loadSessionForResend(campaignId, id);
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  if (!session.recapMd) {
+    res.status(400).json({ error: "No recap available to notify about" });
+    return;
+  }
+
+  const [originalLog] = await db
+    .select()
+    .from(notificationLogsTable)
+    .where(and(
+      eq(notificationLogsTable.id, logId),
+      eq(notificationLogsTable.sessionLogId, id),
+      eq(notificationLogsTable.campaignId, campaignId),
+    ));
+
+  if (!originalLog) {
+    res.status(404).json({ error: "Notification log not found" });
+    return;
+  }
+
+  if (originalLog.status !== "failed") {
+    res.status(400).json({ error: "Only failed notifications can be resent" });
+    return;
+  }
+
+  const ctx = await buildRecipientContext();
+  const newLog = await sendRecapEmailToRecipient(ctx, {
+    sessionLogId: id,
+    campaignId,
+    userId: originalLog.userId,
+    displayName: originalLog.recipientName,
+    sessionNumber: session.sessionNumber,
+    sessionTitle: session.title,
+  });
+
+  res.json({ success: true, log: newLog });
+});
+
+router.post("/sessions/:id/notifications/resend-failed", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can resend notifications" });
+    return;
+  }
+
+  const rawId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(rawId, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid session ID" });
+    return;
+  }
+
+  const session = await loadSessionForResend(campaignId, id);
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  if (!session.recapMd) {
+    res.status(400).json({ error: "No recap available to notify about" });
+    return;
+  }
+
+  const allLogs = await db
+    .select()
+    .from(notificationLogsTable)
+    .where(and(
+      eq(notificationLogsTable.sessionLogId, id),
+      eq(notificationLogsTable.campaignId, campaignId),
+    ))
+    .orderBy(desc(notificationLogsTable.attemptedAt));
+
+  const seenUsers = new Set<string>();
+  const latestPerUser: typeof allLogs = [];
+  for (const log of allLogs) {
+    if (seenUsers.has(log.userId)) continue;
+    seenUsers.add(log.userId);
+    latestPerUser.push(log);
+  }
+  const failedLogs = latestPerUser.filter((l) => l.status === "failed");
+
+  if (failedLogs.length === 0) {
+    res.json({ success: true, resentCount: 0, logs: [] });
+    return;
+  }
+
+  const ctx = await buildRecipientContext();
+  const newLogs = [];
+  for (const failedLog of failedLogs) {
+    const newLog = await sendRecapEmailToRecipient(ctx, {
+      sessionLogId: id,
+      campaignId,
+      userId: failedLog.userId,
+      displayName: failedLog.recipientName,
+      sessionNumber: session.sessionNumber,
+      sessionTitle: session.title,
+    });
+    if (newLog) newLogs.push(newLog);
+  }
+
+  res.json({ success: true, resentCount: newLogs.length, logs: newLogs });
 });
 
 router.post("/sessions/:id/mark-recap-viewed", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
