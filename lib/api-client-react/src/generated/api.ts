@@ -27,8 +27,11 @@ import type {
   CreateEventBody,
   CreateSessionBody,
   DashboardSummary,
+  DeleteEvent200,
+  DeleteEventParams,
   DiceRoll,
   ErrorResponse,
+  EventInviteLog,
   GeneratedRecap,
   HealthStatus,
   NotificationLog,
@@ -2105,6 +2108,190 @@ export const useUpdateEvent = <
 > => {
   return useMutation(getUpdateEventMutationOptions(options));
 };
+
+/**
+ * @summary Delete an event (DM only). Pass series=true to delete the entire recurring series.
+ */
+export const getDeleteEventUrl = (id: number, params?: DeleteEventParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/calendar/${id}?${stringifiedParams}`
+    : `/api/calendar/${id}`;
+};
+
+export const deleteEvent = async (
+  id: number,
+  params?: DeleteEventParams,
+  options?: RequestInit,
+): Promise<DeleteEvent200> => {
+  return customFetch<DeleteEvent200>(getDeleteEventUrl(id, params), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteEventMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteEvent>>,
+    TError,
+    { id: number; params?: DeleteEventParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteEvent>>,
+  TError,
+  { id: number; params?: DeleteEventParams },
+  TContext
+> => {
+  const mutationKey = ["deleteEvent"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteEvent>>,
+    { id: number; params?: DeleteEventParams }
+  > = (props) => {
+    const { id, params } = props ?? {};
+
+    return deleteEvent(id, params, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteEventMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteEvent>>
+>;
+
+export type DeleteEventMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an event (DM only). Pass series=true to delete the entire recurring series.
+ */
+export const useDeleteEvent = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteEvent>>,
+    TError,
+    { id: number; params?: DeleteEventParams },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteEvent>>,
+  TError,
+  { id: number; params?: DeleteEventParams },
+  TContext
+> => {
+  return useMutation(getDeleteEventMutationOptions(options));
+};
+
+/**
+ * @summary Get event invite delivery logs (DM only)
+ */
+export const getGetEventInviteLogsUrl = (id: number) => {
+  return `/api/calendar/${id}/notifications`;
+};
+
+export const getEventInviteLogs = async (
+  id: number,
+  options?: RequestInit,
+): Promise<EventInviteLog[]> => {
+  return customFetch<EventInviteLog[]>(getGetEventInviteLogsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetEventInviteLogsQueryKey = (id: number) => {
+  return [`/api/calendar/${id}/notifications`] as const;
+};
+
+export const getGetEventInviteLogsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEventInviteLogs>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEventInviteLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEventInviteLogsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getEventInviteLogs>>
+  > = ({ signal }) => getEventInviteLogs(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getEventInviteLogs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetEventInviteLogsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEventInviteLogs>>
+>;
+export type GetEventInviteLogsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get event invite delivery logs (DM only)
+ */
+
+export function useGetEventInviteLogs<
+  TData = Awaited<ReturnType<typeof getEventInviteLogs>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEventInviteLogs>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEventInviteLogsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Set or update RSVP for an event

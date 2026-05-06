@@ -45,6 +45,16 @@ export const GetDashboardResponse = zod.object({
       confirmedAt: zod.coerce.date().nullish(),
       status: zod.enum(["proposed", "confirmed", "cancelled"]),
       location: zod.string().nullish(),
+      seriesId: zod.string().nullish(),
+      recurrenceRule: zod
+        .union([
+          zod.object({
+            freq: zod.enum(["weekly", "biweekly", "monthly"]),
+            until: zod.coerce.date(),
+          }),
+          zod.null(),
+        ])
+        .optional(),
       createdAt: zod.coerce.date(),
       rsvps: zod.array(
         zod.object({
@@ -739,6 +749,16 @@ export const ListEventsResponseItem = zod.object({
   confirmedAt: zod.coerce.date().nullish(),
   status: zod.enum(["proposed", "confirmed", "cancelled"]),
   location: zod.string().nullish(),
+  seriesId: zod.string().nullish(),
+  recurrenceRule: zod
+    .union([
+      zod.object({
+        freq: zod.enum(["weekly", "biweekly", "monthly"]),
+        until: zod.coerce.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   createdAt: zod.coerce.date(),
 });
 export const ListEventsResponse = zod.array(ListEventsResponseItem);
@@ -750,6 +770,15 @@ export const CreateEventBody = zod.object({
   title: zod.string(),
   proposedAt: zod.coerce.date(),
   location: zod.string().nullish(),
+  recurrence: zod
+    .union([
+      zod.object({
+        freq: zod.enum(["weekly", "biweekly", "monthly"]),
+        until: zod.coerce.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
 });
 
 /**
@@ -767,6 +796,16 @@ export const GetEventResponse = zod.object({
   confirmedAt: zod.coerce.date().nullish(),
   status: zod.enum(["proposed", "confirmed", "cancelled"]),
   location: zod.string().nullish(),
+  seriesId: zod.string().nullish(),
+  recurrenceRule: zod
+    .union([
+      zod.object({
+        freq: zod.enum(["weekly", "biweekly", "monthly"]),
+        until: zod.coerce.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   createdAt: zod.coerce.date(),
   rsvps: zod.array(
     zod.object({
@@ -804,8 +843,54 @@ export const UpdateEventResponse = zod.object({
   confirmedAt: zod.coerce.date().nullish(),
   status: zod.enum(["proposed", "confirmed", "cancelled"]),
   location: zod.string().nullish(),
+  seriesId: zod.string().nullish(),
+  recurrenceRule: zod
+    .union([
+      zod.object({
+        freq: zod.enum(["weekly", "biweekly", "monthly"]),
+        until: zod.coerce.date(),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   createdAt: zod.coerce.date(),
 });
+
+/**
+ * @summary Delete an event (DM only). Pass series=true to delete the entire recurring series.
+ */
+export const DeleteEventParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteEventQueryParams = zod.object({
+  series: zod.coerce.boolean().optional(),
+});
+
+export const DeleteEventResponse = zod.object({
+  deleted: zod.number(),
+});
+
+/**
+ * @summary Get event invite delivery logs (DM only)
+ */
+export const GetEventInviteLogsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetEventInviteLogsResponseItem = zod.object({
+  id: zod.number(),
+  userId: zod.string(),
+  recipientName: zod.string(),
+  email: zod.string().nullish(),
+  status: zod.string(),
+  reason: zod.string().nullish(),
+  errorMessage: zod.string().nullish(),
+  attemptedAt: zod.coerce.date(),
+});
+export const GetEventInviteLogsResponse = zod.array(
+  GetEventInviteLogsResponseItem,
+);
 
 /**
  * @summary Set or update RSVP for an event

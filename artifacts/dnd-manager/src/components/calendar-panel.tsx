@@ -1,10 +1,10 @@
-import { useState } from "react";
-import { Calendar, Plus, ArrowLeft, Check, X, HelpCircle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Calendar, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  useListEvents, useGetEvent, useCreateEvent, useUpdateEvent, useUpsertRsvp,
+  useListEvents, useGetEvent, useCreateEvent, useUpsertRsvp, useDeleteEvent,
   getListEventsQueryKey, getGetEventQueryKey, getGetDashboardQueryKey
 } from "@workspace/api-client-react";
 import { useGetMyMembership } from "@workspace/api-client-react";
@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+
+type Recurrence = "none" | "weekly" | "biweekly" | "monthly";
 
 export default function CalendarPanel() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -27,6 +29,14 @@ export default function CalendarPanel() {
   }
 
   return <EventList onSelect={setSelectedId} onCreate={() => setShowCreate(true)} />;
+}
+
+function recurrenceLabel(rule: CalendarEvent["recurrenceRule"]): string | null {
+  if (!rule) return null;
+  if (rule.freq === "weekly") return "Weekly";
+  if (rule.freq === "biweekly") return "Every 2 weeks";
+  if (rule.freq === "monthly") return "Monthly";
+  return null;
 }
 
 function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onCreate: () => void }) {
@@ -67,16 +77,25 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
             const date = new Date(ev.proposedAt);
             const isPast = date < new Date();
             const isNext = ev.id === nextEventId;
+            const recur = recurrenceLabel(ev.recurrenceRule);
 
             const cardInner = (
               <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-foreground">{ev.title}</h3>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-foreground truncate">{ev.title}</h3>
+                    {recur && (
+                      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                        <Repeat className="h-2.5 w-2.5" />
+                        {recur}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })} at {date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
                   ev.status === "confirmed" ? "bg-emerald-500/10 text-emerald-400" :
                   ev.status === "cancelled" ? "bg-red-500/10 text-red-400" :
                   "bg-yellow-500/10 text-yellow-400"
@@ -109,24 +128,66 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
   );
 }
 
+function sameLocalDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate();
+}
+
 function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id: number) => void }) {
   const [title, setTitle] = useState("");
   const [dateStr, setDateStr] = useState("");
   const [location, setLocation] = useState("");
+  const [recurrence, setRecurrence] = useState<Recurrence>("none");
+  const [untilStr, setUntilStr] = useState("");
   const createMutation = useCreateEvent();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: events } = useListEvents();
+
+  const upcoming = useMemo(() => {
+    const list = (events as CalendarEvent[] | undefined) ?? [];
+    const now = new Date();
+    return list
+      .filter((e) => new Date(e.proposedAt) >= now && e.status !== "cancelled")
+      .sort((a, b) => new Date(a.proposedAt).getTime() - new Date(b.proposedAt).getTime())
+      .slice(0, 6);
+  }, [events]);
+
+  const conflict = useMemo(() => {
+    if (!dateStr) return null;
+    const picked = new Date(dateStr);
+    return upcoming.find((e) => sameLocalDay(new Date(e.proposedAt), picked)) ?? null;
+  }, [dateStr, upcoming]);
 
   const handleCreate = () => {
     if (!title.trim() || !dateStr) return;
+    if (recurrence !== "none" && !untilStr) {
+      toast({ title: "Pick an end date for the recurring series" });
+      return;
+    }
+    const recurrencePayload = recurrence === "none" ? null : {
+      freq: recurrence,
+      until: new Date(untilStr).toISOString(),
+    };
     createMutation.mutate(
-      { data: { title, proposedAt: new Date(dateStr).toISOString(), location: location || null } },
+      {
+        data: {
+          title,
+          proposedAt: new Date(dateStr).toISOString(),
+          location: location || null,
+          recurrence: recurrencePayload,
+        },
+      },
       {
         onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
           queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
-          toast({ title: "Session scheduled!" });
+          toast({ title: recurrence === "none" ? "Session scheduled!" : "Series scheduled!" });
           onCreated(data.id);
+        },
+        onError: (err) => {
+          toast({ title: "Could not schedule", description: err instanceof Error ? err.message : String(err) });
         },
       },
     );
@@ -147,14 +208,60 @@ function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">Date & Time</label>
           <Input type="datetime-local" value={dateStr} onChange={(e) => setDateStr(e.target.value)} data-testid="input-event-date" />
+          {conflict && (
+            <div className="mt-2 flex items-start gap-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-300" data-testid="conflict-warning">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>You already have <span className="font-semibold">{conflict.title}</span> on this day. Schedule anyway if intentional.</span>
+            </div>
+          )}
         </div>
+        <div>
+          <label className="text-sm font-medium text-foreground mb-1 block">Repeats</label>
+          <select
+            value={recurrence}
+            onChange={(e) => setRecurrence(e.target.value as Recurrence)}
+            className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+            data-testid="select-recurrence"
+          >
+            <option value="none">Doesn't repeat</option>
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Every 2 weeks</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+        {recurrence !== "none" && (
+          <div>
+            <label className="text-sm font-medium text-foreground mb-1 block">Repeat until</label>
+            <Input type="date" value={untilStr} onChange={(e) => setUntilStr(e.target.value)} data-testid="input-recurrence-until" />
+            <p className="mt-1 text-xs text-muted-foreground">Up to 26 occurrences. Invites will be sent for the first 8.</p>
+          </div>
+        )}
         <div>
           <label className="text-sm font-medium text-foreground mb-1 block">Location (optional)</label>
           <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Discord, Roll20, etc." data-testid="input-event-location" />
         </div>
         <Button onClick={handleCreate} disabled={createMutation.isPending || !title.trim() || !dateStr} data-testid="button-save-event">
-          Schedule
+          {recurrence === "none" ? "Schedule" : "Schedule series"}
         </Button>
+
+        {upcoming.length > 0 && (
+          <div className="mt-6 rounded-2xl glass-panel p-4">
+            <h3 className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Already scheduled</h3>
+            <ul className="space-y-1.5">
+              {upcoming.map((e) => {
+                const d = new Date(e.proposedAt);
+                return (
+                  <li key={e.id} className="flex items-center justify-between text-xs text-foreground">
+                    <span className="truncate">{e.title}</span>
+                    <span className="text-muted-foreground tabular-nums shrink-0 ml-2">
+                      {d.toLocaleDateString(undefined, { month: "short", day: "numeric" })} · {d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -163,6 +270,9 @@ function CreateEvent({ onBack, onCreated }: { onBack: () => void; onCreated: (id
 function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const { data: event, isLoading } = useGetEvent(id, { query: { queryKey: getGetEventQueryKey(id) } });
   const upsertRsvp = useUpsertRsvp();
+  const deleteMutation = useDeleteEvent();
+  const { data: membership } = useGetMyMembership();
+  const isDm = (membership as CampaignMember | undefined)?.role === "dm";
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const ev = event as CalendarEventWithRsvps | undefined;
@@ -180,6 +290,25 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
     );
   };
 
+  const handleDelete = (series: boolean) => {
+    const label = series ? "the entire series" : "this session";
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    deleteMutation.mutate(
+      { id, params: series ? { series: true } : undefined },
+      {
+        onSuccess: (data) => {
+          queryClient.invalidateQueries({ queryKey: getListEventsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: getGetDashboardQueryKey() });
+          toast({ title: `Deleted ${data.deleted} session${data.deleted === 1 ? "" : "s"}` });
+          onBack();
+        },
+        onError: (err) => {
+          toast({ title: "Could not delete", description: err instanceof Error ? err.message : String(err) });
+        },
+      },
+    );
+  };
+
   if (isLoading) {
     return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-40 rounded-2xl" /></div>;
   }
@@ -189,6 +318,7 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
   }
 
   const date = new Date(ev.proposedAt);
+  const recur = recurrenceLabel(ev.recurrenceRule);
 
   return (
     <div className="space-y-6" data-testid="event-detail">
@@ -198,7 +328,15 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
       </Button>
 
       <div>
-        <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-event-title">{ev.title}</h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-event-title">{ev.title}</h2>
+          {recur && (
+            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+              <Repeat className="h-3 w-3" />
+              {recur}
+            </span>
+          )}
+        </div>
         <p className="text-muted-foreground">
           {date.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })} at {date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
         </p>
@@ -236,6 +374,36 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
                 </span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {isDm && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 space-y-2">
+          <h3 className="font-semibold text-red-300 text-sm">Danger zone</h3>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleDelete(false)}
+              disabled={deleteMutation.isPending}
+              data-testid="button-delete-event"
+              className="gap-1 border-red-500/30 text-red-300 hover:bg-red-500/10"
+            >
+              <Trash2 className="h-3 w-3" /> Delete this session
+            </Button>
+            {ev.seriesId && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleDelete(true)}
+                disabled={deleteMutation.isPending}
+                data-testid="button-delete-series"
+                className="gap-1 border-red-500/30 text-red-300 hover:bg-red-500/10"
+              >
+                <Trash2 className="h-3 w-3" /> Delete whole series
+              </Button>
+            )}
           </div>
         </div>
       )}

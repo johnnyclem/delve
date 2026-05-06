@@ -36,8 +36,9 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - `characters` — Character sheets (JSON-backed sheetJson)
 - `session_logs` — Session notes + AI recaps
 - `recap_views` — Tracks which players have viewed which recaps (unique index on `(session_log_id, user_id)`)
-- `calendar_events` — Scheduled sessions
+- `calendar_events` — Scheduled sessions (`series_id` + `recurrence_rule` for recurring series)
 - `rsvps` — RSVPs for calendar events
+- `notification_logs` — Email delivery log; `kind` ∈ {`recap`, `event_invite`}, nullable `session_log_id` / `calendar_event_id`
 - `dice_rolls` — Dice roll history
 
 ## Security
@@ -97,10 +98,17 @@ Requires campaign membership:
 - POST /sessions/:id/mark-recap-viewed — mark recap as viewed by current player
 - GET /sessions/latest-recap — get latest recap (rawNotesMd stripped)
 - GET /calendar — list events
-- POST /calendar — create event (DM only)
+- POST /calendar — create event (DM only); accepts `recurrence: { freq, until }` to generate a series and fires themed invite emails (capped at first 8 occurrences)
 - GET /calendar/:id — get event with RSVPs
 - PATCH /calendar/:id — update event (DM only)
+- DELETE /calendar/:id?series=true — delete single event or whole series (DM only)
+- GET /calendar/:id/notifications — invite delivery logs (DM only)
 - PUT /calendar/:eventId/rsvp — upsert RSVP
+
+Public (no auth — HMAC-signed tokens):
+- GET /unsubscribe?token=… — recap email opt-out
+- GET /rsvp/:token?response=yes|no|maybe — confirmation page (no state change)
+- POST /rsvp/:token — commits RSVP (split GET/POST avoids email-prefetch auto-clicks)
 - POST /dice/roll — roll dice
 - GET /dice/recent — recent rolls
 

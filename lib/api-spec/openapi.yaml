@@ -528,6 +528,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CalendarEvent"
+    delete:
+      operationId: deleteEvent
+      tags: [calendar]
+      summary: Delete an event (DM only). Pass series=true to delete the entire recurring series.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: series
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
+                required:
+                  - deleted
+
+  /calendar/{id}/notifications:
+    get:
+      operationId: getEventInviteLogs
+      tags: [calendar]
+      summary: Get event invite delivery logs (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of invite delivery records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EventInviteLog"
 
   /calendar/{eventId}/rsvp:
     put:
@@ -1032,6 +1080,19 @@ components:
         - recap
         - model
 
+    RecurrenceRule:
+      type: object
+      properties:
+        freq:
+          type: string
+          enum: [weekly, biweekly, monthly]
+        until:
+          type: string
+          format: date-time
+      required:
+        - freq
+        - until
+
     CalendarEvent:
       type: object
       properties:
@@ -1052,6 +1113,12 @@ components:
           enum: [proposed, confirmed, cancelled]
         location:
           type: ["string", "null"]
+        seriesId:
+          type: ["string", "null"]
+        recurrenceRule:
+          oneOf:
+            - $ref: "#/components/schemas/RecurrenceRule"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -1083,6 +1150,12 @@ components:
           enum: [proposed, confirmed, cancelled]
         location:
           type: ["string", "null"]
+        seriesId:
+          type: ["string", "null"]
+        recurrenceRule:
+          oneOf:
+            - $ref: "#/components/schemas/RecurrenceRule"
+            - type: "null"
         createdAt:
           type: string
           format: date-time
@@ -1109,9 +1182,40 @@ components:
           format: date-time
         location:
           type: ["string", "null"]
+        recurrence:
+          oneOf:
+            - $ref: "#/components/schemas/RecurrenceRule"
+            - type: "null"
       required:
         - title
         - proposedAt
+
+    EventInviteLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: string
+        recipientName:
+          type: string
+        email:
+          type: ["string", "null"]
+        status:
+          type: string
+        reason:
+          type: ["string", "null"]
+        errorMessage:
+          type: ["string", "null"]
+        attemptedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - recipientName
+        - status
+        - attemptedAt
 
     UpdateEventBody:
       type: object

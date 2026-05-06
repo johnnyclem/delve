@@ -223,6 +223,20 @@ export interface GeneratedRecap {
   model: string;
 }
 
+export type RecurrenceRuleFreq =
+  (typeof RecurrenceRuleFreq)[keyof typeof RecurrenceRuleFreq];
+
+export const RecurrenceRuleFreq = {
+  weekly: "weekly",
+  biweekly: "biweekly",
+  monthly: "monthly",
+} as const;
+
+export interface RecurrenceRule {
+  freq: RecurrenceRuleFreq;
+  until: string;
+}
+
 export type CalendarEventStatus =
   (typeof CalendarEventStatus)[keyof typeof CalendarEventStatus];
 
@@ -242,6 +256,9 @@ export interface CalendarEvent {
   status: CalendarEventStatus;
   /** @nullable */
   location?: string | null;
+  /** @nullable */
+  seriesId?: string | null;
+  recurrenceRule?: RecurrenceRule | null;
   createdAt: string;
 }
 
@@ -286,6 +303,9 @@ export interface CalendarEventWithRsvps {
   status: CalendarEventWithRsvpsStatus;
   /** @nullable */
   location?: string | null;
+  /** @nullable */
+  seriesId?: string | null;
+  recurrenceRule?: RecurrenceRule | null;
   createdAt: string;
   rsvps: RsvpWithMember[];
 }
@@ -295,6 +315,21 @@ export interface CreateEventBody {
   proposedAt: string;
   /** @nullable */
   location?: string | null;
+  recurrence?: RecurrenceRule | null;
+}
+
+export interface EventInviteLog {
+  id: number;
+  userId: string;
+  recipientName: string;
+  /** @nullable */
+  email?: string | null;
+  status: string;
+  /** @nullable */
+  reason?: string | null;
+  /** @nullable */
+  errorMessage?: string | null;
+  attemptedAt: string;
 }
 
 export type UpdateEventBodyStatus =
@@ -424,3 +459,11 @@ export interface DashboardSummary {
 export interface UpdateNotificationPrefsBody {
   emailNotifications: boolean;
 }
+
+export type DeleteEventParams = {
+  series?: boolean;
+};
+
+export type DeleteEvent200 = {
+  deleted: number;
+};
