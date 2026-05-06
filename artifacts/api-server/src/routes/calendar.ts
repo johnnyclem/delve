@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, calendarEventsTable, rsvpsTable, campaignMembersTable, notificationLogsTable, campaignsTable } from "@workspace/db";
-import { eq, and, inArray, desc } from "drizzle-orm";
+import { eq, and, inArray, desc, asc, gt } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
@@ -137,6 +137,191 @@ export async function getDeliveryStatusForEvents(
   }
   return result;
 }
+
+export interface ReanchorResult {
+  seriesId: string;
+  campaignId: number;
+  timezone: string;
+  deletedFutureCount: number;
+  insertedFutureCount: number;
+  preservedPastCount: number;
+}
+
+/**
+ * Re-anchor an existing recurring series to the campaign's current timezone so
+ * that its future occurrences stay on the original local wall-clock time across
+ * DST boundaries. Past occurrences (and their RSVPs / notification logs) are
+ * preserved untouched; only events whose `proposedAt` is strictly after `now`
+ * are rewritten.
+ */
+export async function reanchorSeries(params: {
+  campaignId: number;
+  seriesId: string;
+  timezone: string;
+  now?: Date;
+}): Promise<ReanchorResult> {
+  const { campaignId, seriesId, timezone } = params;
+  const now = params.now ?? new Date();
+
+  const events = await db
+    .select()
+    .from(calendarEventsTable)
+    .where(
+      and(
+        eq(calendarEventsTable.campaignId, campaignId),
+        eq(calendarEventsTable.seriesId, seriesId),
+      ),
+    )
+    .orderBy(asc(calendarEventsTable.proposedAt));
+
+  if (events.length === 0) {
+    return {
+      seriesId,
+      campaignId,
+      timezone,
+      deletedFutureCount: 0,
+      insertedFutureCount: 0,
+      preservedPastCount: 0,
+    };
+  }
+
+  const anchor = events[0];
+  const rule = anchor.recurrenceRule;
+  if (!rule) {
+    return {
+      seriesId,
+      campaignId,
+      timezone,
+      deletedFutureCount: 0,
+      insertedFutureCount: 0,
+      preservedPastCount: events.length,
+    };
+  }
+
+  const until = new Date(rule.until);
+  const regenerated = generateOccurrenceDates(anchor.proposedAt, rule.freq, until, timezone);
+
+  const futureExisting = events.filter((e) => e.proposedAt.getTime() > now.getTime());
+  const pastExisting = events.filter((e) => e.proposedAt.getTime() <= now.getTime());
+  const futureExistingIds = futureExisting.map((e) => e.id);
+
+  if (futureExistingIds.length > 0) {
+    await db.delete(rsvpsTable).where(inArray(rsvpsTable.calendarEventId, futureExistingIds));
+    await db
+      .update(notificationLogsTable)
+      .set({ calendarEventId: null })
+      .where(inArray(notificationLogsTable.calendarEventId, futureExistingIds));
+    await db.delete(calendarEventsTable).where(inArray(calendarEventsTable.id, futureExistingIds));
+  }
+
+  const ruleSerialized = { freq: rule.freq, until: until.toISOString() };
+  const newFutureDates = regenerated.filter((d) => d.getTime() > now.getTime());
+
+  let insertedCount = 0;
+  if (newFutureDates.length > 0) {
+    const inserted = await db
+      .insert(calendarEventsTable)
+      .values(
+        newFutureDates.map((d) => ({
+          campaignId,
+          title: anchor.title,
+          proposedAt: d,
+          location: anchor.location ?? null,
+          seriesId,
+          recurrenceRule: ruleSerialized,
+        })),
+      )
+      .returning({ id: calendarEventsTable.id });
+    insertedCount = inserted.length;
+  }
+
+  return {
+    seriesId,
+    campaignId,
+    timezone,
+    deletedFutureCount: futureExistingIds.length,
+    insertedFutureCount: insertedCount,
+    preservedPastCount: pastExisting.length,
+  };
+}
+
+/**
+ * Re-anchor every recurring series in every campaign to the campaign's current
+ * timezone. Used by the admin one-shot backfill route.
+ */
+export async function reanchorAllSeries(now: Date = new Date()): Promise<ReanchorResult[]> {
+  const rows = await db
+    .selectDistinct({
+      seriesId: calendarEventsTable.seriesId,
+      campaignId: calendarEventsTable.campaignId,
+    })
+    .from(calendarEventsTable)
+    .where(gt(calendarEventsTable.proposedAt, now));
+
+  const campaignIds = Array.from(new Set(rows.map((r) => r.campaignId)));
+  const campaigns = campaignIds.length === 0
+    ? []
+    : await db
+        .select({ id: campaignsTable.id, timezone: campaignsTable.timezone })
+        .from(campaignsTable)
+        .where(inArray(campaignsTable.id, campaignIds));
+  const tzByCampaign = new Map(campaigns.map((c) => [c.id, c.timezone ?? "UTC"]));
+
+  const results: ReanchorResult[] = [];
+  for (const r of rows) {
+    if (!r.seriesId) continue;
+    const tz = tzByCampaign.get(r.campaignId) ?? "UTC";
+    const result = await reanchorSeries({
+      campaignId: r.campaignId,
+      seriesId: r.seriesId,
+      timezone: tz,
+      now,
+    });
+    results.push(result);
+  }
+  return results;
+}
+
+router.post("/calendar/series/:seriesId/reanchor", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can re-anchor a series" });
+    return;
+  }
+
+  const raw = Array.isArray(req.params.seriesId) ? req.params.seriesId[0] : req.params.seriesId;
+  const seriesId = typeof raw === "string" ? raw : "";
+  if (!seriesId) {
+    res.status(400).json({ error: "Invalid series ID" });
+    return;
+  }
+
+  const [existing] = await db
+    .select({ id: calendarEventsTable.id })
+    .from(calendarEventsTable)
+    .where(
+      and(
+        eq(calendarEventsTable.campaignId, campaignId),
+        eq(calendarEventsTable.seriesId, seriesId),
+      ),
+    )
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "Series not found" });
+    return;
+  }
+
+  const [campaignRow] = await db
+    .select({ timezone: campaignsTable.timezone })
+    .from(campaignsTable)
+    .where(eq(campaignsTable.id, campaignId));
+  const tz = campaignRow?.timezone ?? "UTC";
+
+  const result = await reanchorSeries({ campaignId, seriesId, timezone: tz });
+  res.json(result);
+});
 
 router.get("/calendar", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
