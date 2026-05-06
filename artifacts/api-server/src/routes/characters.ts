@@ -185,7 +185,9 @@ router.get("/characters/:id/pdf", requireAuth, requireCampaignMember, async (req
   // Disposition header injection). Cap the character-name portion at 80 chars per spec.
   const sanitized = char.name.replace(/[^a-z0-9 \-]/gi, "_").trim().slice(0, 80) || `character-${char.id}`;
   const filename = `Delve - ${sanitized}.pdf`;
-  const disposition = req.query.download === "1" ? "attachment" : "inline";
+  // Default to attachment per the route contract. The Print button uses `?inline=1`
+  // so the browser's PDF viewer can open the document and trigger native print.
+  const disposition = req.query.inline === "1" ? "inline" : "attachment";
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `${disposition}; filename="${filename}"`);

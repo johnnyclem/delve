@@ -92,7 +92,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
               data-testid={`button-print-character-pdf-${id}`}
               onClick={() => toast({ title: "Building your sheet…" })}
             >
-              <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
+              <a href={`${pdfUrl}?inline=1`} target="_blank" rel="noopener noreferrer">
                 <Printer className="h-4 w-4 mr-1" />
                 Print
               </a>
@@ -104,7 +104,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
               data-testid={`button-download-character-pdf-${id}`}
               onClick={() => toast({ title: "Building your sheet…" })}
             >
-              <a href={`${pdfUrl}?download=1`} download>
+              <a href={pdfUrl} download>
                 <Download className="h-4 w-4 mr-1" />
                 Download PDF
               </a>

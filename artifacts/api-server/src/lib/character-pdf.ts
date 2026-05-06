@@ -92,15 +92,6 @@ const SKILL_TO_ABILITY: Record<string, "strength" | "dexterity" | "constitution"
   survival: "wisdom",
 };
 
-const SAVE_TO_ABILITY: Record<string, keyof typeof SKILL_TO_ABILITY extends never ? never : "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma"> = {
-  strength: "strength",
-  dexterity: "dexterity",
-  constitution: "constitution",
-  intelligence: "intelligence",
-  wisdom: "wisdom",
-  charisma: "charisma",
-};
-
 function normalize(s: string): string {
   return s.trim().toLowerCase();
 }
@@ -116,110 +107,136 @@ function isProficient(list: string[] | undefined, key: string): boolean {
  * sheetJson resolves to `undefined` and is left blank. */
 function buildFieldValues(character: Character & { ownerDisplayName?: string }): Record<string, string> {
   const sheet: CharacterSheet = (character.sheetJson as CharacterSheet) ?? {};
-  const profBonus = sheet.proficiencyBonus ?? 2;
+  const values: Record<string, string | undefined> = {};
 
-  const mods = {
-    strength: abilityMod(sheet.strength),
-    dexterity: abilityMod(sheet.dexterity),
-    constitution: abilityMod(sheet.constitution),
-    intelligence: abilityMod(sheet.intelligence),
-    wisdom: abilityMod(sheet.wisdom),
-    charisma: abilityMod(sheet.charisma),
+  // ---- Identity (always set: come from the Character row, not sheetJson) ----
+  values["CharacterName"] = character.name;
+  values["CharacterName 2"] = character.name;
+  values["ClassLevel"] = `${character.class} ${character.level}`;
+  values["Race "] = character.race;
+  if (character.ownerDisplayName) values["PlayerName"] = character.ownerDisplayName;
+
+  // ---- Optional identity bits (only when present on sheetJson) ----
+  if (sheet.background) values["Background"] = sheet.background;
+  if (sheet.alignment) values["Alignment"] = sheet.alignment;
+  if (typeof sheet.xp === "number") values["XP"] = String(sheet.xp);
+  if (sheet.inspiration) values["Inspiration"] = "1";
+
+  // ---- Combat top-row (only when present) ----
+  if (typeof sheet.armorClass === "number") values["AC"] = String(sheet.armorClass);
+  if (typeof sheet.speed === "number") values["Speed"] = String(sheet.speed);
+
+  // Initiative: use explicit value, or DEX modifier when DEX is known. Otherwise blank.
+  if (typeof sheet.initiative === "number") {
+    values["Initiative"] = fmtMod(sheet.initiative);
+  } else if (typeof sheet.dexterity === "number") {
+    values["Initiative"] = fmtMod(abilityMod(sheet.dexterity));
+  }
+
+  // Proficiency bonus: only set when the sheet recorded one (don't invent +2).
+  const profBonusKnown = typeof sheet.proficiencyBonus === "number";
+  if (profBonusKnown) values["ProfBonus"] = fmtMod(sheet.proficiencyBonus as number);
+
+  // ---- Ability scores + modifiers (only when score recorded) ----
+  const abilityField = {
+    strength:     ["STR", "STRmod"],
+    dexterity:    ["DEX", "DEXmod "],
+    constitution: ["CON", "CONmod"],
+    intelligence: ["INT", "INTmod"],
+    wisdom:       ["WIS", "WISmod"],
+    charisma:     ["CHA", "CHamod"],
+  } as const;
+
+  type AbilityKey = keyof typeof abilityField;
+  const ABILITIES: AbilityKey[] = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"];
+
+  for (const ability of ABILITIES) {
+    const score = sheet[ability];
+    if (typeof score === "number") {
+      const [scoreField, modField] = abilityField[ability];
+      values[scoreField] = String(score);
+      values[modField] = fmtMod(abilityMod(score));
+    }
+  }
+
+  // ---- Saving throws (require both an ability score AND a known prof bonus
+  // when the save is proficient; otherwise blank) ----
+  const saveField: Record<AbilityKey, string> = {
+    strength: "ST Strength",
+    dexterity: "ST Dexterity",
+    constitution: "ST Constitution",
+    intelligence: "ST Intelligence",
+    wisdom: "ST Wisdom",
+    charisma: "ST Charisma",
   };
 
-  const saveValue = (ability: keyof typeof mods): string => {
-    const base = mods[ability];
-    const total = isProficient(sheet.savingThrows, ability) ? base + profBonus : base;
-    return fmtMod(total);
+  for (const ability of ABILITIES) {
+    const score = sheet[ability];
+    if (typeof score !== "number") continue;
+    const proficient = isProficient(sheet.savingThrows, ability);
+    if (proficient && !profBonusKnown) continue;
+    const bonus = proficient ? (sheet.proficiencyBonus as number) : 0;
+    values[saveField[ability]] = fmtMod(abilityMod(score) + bonus);
+  }
+
+  // ---- HP / Hit Dice (only when present) ----
+  if (typeof sheet.maxHp === "number") values["HPMax"] = String(sheet.maxHp);
+  if (typeof sheet.currentHp === "number") values["HPCurrent"] = String(sheet.currentHp);
+  if (typeof sheet.tempHp === "number") values["HPTemp"] = String(sheet.tempHp);
+  if (sheet.hitDiceTotal) values["HDTotal"] = sheet.hitDiceTotal;
+  if (sheet.hitDice) values["HD"] = sheet.hitDice;
+
+  // ---- Skills (require the underlying ability score; same prof rule as saves) ----
+  const skillField: Record<string, string> = {
+    "acrobatics": "Acrobatics",
+    "animal handling": "Animal",
+    "arcana": "Arcana",
+    "athletics": "Athletics",
+    "deception": "Deception ",
+    "history": "History ",
+    "insight": "Insight",
+    "intimidation": "Intimidation",
+    "investigation": "Investigation ",
+    "medicine": "Medicine",
+    "nature": "Nature",
+    "perception": "Perception ",
+    "performance": "Performance",
+    "persuasion": "Persuasion",
+    "religion": "Religion",
+    "sleight of hand": "SleightofHand",
+    "stealth ": "Stealth ",
+    "survival": "Survival",
   };
 
-  const skillValue = (skillName: string): string => {
-    const ability = SKILL_TO_ABILITY[normalize(skillName)];
-    if (!ability) return "";
-    const base = mods[ability];
-    const total = isProficient(sheet.skills, skillName) ? base + profBonus : base;
-    return fmtMod(total);
-  };
+  for (const [skillKey, fieldName] of Object.entries(skillField)) {
+    const ability = SKILL_TO_ABILITY[normalize(skillKey)];
+    if (!ability) continue;
+    const score = sheet[ability];
+    if (typeof score !== "number") continue;
+    const proficient = isProficient(sheet.skills, skillKey);
+    if (proficient && !profBonusKnown) continue;
+    const bonus = proficient ? (sheet.proficiencyBonus as number) : 0;
+    values[fieldName] = fmtMod(abilityMod(score) + bonus);
+  }
 
-  const passivePerception = 10 + mods.wisdom + (isProficient(sheet.skills, "perception") ? profBonus : 0);
+  // Passive perception: 10 + WIS mod (+ prof if proficient & known) — needs WIS.
+  if (typeof sheet.wisdom === "number") {
+    const perceptionProficient = isProficient(sheet.skills, "perception");
+    if (!perceptionProficient || profBonusKnown) {
+      const bonus = perceptionProficient ? (sheet.proficiencyBonus as number) : 0;
+      values["Passive"] = String(10 + abilityMod(sheet.wisdom) + bonus);
+    }
+  }
 
-  const values: Record<string, string | undefined> = {
-    // Identity
-    "CharacterName": character.name,
-    "CharacterName 2": character.name,
-    "ClassLevel": `${character.class} ${character.level}`,
-    "Background": sheet.background ?? "",
-    "PlayerName": character.ownerDisplayName ?? "",
-    "Race ": character.race,
-    "Alignment": sheet.alignment ?? "",
-    "XP": typeof sheet.xp === "number" ? String(sheet.xp) : "",
+  // ---- Narrative / inventory (only when present) ----
+  if (sheet.proficiencies) values["ProficienciesLang"] = sheet.proficiencies;
+  if (sheet.inventory && sheet.inventory.length > 0) {
+    values["Equipment"] = sheet.inventory.join("\n");
+  }
+  if (sheet.notes) values["Features and Traits"] = sheet.notes;
 
-    // Top stats
-    "Inspiration": sheet.inspiration ? "1" : "",
-    "ProfBonus": fmtMod(profBonus),
-    "AC": String(sheet.armorClass ?? 10),
-    "Initiative": fmtMod(sheet.initiative ?? mods.dexterity),
-    "Speed": String(sheet.speed ?? 30),
-
-    // Ability scores
-    "STR": String(sheet.strength ?? 10),
-    "DEX": String(sheet.dexterity ?? 10),
-    "CON": String(sheet.constitution ?? 10),
-    "INT": String(sheet.intelligence ?? 10),
-    "WIS": String(sheet.wisdom ?? 10),
-    "CHA": String(sheet.charisma ?? 10),
-    "STRmod": fmtMod(mods.strength),
-    "DEXmod ": fmtMod(mods.dexterity),
-    "CONmod": fmtMod(mods.constitution),
-    "INTmod": fmtMod(mods.intelligence),
-    "WISmod": fmtMod(mods.wisdom),
-    "CHamod": fmtMod(mods.charisma),
-
-    // Saving throws
-    "ST Strength": saveValue("strength"),
-    "ST Dexterity": saveValue("dexterity"),
-    "ST Constitution": saveValue("constitution"),
-    "ST Intelligence": saveValue("intelligence"),
-    "ST Wisdom": saveValue("wisdom"),
-    "ST Charisma": saveValue("charisma"),
-
-    // HP / Hit Dice
-    "HPMax": typeof sheet.maxHp === "number" ? String(sheet.maxHp) : "",
-    "HPCurrent": typeof sheet.currentHp === "number" ? String(sheet.currentHp) : "",
-    "HPTemp": typeof sheet.tempHp === "number" ? String(sheet.tempHp) : "",
-    "HDTotal": sheet.hitDiceTotal ?? "",
-    "HD": sheet.hitDice ?? "",
-
-    // Skills (note: trailing-space field names mirror the template exactly)
-    "Acrobatics": skillValue("acrobatics"),
-    "Animal": skillValue("animal handling"),
-    "Arcana": skillValue("arcana"),
-    "Athletics": skillValue("athletics"),
-    "Deception ": skillValue("deception"),
-    "History ": skillValue("history"),
-    "Insight": skillValue("insight"),
-    "Intimidation": skillValue("intimidation"),
-    "Investigation ": skillValue("investigation"),
-    "Medicine": skillValue("medicine"),
-    "Nature": skillValue("nature"),
-    "Perception ": skillValue("perception"),
-    "Performance": skillValue("performance"),
-    "Persuasion": skillValue("persuasion"),
-    "Religion": skillValue("religion"),
-    "SleightofHand": skillValue("sleight of hand"),
-    "Stealth ": skillValue("stealth"),
-    "Survival": skillValue("survival"),
-
-    "Passive": String(passivePerception),
-    "ProficienciesLang": sheet.proficiencies ?? "",
-
-    // Equipment & narrative bits we have
-    "Equipment": (sheet.inventory ?? []).join("\n"),
-    "Features and Traits": sheet.notes ?? "",
-  };
-
-  // Drop empty strings so we never overwrite with "" (leaves the field blank instead of
-  // explicitly setting an empty value, which keeps the sheet's default rendering).
+  // Drop any undefined/empty entries so we never call setText("") (which would
+  // overwrite a template-default with a blank).
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(values)) {
     if (v !== undefined && v !== "") out[k] = v;
