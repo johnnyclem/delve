@@ -62,24 +62,24 @@ export async function syncMemberProfile(
   return existing;
 }
 
-export async function bootstrapDmIfNeeded(
+export async function claimDmWithToken(
   campaignId: number,
   userId: string,
   displayName: string,
   avatarUrl?: string | null,
-): Promise<typeof campaignMembersTable.$inferSelect | null> {
+): Promise<typeof campaignMembersTable.$inferSelect> {
   const existing = await getMember(campaignId, userId);
   if (existing) {
-    return syncMemberProfile(campaignId, userId, displayName, avatarUrl);
-  }
-
-  const allMembers = await db
-    .select()
-    .from(campaignMembersTable)
-    .where(eq(campaignMembersTable.campaignId, campaignId));
-
-  if (allMembers.length > 0) {
-    return null;
+    if (existing.role !== "dm") {
+      const [updated] = await db
+        .update(campaignMembersTable)
+        .set({ role: "dm" })
+        .where(eq(campaignMembersTable.id, existing.id))
+        .returning();
+      await db.update(campaignsTable).set({ dmUserId: userId }).where(eq(campaignsTable.id, campaignId));
+      return updated;
+    }
+    return existing;
   }
 
   const [member] = await db
@@ -93,10 +93,10 @@ export async function bootstrapDmIfNeeded(
     })
     .returning();
 
-  await db
-    .update(campaignsTable)
-    .set({ dmUserId: userId })
-    .where(eq(campaignsTable.id, campaignId));
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
+  if (!campaign || campaign.dmUserId === "pending") {
+    await db.update(campaignsTable).set({ dmUserId: userId }).where(eq(campaignsTable.id, campaignId));
+  }
 
   return member;
 }

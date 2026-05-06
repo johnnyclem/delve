@@ -1,8 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, campaignsTable, campaignMembersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
 import { requireAuth, getUserId, getUserDisplayName, getUserAvatarUrl } from "../middlewares/requireAuth";
-import { getOrCreateCampaign } from "../lib/campaign";
+import { getOrCreateCampaign, claimDmWithToken } from "../lib/campaign";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -10,7 +8,7 @@ const router: IRouter = Router();
 router.post("/admin/claim-dm", requireAuth, async (req, res): Promise<void> => {
   const expected = process.env.ADMIN_RESET_TOKEN;
   if (!expected) {
-    res.status(503).json({ error: "Admin reset is not configured" });
+    res.status(503).json({ error: "Admin token is not configured" });
     return;
   }
 
@@ -23,20 +21,7 @@ router.post("/admin/claim-dm", requireAuth, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
 
-  await db.delete(campaignMembersTable).where(eq(campaignMembersTable.campaignId, campaignId));
-
-  const [member] = await db
-    .insert(campaignMembersTable)
-    .values({
-      campaignId,
-      userId,
-      role: "dm",
-      displayName: getUserDisplayName(req),
-      avatarUrl: getUserAvatarUrl(req),
-    })
-    .returning();
-
-  await db.update(campaignsTable).set({ dmUserId: userId }).where(eq(campaignsTable.id, campaignId));
+  const member = await claimDmWithToken(campaignId, userId, getUserDisplayName(req), getUserAvatarUrl(req));
 
   logger.info({ userId, campaignId }, "Admin DM claim succeeded");
   res.json({ success: true, member });

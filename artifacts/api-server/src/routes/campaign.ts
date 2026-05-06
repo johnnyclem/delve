@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, campaignsTable, campaignMembersTable, charactersTable, sessionLogsTable, calendarEventsTable, rsvpsTable, diceRollsTable } from "@workspace/db";
 import { eq, desc, and, gte, asc, isNotNull } from "drizzle-orm";
 import { requireAuth, getUserId, getUserDisplayName, getUserAvatarUrl } from "../middlewares/requireAuth";
-import { getOrCreateCampaign, bootstrapDmIfNeeded, getMember, getCampaignInviteCode } from "../lib/campaign";
+import { getOrCreateCampaign, getMember, syncMemberProfile, getCampaignInviteCode } from "../lib/campaign";
 
 const router: IRouter = Router();
 
@@ -17,11 +17,12 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
 
-  const member = await bootstrapDmIfNeeded(campaignId, userId, getUserDisplayName(req), getUserAvatarUrl(req));
-  if (!member) {
+  const existing = await getMember(campaignId, userId);
+  if (!existing) {
     res.status(403).json({ error: "Not a campaign member", needsInvite: true });
     return;
   }
+  const member = (await syncMemberProfile(campaignId, userId, getUserDisplayName(req), getUserAvatarUrl(req))) ?? existing;
 
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
 
