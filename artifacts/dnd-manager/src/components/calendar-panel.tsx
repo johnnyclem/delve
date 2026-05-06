@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import {
   useListEvents, useGetEvent, useCreateEvent, useUpsertRsvp, useDeleteEvent,
-  useGetEventInviteLogs,
-  getListEventsQueryKey, getGetEventQueryKey, getGetDashboardQueryKey
+  useGetEventInviteLogs, useResendEventInvites,
+  getListEventsQueryKey, getGetEventQueryKey, getGetDashboardQueryKey,
+  getGetEventInviteLogsQueryKey,
 } from "@workspace/api-client-react";
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { CalendarEvent, CalendarEventWithRsvps, CampaignMember, RsvpWithMember, EventInviteLog } from "@workspace/api-client-react";
@@ -379,7 +380,32 @@ function inviteStatusVisual(status: string): { color: string; bg: string; Icon: 
 
 function InviteDeliveryPanel({ eventId }: { eventId: number }) {
   const { data, isLoading, refetch, isFetching } = useGetEventInviteLogs(eventId);
+  const resendMutation = useResendEventInvites();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const logs = (data as EventInviteLog[] | undefined) ?? [];
+
+  const handleResend = () => {
+    resendMutation.mutate(
+      { id: eventId },
+      {
+        onSuccess: (result) => {
+          queryClient.invalidateQueries({ queryKey: getGetEventInviteLogsQueryKey(eventId) });
+          const count = (result as { resentCount?: number } | undefined)?.resentCount ?? 0;
+          toast({
+            title: count === 0 ? "No recipients to email" : `Resent ${count} invite${count === 1 ? "" : "s"}`,
+            description: count === 0 ? "No players are opted in for invite emails." : undefined,
+          });
+        },
+        onError: (err) => {
+          toast({
+            title: "Could not resend invites",
+            description: err instanceof Error ? err.message : String(err),
+          });
+        },
+      },
+    );
+  };
 
   // Latest attempt per recipient
   const latestByUser = useMemo(() => {
@@ -399,16 +425,29 @@ function InviteDeliveryPanel({ eventId }: { eventId: number }) {
         <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
           <Mail className="h-4 w-4 text-primary" /> Invite delivery
         </h3>
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="h-7 text-xs"
-          data-testid="button-refresh-invite-logs"
-        >
-          {isFetching ? "Refreshing…" : "Refresh"}
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => refetch()}
+            disabled={isFetching || resendMutation.isPending}
+            className="h-7 text-xs"
+            data-testid="button-refresh-invite-logs"
+          >
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleResend}
+            disabled={resendMutation.isPending}
+            className="h-7 text-xs gap-1"
+            data-testid="button-resend-invites"
+          >
+            <Mail className="h-3 w-3" />
+            {resendMutation.isPending ? "Resending…" : "Resend invites"}
+          </Button>
+        </div>
       </div>
       {isLoading ? (
         <div className="space-y-2">

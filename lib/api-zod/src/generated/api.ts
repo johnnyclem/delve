@@ -893,6 +893,30 @@ export const GetEventInviteLogsResponse = zod.array(
 );
 
 /**
+ * @summary Resend event invite emails to all opted-in players (DM only)
+ */
+export const ResendEventInvitesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const ResendEventInvitesResponse = zod.object({
+  success: zod.boolean(),
+  resentCount: zod.number(),
+  logs: zod.array(
+    zod.object({
+      id: zod.number(),
+      userId: zod.string(),
+      recipientName: zod.string(),
+      email: zod.string().nullish(),
+      status: zod.string(),
+      reason: zod.string().nullish(),
+      errorMessage: zod.string().nullish(),
+      attemptedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
  * @summary Set or update RSVP for an event
  */
 export const UpsertRsvpParams = zod.object({

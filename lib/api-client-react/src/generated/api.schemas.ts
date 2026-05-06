@@ -332,6 +332,12 @@ export interface EventInviteLog {
   attemptedAt: string;
 }
 
+export interface ResendEventInvitesResult {
+  success: boolean;
+  resentCount: number;
+  logs: EventInviteLog[];
+}
+
 export type UpdateEventBodyStatus =
   (typeof UpdateEventBodyStatus)[keyof typeof UpdateEventBodyStatus];
 

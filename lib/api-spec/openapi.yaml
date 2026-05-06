@@ -577,6 +577,37 @@ paths:
                 items:
                   $ref: "#/components/schemas/EventInviteLog"
 
+  /calendar/{id}/resend-invites:
+    post:
+      operationId: resendEventInvites
+      tags: [calendar]
+      summary: Resend event invite emails to all opted-in players (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Resend dispatched; returns the new invite delivery rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendEventInvitesResult"
+        "403":
+          description: Only the DM can resend invites
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Event not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /calendar/{eventId}/rsvp:
     put:
       operationId: upsertRsvp
@@ -1189,6 +1220,22 @@ components:
       required:
         - title
         - proposedAt
+
+    ResendEventInvitesResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        resentCount:
+          type: integer
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/EventInviteLog"
+      required:
+        - success
+        - resentCount
+        - logs
 
     EventInviteLog:
       type: object

@@ -310,6 +310,61 @@ router.get("/calendar/:id/notifications", requireAuth, requireCampaignMember, as
   res.json(logs);
 });
 
+router.post("/calendar/:id/resend-invites", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can resend invites" });
+    return;
+  }
+
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid event ID" });
+    return;
+  }
+
+  const [event] = await db
+    .select()
+    .from(calendarEventsTable)
+    .where(and(eq(calendarEventsTable.id, id), eq(calendarEventsTable.campaignId, campaignId)));
+  if (!event) {
+    res.status(404).json({ error: "Event not found" });
+    return;
+  }
+
+  // Mark the watermark before send so we can return only the freshly-created log rows.
+  const startedAt = new Date();
+  await sendEventInvitesForEvents({ campaignId, eventIds: [id] });
+
+  const newLogs = await db
+    .select({
+      id: notificationLogsTable.id,
+      userId: notificationLogsTable.userId,
+      recipientName: notificationLogsTable.recipientName,
+      email: notificationLogsTable.email,
+      status: notificationLogsTable.status,
+      reason: notificationLogsTable.reason,
+      errorMessage: notificationLogsTable.errorMessage,
+      attemptedAt: notificationLogsTable.attemptedAt,
+    })
+    .from(notificationLogsTable)
+    .where(
+      and(
+        eq(notificationLogsTable.calendarEventId, id),
+        eq(notificationLogsTable.campaignId, campaignId),
+        eq(notificationLogsTable.kind, "event_invite"),
+      ),
+    )
+    .orderBy(desc(notificationLogsTable.attemptedAt));
+
+  const fresh = newLogs.filter((l) => new Date(l.attemptedAt).getTime() >= startedAt.getTime());
+
+  res.json({ success: true, resentCount: fresh.length, logs: fresh });
+});
+
 export async function upsertRsvp(params: {
   eventId: number;
   userId: string;

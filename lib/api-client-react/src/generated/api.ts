@@ -36,6 +36,7 @@ import type {
   HealthStatus,
   NotificationLog,
   NotifyRecapResult,
+  ResendEventInvitesResult,
   ResendFailedResult,
   ResendNotificationResult,
   RollDiceBody,
@@ -2292,6 +2293,90 @@ export function useGetEventInviteLogs<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Resend event invite emails to all opted-in players (DM only)
+ */
+export const getResendEventInvitesUrl = (id: number) => {
+  return `/api/calendar/${id}/resend-invites`;
+};
+
+export const resendEventInvites = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ResendEventInvitesResult> => {
+  return customFetch<ResendEventInvitesResult>(getResendEventInvitesUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getResendEventInvitesMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendEventInvites>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof resendEventInvites>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["resendEventInvites"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof resendEventInvites>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return resendEventInvites(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ResendEventInvitesMutationResult = NonNullable<
+  Awaited<ReturnType<typeof resendEventInvites>>
+>;
+
+export type ResendEventInvitesMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Resend event invite emails to all opted-in players (DM only)
+ */
+export const useResendEventInvites = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof resendEventInvites>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof resendEventInvites>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getResendEventInvitesMutationOptions(options));
+};
 
 /**
  * @summary Set or update RSVP for an event
