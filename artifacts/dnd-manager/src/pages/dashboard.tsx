@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
@@ -33,6 +33,16 @@ export default function DashboardPage() {
   const { user } = useUser();
   const { signOut } = useClerk();
   const [activeTab, setActiveTab] = useState("overview");
+  const [calendarDeepLink, setCalendarDeepLink] = useState<{ eventId: number; scrollToDelivery?: boolean } | null>(null);
+  // Clear the deep-link when the user navigates away from Calendar so that a later
+  // return to the Calendar tab shows the list view rather than auto-reopening the
+  // previously deep-linked event. The CalendarPanel's `key` prop ensures a fresh
+  // mount per deep-link, so this clear doesn't disturb the current view.
+  useEffect(() => {
+    if (activeTab !== "calendar" && calendarDeepLink) {
+      setCalendarDeepLink(null);
+    }
+  }, [activeTab, calendarDeepLink]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { data: dashboard, isLoading, error } = useGetDashboard();
   const { data: sessions } = useListSessions();
@@ -180,10 +190,27 @@ export default function DashboardPage() {
         )}
 
         <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
-          {activeTab === "overview" && <OverviewPanel dashboard={dashboard as DashboardSummary & { inviteCode?: string }} isLoading={isLoading} onNavigate={setActiveTab} />}
+          {activeTab === "overview" && (
+            <OverviewPanel
+              dashboard={dashboard as DashboardSummary & { inviteCode?: string }}
+              isLoading={isLoading}
+              isDm={isDm}
+              onNavigate={setActiveTab}
+              onOpenEvent={(eventId, opts) => {
+                setCalendarDeepLink({ eventId, scrollToDelivery: opts?.scrollToDelivery });
+                setActiveTab("calendar");
+              }}
+            />
+          )}
           {activeTab === "characters" && <CharacterListPanel />}
           {activeTab === "sessions" && <SessionsPanel />}
-          {activeTab === "calendar" && <CalendarPanel />}
+          {activeTab === "calendar" && (
+            <CalendarPanel
+              key={calendarDeepLink ? `${calendarDeepLink.eventId}-${calendarDeepLink.scrollToDelivery ? "d" : ""}` : "list"}
+              initialEventId={calendarDeepLink?.eventId ?? null}
+              initialScrollToDelivery={calendarDeepLink?.scrollToDelivery}
+            />
+          )}
           {activeTab === "dice" && <DiceRollerPanel />}
         </main>
       </div>
@@ -379,7 +406,7 @@ function SessionTrendChart({ data }: { data: SessionTrendPoint[] }) {
   );
 }
 
-function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; onNavigate: (tab: string) => void }) {
+function OverviewPanel({ dashboard, isLoading, isDm, onNavigate, onOpenEvent }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; isDm: boolean; onNavigate: (tab: string) => void; onOpenEvent: (eventId: number, opts?: { scrollToDelivery?: boolean }) => void }) {
   if (isLoading) {
     return (
       <div className="space-y-6" data-testid="overview-loading">
@@ -456,13 +483,47 @@ function OverviewPanel({ dashboard, isLoading, onNavigate }: { dashboard: (Dashb
       </button>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => onNavigate("calendar")} className="text-left">
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          onClick={() => {
+            if (dashboard?.nextEvent) onOpenEvent(dashboard.nextEvent.id);
+            else onNavigate("calendar");
+          }}
+          className="text-left"
+          data-testid="card-next-session"
+        >
           <AnimatedBorder className="p-5" interactive speed="slow">
             <div className="flex items-center justify-between mb-3">
               <Calendar className="h-5 w-5 text-primary" />
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </div>
-            <h3 className="font-semibold text-foreground text-sm">Next Session</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-foreground text-sm">Next Session</h3>
+              {isDm && dashboard?.nextEvent?.deliveryStatus?.hasFailures && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (dashboard.nextEvent) onOpenEvent(dashboard.nextEvent.id, { scrollToDelivery: true });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (dashboard.nextEvent) onOpenEvent(dashboard.nextEvent.id, { scrollToDelivery: true });
+                    }
+                  }}
+                  title={`${dashboard.nextEvent.deliveryStatus.failedCount} invite${dashboard.nextEvent.deliveryStatus.failedCount === 1 ? "" : "s"} failed to send. Click to review delivery.`}
+                  className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-pointer"
+                  data-testid="badge-next-session-delivery-issue"
+                >
+                  <Mail className="h-2.5 w-2.5" />
+                  Delivery issue
+                </span>
+              )}
+            </div>
             {dashboard?.nextEvent ? (
               <p className="text-muted-foreground text-xs mt-1">
                 {new Date(dashboard.nextEvent.proposedAt).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}

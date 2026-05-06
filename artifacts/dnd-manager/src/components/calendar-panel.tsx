@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -19,19 +19,31 @@ import { useToast } from "@/hooks/use-toast";
 
 type Recurrence = "none" | "weekly" | "biweekly" | "monthly";
 
-export default function CalendarPanel() {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+export default function CalendarPanel({ initialEventId, initialScrollToDelivery }: { initialEventId?: number | null; initialScrollToDelivery?: boolean } = {}) {
+  const [selectedId, setSelectedId] = useState<number | null>(initialEventId ?? null);
+  const [scrollToDelivery, setScrollToDelivery] = useState<boolean>(!!initialScrollToDelivery);
   const [showCreate, setShowCreate] = useState(false);
 
   if (selectedId !== null) {
-    return <EventDetail id={selectedId} onBack={() => setSelectedId(null)} />;
+    return (
+      <EventDetail
+        id={selectedId}
+        scrollToDelivery={scrollToDelivery}
+        onBack={() => { setSelectedId(null); setScrollToDelivery(false); }}
+      />
+    );
   }
 
   if (showCreate) {
     return <CreateEvent onBack={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); setSelectedId(id); }} />;
   }
 
-  return <EventList onSelect={setSelectedId} onCreate={() => setShowCreate(true)} />;
+  return (
+    <EventList
+      onSelect={(id, opts) => { setSelectedId(id); setScrollToDelivery(!!opts?.scrollToDelivery); }}
+      onCreate={() => setShowCreate(true)}
+    />
+  );
 }
 
 function recurrenceLabel(rule: CalendarEvent["recurrenceRule"]): string | null {
@@ -54,7 +66,7 @@ function startOfDay(d: Date): Date {
   return x;
 }
 
-function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onCreate: () => void }) {
+function EventList({ onSelect, onCreate }: { onSelect: (id: number, opts?: { scrollToDelivery?: boolean }) => void; onCreate: () => void }) {
   const { data: events, isLoading } = useListEvents();
   const { data: membership } = useGetMyMembership();
   const isDm = (membership as CampaignMember | undefined)?.role === "dm";
@@ -94,6 +106,9 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
             const isNext = ev.id === nextEventId;
             const recur = recurrenceLabel(ev.recurrenceRule);
 
+            const failedCount = ev.deliveryStatus?.hasFailures ? ev.deliveryStatus.failedCount : 0;
+            const showDeliveryBadge = isDm && !isPast && failedCount > 0;
+
             const cardInner = (
               <div className="flex items-center justify-between">
                 <div className="min-w-0">
@@ -103,6 +118,26 @@ function EventList({ onSelect, onCreate }: { onSelect: (id: number) => void; onC
                       <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
                         <Repeat className="h-2.5 w-2.5" />
                         {recur}
+                      </span>
+                    )}
+                    {showDeliveryBadge && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); onSelect(ev.id, { scrollToDelivery: true }); }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onSelect(ev.id, { scrollToDelivery: true });
+                          }
+                        }}
+                        title={`${failedCount} invite${failedCount === 1 ? "" : "s"} failed to send. Click to review delivery.`}
+                        className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-pointer"
+                        data-testid={`badge-delivery-issue-${ev.id}`}
+                      >
+                        <MailX className="h-2.5 w-2.5" />
+                        Delivery issue
                       </span>
                     )}
                   </div>
@@ -378,7 +413,7 @@ function inviteStatusVisual(status: string): { color: string; bg: string; Icon: 
   return { color: "text-muted-foreground", bg: "bg-muted/20", Icon: MailQuestion, label: status };
 }
 
-function InviteDeliveryPanel({ eventId }: { eventId: number }) {
+function InviteDeliveryPanel({ eventId, scrollIntoView }: { eventId: number; scrollIntoView?: boolean }) {
   const { data, isLoading, refetch, isFetching } = useGetEventInviteLogs(eventId);
   const resendMutation = useResendEventInvites();
   const resendOneMutation = useResendEventInvite();
@@ -455,8 +490,15 @@ function InviteDeliveryPanel({ eventId }: { eventId: number }) {
     return [...m.values()].sort((a, b) => new Date(b.attemptedAt).getTime() - new Date(a.attemptedAt).getTime());
   }, [logs]);
 
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (scrollIntoView && containerRef.current) {
+      containerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [scrollIntoView]);
+
   return (
-    <div className="rounded-2xl glass-panel p-5" data-testid="invite-delivery-panel">
+    <div ref={containerRef} className="rounded-2xl glass-panel p-5" data-testid="invite-delivery-panel">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
           <Mail className="h-4 w-4 text-primary" /> Invite delivery
@@ -540,7 +582,7 @@ function InviteDeliveryPanel({ eventId }: { eventId: number }) {
   );
 }
 
-function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
+function EventDetail({ id, onBack, scrollToDelivery }: { id: number; onBack: () => void; scrollToDelivery?: boolean }) {
   const { data: event, isLoading } = useGetEvent(id, { query: { queryKey: getGetEventQueryKey(id) } });
   const upsertRsvp = useUpsertRsvp();
   const deleteMutation = useDeleteEvent();
@@ -658,7 +700,7 @@ function EventDetail({ id, onBack }: { id: number; onBack: () => void }) {
         </div>
       )}
 
-      {isDm && <InviteDeliveryPanel eventId={id} />}
+      {isDm && <InviteDeliveryPanel eventId={id} scrollIntoView={scrollToDelivery} />}
 
       {isDm && (
         <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4 space-y-2">

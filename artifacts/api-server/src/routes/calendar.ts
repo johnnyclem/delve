@@ -69,12 +69,83 @@ export function generateOccurrenceDates(
   return dates;
 }
 
+export type EventDeliveryStatus = { hasFailures: boolean; failedCount: number };
+
+/**
+ * For each event id, compute whether the latest invite attempt per recipient
+ * resulted in a `failed` status. Older attempts that have since been retried
+ * successfully are not counted.
+ */
+export async function getDeliveryStatusForEvents(
+  campaignId: number,
+  eventIds: number[],
+): Promise<Map<number, EventDeliveryStatus>> {
+  const result = new Map<number, EventDeliveryStatus>();
+  if (eventIds.length === 0) return result;
+
+  const logs = await db
+    .select({
+      calendarEventId: notificationLogsTable.calendarEventId,
+      userId: notificationLogsTable.userId,
+      status: notificationLogsTable.status,
+      attemptedAt: notificationLogsTable.attemptedAt,
+    })
+    .from(notificationLogsTable)
+    .where(
+      and(
+        eq(notificationLogsTable.campaignId, campaignId),
+        eq(notificationLogsTable.kind, "event_invite"),
+        inArray(notificationLogsTable.calendarEventId, eventIds),
+      ),
+    );
+
+  // Group: pick latest log per (eventId, userId)
+  const latest = new Map<string, { eventId: number; status: string; attemptedAt: Date }>();
+  for (const log of logs) {
+    if (log.calendarEventId == null) continue;
+    const key = `${log.calendarEventId}:${log.userId}`;
+    const prev = latest.get(key);
+    const at = new Date(log.attemptedAt);
+    if (!prev || at.getTime() > prev.attemptedAt.getTime()) {
+      latest.set(key, { eventId: log.calendarEventId, status: log.status, attemptedAt: at });
+    }
+  }
+
+  for (const { eventId, status } of latest.values()) {
+    const cur = result.get(eventId) ?? { hasFailures: false, failedCount: 0 };
+    if (status === "failed") {
+      cur.hasFailures = true;
+      cur.failedCount += 1;
+    }
+    result.set(eventId, cur);
+  }
+  return result;
+}
+
 router.get("/calendar", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
   const events = await db
     .select()
     .from(calendarEventsTable)
     .where(eq(calendarEventsTable.campaignId, campaignId));
+
+  // Only DMs see invite delivery status, and only for upcoming events (past sessions
+  // can't be acted on, so noise from old failures is unhelpful).
+  if (await isDm(campaignId, userId)) {
+    const now = Date.now();
+    const upcomingIds = events
+      .filter((e) => new Date(e.proposedAt).getTime() >= now)
+      .map((e) => e.id);
+    const statusMap = await getDeliveryStatusForEvents(campaignId, upcomingIds);
+    const enriched = events.map((e) => {
+      const ds = statusMap.get(e.id);
+      return ds ? { ...e, deliveryStatus: ds } : e;
+    });
+    res.json(enriched);
+    return;
+  }
+
   res.json(events);
 });
 

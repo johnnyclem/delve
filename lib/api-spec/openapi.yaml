@@ -1200,6 +1200,18 @@ components:
         - freq
         - until
 
+    EventDeliveryStatus:
+      type: object
+      description: Aggregated invite delivery status for an event (DM-only field).
+      properties:
+        hasFailures:
+          type: boolean
+        failedCount:
+          type: integer
+      required:
+        - hasFailures
+        - failedCount
+
     CalendarEvent:
       type: object
       properties:
@@ -1229,6 +1241,8 @@ components:
         createdAt:
           type: string
           format: date-time
+        deliveryStatus:
+          $ref: "#/components/schemas/EventDeliveryStatus"
       required:
         - id
         - campaignId
@@ -1270,6 +1284,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RsvpWithMember"
+        deliveryStatus:
+          $ref: "#/components/schemas/EventDeliveryStatus"
       required:
         - id
         - campaignId

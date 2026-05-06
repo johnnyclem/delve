@@ -4,6 +4,7 @@ import { eq, desc, and, gte, asc, isNotNull } from "drizzle-orm";
 import { requireAuth, getUserId, getUserDisplayName, getUserAvatarUrl } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, getMember, syncMemberProfile, getCampaignInviteCode, isDm } from "../lib/campaign";
 import { isValidTimeZone } from "../lib/timezone";
+import { getDeliveryStatusForEvents } from "./calendar";
 
 const router: IRouter = Router();
 
@@ -132,6 +133,13 @@ router.get("/campaign/dashboard", requireAuth, async (req, res): Promise<void> =
       };
     });
     nextEventWithRsvps = { ...nextEvent, rsvps: rsvpsWithMembers };
+    if (member.role === "dm") {
+      const statusMap = await getDeliveryStatusForEvents(campaignId, [nextEvent.id]);
+      const ds = statusMap.get(nextEvent.id);
+      if (ds) {
+        nextEventWithRsvps = { ...nextEventWithRsvps, deliveryStatus: ds };
+      }
+    }
   }
 
   const recentRolls = await db

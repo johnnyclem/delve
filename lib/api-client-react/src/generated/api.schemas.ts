@@ -244,6 +244,14 @@ export interface RecurrenceRule {
   until: string;
 }
 
+/**
+ * Aggregated invite delivery status for an event (DM-only field).
+ */
+export interface EventDeliveryStatus {
+  hasFailures: boolean;
+  failedCount: number;
+}
+
 export type CalendarEventStatus =
   (typeof CalendarEventStatus)[keyof typeof CalendarEventStatus];
 
@@ -267,6 +275,7 @@ export interface CalendarEvent {
   seriesId?: string | null;
   recurrenceRule?: RecurrenceRule | null;
   createdAt: string;
+  deliveryStatus?: EventDeliveryStatus;
 }
 
 export type CalendarEventWithRsvpsStatus =
@@ -315,6 +324,7 @@ export interface CalendarEventWithRsvps {
   recurrenceRule?: RecurrenceRule | null;
   createdAt: string;
   rsvps: RsvpWithMember[];
+  deliveryStatus?: EventDeliveryStatus;
 }
 
 export interface CreateEventBody {

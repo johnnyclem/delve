@@ -101,6 +101,15 @@ export const GetDashboardResponse = zod.object({
           createdAt: zod.coerce.date(),
         }),
       ),
+      deliveryStatus: zod
+        .object({
+          hasFailures: zod.boolean(),
+          failedCount: zod.number(),
+        })
+        .optional()
+        .describe(
+          "Aggregated invite delivery status for an event (DM-only field).",
+        ),
     })
     .optional(),
   latestRecap: zod
@@ -793,6 +802,15 @@ export const ListEventsResponseItem = zod.object({
     ])
     .optional(),
   createdAt: zod.coerce.date(),
+  deliveryStatus: zod
+    .object({
+      hasFailures: zod.boolean(),
+      failedCount: zod.number(),
+    })
+    .optional()
+    .describe(
+      "Aggregated invite delivery status for an event (DM-only field).",
+    ),
 });
 export const ListEventsResponse = zod.array(ListEventsResponseItem);
 
@@ -852,6 +870,15 @@ export const GetEventResponse = zod.object({
       createdAt: zod.coerce.date(),
     }),
   ),
+  deliveryStatus: zod
+    .object({
+      hasFailures: zod.boolean(),
+      failedCount: zod.number(),
+    })
+    .optional()
+    .describe(
+      "Aggregated invite delivery status for an event (DM-only field).",
+    ),
 });
 
 /**
@@ -887,6 +914,15 @@ export const UpdateEventResponse = zod.object({
     ])
     .optional(),
   createdAt: zod.coerce.date(),
+  deliveryStatus: zod
+    .object({
+      hasFailures: zod.boolean(),
+      failedCount: zod.number(),
+    })
+    .optional()
+    .describe(
+      "Aggregated invite delivery status for an event (DM-only field).",
+    ),
 });
 
 /**
