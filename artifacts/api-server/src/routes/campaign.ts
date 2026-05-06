@@ -2,7 +2,8 @@ import { Router, type IRouter } from "express";
 import { db, campaignsTable, campaignMembersTable, charactersTable, sessionLogsTable, calendarEventsTable, rsvpsTable, diceRollsTable } from "@workspace/db";
 import { eq, desc, and, gte, asc, isNotNull } from "drizzle-orm";
 import { requireAuth, getUserId, getUserDisplayName, getUserAvatarUrl } from "../middlewares/requireAuth";
-import { getOrCreateCampaign, getMember, syncMemberProfile, getCampaignInviteCode } from "../lib/campaign";
+import { getOrCreateCampaign, getMember, syncMemberProfile, getCampaignInviteCode, isDm } from "../lib/campaign";
+import { isValidTimeZone } from "../lib/timezone";
 
 const router: IRouter = Router();
 
@@ -10,6 +11,40 @@ router.get("/campaign", requireAuth, async (req, res): Promise<void> => {
   const campaignId = await getOrCreateCampaign();
   const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
   const { inviteCode: _code, ...safeCampaign } = campaign;
+  res.json(safeCampaign);
+});
+
+router.patch("/campaign", requireAuth, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can update the campaign" });
+    return;
+  }
+
+  const updates: Record<string, unknown> = {};
+  const { timezone } = (req.body ?? {}) as { timezone?: unknown };
+  if (timezone !== undefined) {
+    if (typeof timezone !== "string" || !isValidTimeZone(timezone)) {
+      res.status(400).json({ error: "Invalid IANA timezone identifier" });
+      return;
+    }
+    updates.timezone = timezone;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No supported fields to update" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(campaignsTable)
+    .set(updates)
+    .where(eq(campaignsTable.id, campaignId))
+    .returning();
+
+  const { inviteCode: _code, ...safeCampaign } = updated;
   res.json(safeCampaign);
 });
 

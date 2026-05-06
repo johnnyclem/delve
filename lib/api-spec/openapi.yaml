@@ -52,6 +52,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Campaign"
+    patch:
+      operationId: updateCampaign
+      tags: [campaign]
+      summary: Update campaign settings (DM only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCampaignBody"
+      responses:
+        "200":
+          description: Updated campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Campaign"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not authorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /campaign/dashboard:
     get:
@@ -732,6 +761,9 @@ components:
           type: ["string", "null"]
         dmUserId:
           type: string
+        timezone:
+          type: string
+          description: IANA time-zone identifier (e.g. "America/New_York"). Defaults to "UTC".
         createdAt:
           type: string
           format: date-time
@@ -739,7 +771,15 @@ components:
         - id
         - name
         - dmUserId
+        - timezone
         - createdAt
+
+    UpdateCampaignBody:
+      type: object
+      properties:
+        timezone:
+          type: string
+          description: IANA time-zone identifier (e.g. "America/Los_Angeles").
 
     CampaignMember:
       type: object

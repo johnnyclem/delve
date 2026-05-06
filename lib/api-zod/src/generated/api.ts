@@ -22,6 +22,34 @@ export const GetCampaignResponse = zod.object({
   name: zod.string(),
   worldName: zod.string().nullish(),
   dmUserId: zod.string(),
+  timezone: zod
+    .string()
+    .describe(
+      'IANA time-zone identifier (e.g. \"America\/New_York\"). Defaults to \"UTC\".',
+    ),
+  createdAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update campaign settings (DM only)
+ */
+export const UpdateCampaignBody = zod.object({
+  timezone: zod
+    .string()
+    .optional()
+    .describe('IANA time-zone identifier (e.g. \"America\/Los_Angeles\").'),
+});
+
+export const UpdateCampaignResponse = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  worldName: zod.string().nullish(),
+  dmUserId: zod.string(),
+  timezone: zod
+    .string()
+    .describe(
+      'IANA time-zone identifier (e.g. \"America\/New_York\"). Defaults to \"UTC\".',
+    ),
   createdAt: zod.coerce.date(),
 });
 
@@ -34,6 +62,11 @@ export const GetDashboardResponse = zod.object({
     name: zod.string(),
     worldName: zod.string().nullish(),
     dmUserId: zod.string(),
+    timezone: zod
+      .string()
+      .describe(
+        'IANA time-zone identifier (e.g. \"America\/New_York\"). Defaults to \"UTC\".',
+      ),
     createdAt: zod.coerce.date(),
   }),
   nextEvent: zod

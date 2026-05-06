@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, calendarEventsTable, rsvpsTable, campaignMembersTable, notificationLogsTable } from "@workspace/db";
+import { db, calendarEventsTable, rsvpsTable, campaignMembersTable, notificationLogsTable, campaignsTable } from "@workspace/db";
 import { eq, and, inArray, desc } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
@@ -7,43 +7,61 @@ import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateEventBody, UpdateEventBody, UpsertRsvpBody } from "@workspace/api-zod";
 import { sendEventInvitesForEvents, sendEventInviteForOne } from "../lib/email";
 import { logger } from "../lib/logger";
+import { getZonedParts, zonedTimeToUtc } from "../lib/timezone";
 
 const router: IRouter = Router();
 
 const MAX_OCCURRENCES = 26;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function generateOccurrenceDates(start: Date, freq: "weekly" | "biweekly" | "monthly", until: Date): Date[] {
-  // For weekly/biweekly use fixed millisecond offsets from `start` so we don't accumulate
-  // drift; this preserves the UTC instant exactly (local wall-clock may shift ±1h across DST,
-  // an accepted trade-off without per-user timezone storage).
-  // For monthly we step in calendar months and clamp to the last valid day of the target month
-  // so e.g. Jan 31 → Feb 28/29 instead of overflowing into March.
+export function generateOccurrenceDates(
+  start: Date,
+  freq: "weekly" | "biweekly" | "monthly",
+  until: Date,
+  tz: string = "UTC",
+): Date[] {
+  // Recurrence is anchored on the local wall-clock time in `tz` so the session
+  // always starts at e.g. "Tuesday 7pm" regardless of DST transitions. For UTC
+  // (the default) this is equivalent to fixed-offset stepping. For monthly we
+  // step in calendar months and clamp to the last valid day of the target
+  // month so Jan 31 → Feb 28/29 instead of overflowing into March.
   const dates: Date[] = [new Date(start.getTime())];
+  const startLocal = getZonedParts(start, tz);
   for (let i = 1; dates.length < MAX_OCCURRENCES; i++) {
     let next: Date;
-    if (freq === "weekly") {
-      next = new Date(start.getTime() + i * 7 * DAY_MS);
-    } else if (freq === "biweekly") {
-      next = new Date(start.getTime() + i * 14 * DAY_MS);
+    if (freq === "weekly" || freq === "biweekly") {
+      const stepDays = freq === "weekly" ? 7 : 14;
+      // Walk i*stepDays in the local calendar by treating local Y/M/D as a
+      // naive UTC date, advancing in days, then re-zoning back to UTC.
+      const naive = new Date(Date.UTC(
+        startLocal.year,
+        startLocal.month - 1,
+        startLocal.day,
+      ) + i * stepDays * DAY_MS);
+      next = zonedTimeToUtc(
+        naive.getUTCFullYear(),
+        naive.getUTCMonth() + 1,
+        naive.getUTCDate(),
+        startLocal.hour,
+        startLocal.minute,
+        startLocal.second,
+        tz,
+      );
     } else {
-      const y = start.getUTCFullYear();
-      const m = start.getUTCMonth() + i;
-      const targetYear = y + Math.floor(m / 12);
+      const m = startLocal.month - 1 + i;
+      const targetYear = startLocal.year + Math.floor(m / 12);
       const targetMonth = ((m % 12) + 12) % 12;
-      const desiredDay = start.getUTCDate();
-      // Last day of target month
       const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
-      const day = Math.min(desiredDay, lastDay);
-      next = new Date(Date.UTC(
+      const day = Math.min(startLocal.day, lastDay);
+      next = zonedTimeToUtc(
         targetYear,
-        targetMonth,
+        targetMonth + 1,
         day,
-        start.getUTCHours(),
-        start.getUTCMinutes(),
-        start.getUTCSeconds(),
-        start.getUTCMilliseconds(),
-      ));
+        startLocal.hour,
+        startLocal.minute,
+        startLocal.second,
+        tz,
+      );
     }
     if (next.getTime() > until.getTime()) break;
     dates.push(next);
@@ -97,7 +115,12 @@ router.post("/calendar", requireAuth, requireCampaignMember, async (req, res): P
       return;
     }
     const seriesId = randomUUID();
-    const dates = generateOccurrenceDates(startDate, recurrence.freq, until);
+    const [campaignRow] = await db
+      .select({ timezone: campaignsTable.timezone })
+      .from(campaignsTable)
+      .where(eq(campaignsTable.id, campaignId));
+    const tz = campaignRow?.timezone ?? "UTC";
+    const dates = generateOccurrenceDates(startDate, recurrence.freq, until, tz);
     const ruleSerialized = { freq: recurrence.freq, until: until.toISOString() };
     inserted = await db
       .insert(calendarEventsTable)

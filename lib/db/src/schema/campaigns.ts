@@ -8,6 +8,10 @@ export const campaignsTable = pgTable("campaigns", {
   worldName: text("world_name"),
   dmUserId: text("dm_user_id").notNull(),
   inviteCode: text("invite_code").notNull().default("CHANGEME"),
+  // IANA time-zone identifier (e.g. "America/New_York"). Used to keep
+  // recurring-session wall-clock times stable across DST transitions and
+  // to format invite emails in the campaign's local time.
+  timezone: text("timezone").notNull().default("UTC"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

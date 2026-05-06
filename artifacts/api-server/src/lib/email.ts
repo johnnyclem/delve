@@ -3,6 +3,7 @@ import { eq, and, isNotNull, desc } from "drizzle-orm";
 import { logger } from "./logger";
 import { generateUnsubscribeToken } from "./unsubscribe";
 import { generateRsvpToken } from "./rsvp-token";
+import { formatInZone, isValidTimeZone } from "./timezone";
 
 interface RecapNotificationParams {
   campaignId: number;
@@ -316,6 +317,7 @@ function recapExcerpt(recapMd: string | null | undefined): string | null {
 interface EventInviteParams {
   campaignId: number;
   campaignName: string;
+  campaignTimezone: string;
   eventId: number;
   eventTitle: string;
   proposedAt: Date;
@@ -398,6 +400,7 @@ export async function sendEventInviteToRecipient(
       html: buildEventInviteHtml({
         playerName: displayName,
         ...params,
+        campaignTimezone: isValidTimeZone(params.campaignTimezone) ? params.campaignTimezone : "UTC",
         yesUrl,
         noUrl,
         maybeUrl,
@@ -505,6 +508,7 @@ export async function sendEventInviteForOne(params: {
   return sendEventInviteToRecipient(ctx, {
     campaignId,
     campaignName: inviteCtx.campaign.name,
+    campaignTimezone: inviteCtx.campaign.timezone ?? "UTC",
     eventId: ev.id,
     eventTitle: ev.title,
     proposedAt: ev.proposedAt,
@@ -558,6 +562,7 @@ export async function sendEventInvitesForEvents(params: {
         await sendEventInviteToRecipient(ctx, {
           campaignId,
           campaignName: inviteCtx.campaign.name,
+          campaignTimezone: inviteCtx.campaign.timezone ?? "UTC",
           eventId: ev.id,
           eventTitle: ev.title,
           proposedAt: ev.proposedAt,
@@ -584,14 +589,14 @@ function buildEventInviteHtml(params: EventInviteParams & {
   unsubscribeUrl: string | null;
 }): string {
   const {
-    playerName, campaignName, eventTitle, proposedAt, location,
+    playerName, campaignName, campaignTimezone, eventTitle, proposedAt, location,
     recapExcerpt: excerpt, lastSessionTitle, lastSessionNumber,
     appUrl, yesUrl, noUrl, maybeUrl, unsubscribeUrl,
   } = params;
 
-  const dateStr = proposedAt.toLocaleString("en-US", {
+  const dateStr = formatInZone(proposedAt, campaignTimezone, {
     weekday: "long", month: "long", day: "numeric",
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    hour: "numeric", minute: "2-digit",
   });
 
   const recapBlock = excerpt

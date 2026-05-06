@@ -31,7 +31,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 
 ## Database Schema
 
-- `campaigns` — Single campaign record (includes `invite_code` for joining)
+- `campaigns` — Single campaign record (includes `invite_code` for joining and `timezone` IANA zone string, default "UTC", used for DST-stable recurrence + invite email formatting)
 - `campaign_members` — Users in the campaign (role: dm/player, `email_notifications` boolean default false, unique index on `(campaign_id, user_id)`)
 - `characters` — Character sheets (JSON-backed sheetJson)
 - `session_logs` — Session notes + AI recaps
@@ -81,6 +81,7 @@ Auth-only (no membership required):
 - GET /members/me — get current user's membership (404 if not a member)
 - GET /campaign/dashboard — dashboard (auto-enrolls first user as DM, 403 for non-members)
 - GET /campaign — get campaign info
+- PATCH /campaign — update campaign settings (DM only; currently `timezone`)
 - POST /members/join — join campaign with invite code
 - PATCH /members/me/notifications — update email notification preferences
 

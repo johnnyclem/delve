@@ -19,7 +19,14 @@ export interface Campaign {
   /** @nullable */
   worldName?: string | null;
   dmUserId: string;
+  /** IANA time-zone identifier (e.g. "America/New_York"). Defaults to "UTC". */
+  timezone: string;
   createdAt: string;
+}
+
+export interface UpdateCampaignBody {
+  /** IANA time-zone identifier (e.g. "America/Los_Angeles"). */
+  timezone?: string;
 }
 
 export type CampaignMemberRole =
