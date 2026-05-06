@@ -31,7 +31,16 @@ export default function MyCharacterPanel({ onNavigateToCharacters }: { onNavigat
     );
   }
 
-  const myChars = ((characters ?? []) as Character[]).filter((c) => c.ownerUserId === user?.id);
+  // Pick the most recently updated owned character so a player who has rolled multiple
+  // PCs lands on the one they last touched.
+  const myChars = ((characters ?? []) as Character[])
+    .filter((c) => c.ownerUserId === user?.id)
+    .slice()
+    .sort((a, b) => {
+      const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return tb - ta;
+    });
   const myChar = myChars[0];
 
   if (!myChar) {

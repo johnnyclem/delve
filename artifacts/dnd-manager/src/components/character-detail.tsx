@@ -85,13 +85,25 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
         )}
         {canExport && (
           <div className="ml-auto flex items-center gap-2">
-            <Button asChild variant="outline" size="sm" data-testid="button-print-character-pdf">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              data-testid={`button-print-character-pdf-${id}`}
+              onClick={() => toast({ title: "Building your sheet…" })}
+            >
               <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
                 <Printer className="h-4 w-4 mr-1" />
                 Print
               </a>
             </Button>
-            <Button asChild variant="outline" size="sm" data-testid="button-download-character-pdf">
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              data-testid={`button-download-character-pdf-${id}`}
+              onClick={() => toast({ title: "Building your sheet…" })}
+            >
               <a href={`${pdfUrl}?download=1`} download>
                 <Download className="h-4 w-4 mr-1" />
                 Download PDF

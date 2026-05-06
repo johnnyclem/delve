@@ -79,17 +79,19 @@ export default function DashboardPage() {
   const showMyCharacterTab = !!membership && !isDm;
   const navItems = useMemo(() => buildNavItems({ showMyCharacter: showMyCharacterTab }), [showMyCharacterTab]);
 
-  // On first successful load, land non-DM players who own a character on "My Character".
-  // Uses the raw setter (not the wrapped setActiveTab) so this doesn't itself flip the lock
-  // before the membership/characters queries resolve.
+  // On first successful load, land non-DM players on "My Character" — whether they
+  // already own a character (where it shows their sheet) or not (where MyCharacterPanel
+  // renders the create-CTA empty state). DMs are unaffected and stay on Overview.
+  // Uses the raw setter (not the wrapped setActiveTab) so this doesn't itself flip the
+  // lock before the membership/characters queries resolve.
   useEffect(() => {
     if (hasAutoLanded) return;
     if (!membership || !characters) return;
-    if (showMyCharacterTab && hasOwnCharacter) {
+    if (showMyCharacterTab) {
       setActiveTabState("my-character");
     }
     setHasAutoLanded(true);
-  }, [hasAutoLanded, membership, characters, showMyCharacterTab, hasOwnCharacter]);
+  }, [hasAutoLanded, membership, characters, showMyCharacterTab]);
   const { data: events } = useListEvents({ query: { enabled: !!isDm, queryKey: ["/api/calendar"] } });
   const newRecapCount = membership && !isDm && sessions
     ? sessions.filter(s => s.hasNewRecap).length

@@ -1,4 +1,7 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import { PDFDocument, type PDFForm } from "pdf-lib";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import type { charactersTable } from "@workspace/db";
 
 type Character = typeof charactersTable.$inferSelect;
@@ -12,333 +15,255 @@ interface CharacterSheet {
   charisma?: number;
   maxHp?: number;
   currentHp?: number;
+  tempHp?: number;
+  hitDiceTotal?: string;
+  hitDice?: string;
   armorClass?: number;
+  initiative?: number;
   speed?: number;
   proficiencyBonus?: number;
+  inspiration?: boolean | number;
+  alignment?: string;
+  background?: string;
+  xp?: number;
   savingThrows?: string[];
   skills?: string[];
   inventory?: string[];
+  proficiencies?: string;
+  notes?: string;
   attacks?: Array<{ name: string; bonus: number; damage: string }>;
   spells?: Array<{ name: string; level?: number; description?: string }>;
   cantrips?: string[];
   spellSlots?: Record<string, { total?: number; used?: number }>;
-  notes?: string;
 }
 
-const PAGE_W = 612;
-const PAGE_H = 792;
-const MARGIN = 36;
-const INK = rgb(0.08, 0.08, 0.1);
-const MUTED = rgb(0.4, 0.4, 0.45);
-const ACCENT = rgb(0.42, 0.18, 0.78);
-const RULE = rgb(0.78, 0.78, 0.82);
+export class TemplateMissingError extends Error {
+  constructor(public readonly templatePath: string, cause?: unknown) {
+    super(`5e character sheet template not configured at ${templatePath}`);
+    this.name = "TemplateMissingError";
+    if (cause) (this as { cause?: unknown }).cause = cause;
+  }
+}
 
-function abilityMod(score: number): string {
-  const mod = Math.floor((score - 10) / 2);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// src/lib → ../../assets
+const TEMPLATE_PATH = join(__dirname, "..", "..", "assets", "dnd-5e-character-sheet.pdf");
+
+let templateBytesPromise: Promise<Uint8Array> | null = null;
+
+async function loadTemplateBytes(): Promise<Uint8Array> {
+  if (!templateBytesPromise) {
+    templateBytesPromise = readFile(TEMPLATE_PATH).catch((err) => {
+      // Reset cache on failure so a later request can retry after the asset is added.
+      templateBytesPromise = null;
+      throw new TemplateMissingError(TEMPLATE_PATH, err);
+    });
+  }
+  return templateBytesPromise;
+}
+
+function abilityMod(score: number | undefined): number {
+  return Math.floor(((score ?? 10) - 10) / 2);
+}
+
+function fmtMod(mod: number): string {
   return mod >= 0 ? `+${mod}` : `${mod}`;
 }
 
-function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
-  const lines: string[] = [];
-  for (const paragraph of text.split(/\r?\n/)) {
-    if (paragraph === "") { lines.push(""); continue; }
-    const words = paragraph.split(/\s+/);
-    let line = "";
-    for (const word of words) {
-      const candidate = line ? `${line} ${word}` : word;
-      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
-        line = candidate;
-      } else {
-        if (line) lines.push(line);
-        if (font.widthOfTextAtSize(word, size) > maxWidth) {
-          // Hard-break very long token
-          let chunk = "";
-          for (const ch of word) {
-            if (font.widthOfTextAtSize(chunk + ch, size) > maxWidth) {
-              lines.push(chunk); chunk = ch;
-            } else chunk += ch;
-          }
-          line = chunk;
-        } else {
-          line = word;
-        }
-      }
-    }
-    if (line) lines.push(line);
-  }
-  return lines;
+const SKILL_TO_ABILITY: Record<string, "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma"> = {
+  acrobatics: "dexterity",
+  "animal handling": "wisdom",
+  arcana: "intelligence",
+  athletics: "strength",
+  deception: "charisma",
+  history: "intelligence",
+  insight: "wisdom",
+  intimidation: "charisma",
+  investigation: "intelligence",
+  medicine: "wisdom",
+  nature: "intelligence",
+  perception: "wisdom",
+  performance: "charisma",
+  persuasion: "charisma",
+  religion: "intelligence",
+  "sleight of hand": "dexterity",
+  stealth: "dexterity",
+  survival: "wisdom",
+};
+
+const SAVE_TO_ABILITY: Record<string, keyof typeof SKILL_TO_ABILITY extends never ? never : "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma"> = {
+  strength: "strength",
+  dexterity: "dexterity",
+  constitution: "constitution",
+  intelligence: "intelligence",
+  wisdom: "wisdom",
+  charisma: "charisma",
+};
+
+function normalize(s: string): string {
+  return s.trim().toLowerCase();
 }
 
-interface DrawCtx {
-  page: PDFPage;
-  font: PDFFont;
-  bold: PDFFont;
-  cursor: { y: number };
-  doc: PDFDocument;
+function isProficient(list: string[] | undefined, key: string): boolean {
+  if (!list) return false;
+  const target = normalize(key);
+  return list.some((x) => normalize(x) === target);
 }
 
-function newPage(ctx: DrawCtx): void {
-  ctx.page = ctx.doc.addPage([PAGE_W, PAGE_H]);
-  ctx.cursor.y = PAGE_H - MARGIN;
-}
-
-function ensureSpace(ctx: DrawCtx, needed: number): void {
-  if (ctx.cursor.y - needed < MARGIN) newPage(ctx);
-}
-
-function sectionHeader(ctx: DrawCtx, label: string): void {
-  ensureSpace(ctx, 24);
-  ctx.cursor.y -= 6;
-  ctx.page.drawText(label.toUpperCase(), {
-    x: MARGIN, y: ctx.cursor.y, size: 9, font: ctx.bold, color: ACCENT,
-  });
-  ctx.cursor.y -= 4;
-  ctx.page.drawLine({
-    start: { x: MARGIN, y: ctx.cursor.y },
-    end: { x: PAGE_W - MARGIN, y: ctx.cursor.y },
-    thickness: 0.5, color: RULE,
-  });
-  ctx.cursor.y -= 10;
-}
-
-function statBox(
-  page: PDFPage, font: PDFFont, bold: PDFFont,
-  x: number, y: number, w: number, h: number,
-  label: string, value: string,
-): void {
-  page.drawRectangle({ x, y: y - h, width: w, height: h, borderColor: RULE, borderWidth: 0.75 });
-  page.drawText(label.toUpperCase(), {
-    x: x + 4, y: y - 11, size: 7, font: bold, color: MUTED,
-  });
-  const valueSize = 18;
-  const tw = bold.widthOfTextAtSize(value, valueSize);
-  page.drawText(value, {
-    x: x + (w - tw) / 2, y: y - h + (h - valueSize) / 2 + 2,
-    size: valueSize, font: bold, color: INK,
-  });
-}
-
-function abilityBox(
-  page: PDFPage, font: PDFFont, bold: PDFFont,
-  x: number, y: number, w: number, h: number,
-  label: string, score: number,
-): void {
-  page.drawRectangle({ x, y: y - h, width: w, height: h, borderColor: RULE, borderWidth: 0.75 });
-  const labelW = bold.widthOfTextAtSize(label, 8);
-  page.drawText(label, { x: x + (w - labelW) / 2, y: y - 12, size: 8, font: bold, color: MUTED });
-  const scoreStr = String(score);
-  const scoreW = bold.widthOfTextAtSize(scoreStr, 22);
-  page.drawText(scoreStr, { x: x + (w - scoreW) / 2, y: y - 36, size: 22, font: bold, color: INK });
-  const mod = abilityMod(score);
-  const modW = font.widthOfTextAtSize(mod, 11);
-  page.drawText(mod, { x: x + (w - modW) / 2, y: y - h + 6, size: 11, font, color: ACCENT });
-}
-
-export async function fillCharacterSheetPdf(character: Character & { ownerDisplayName?: string }): Promise<Uint8Array> {
+/** Build the field map. Field names mirror the official WotC fillable sheet (case + trailing
+ * whitespace preserved exactly as enumerated from the AcroForm). Any field not present in
+ * sheetJson resolves to `undefined` and is left blank. */
+function buildFieldValues(character: Character & { ownerDisplayName?: string }): Record<string, string> {
   const sheet: CharacterSheet = (character.sheetJson as CharacterSheet) ?? {};
+  const profBonus = sheet.proficiencyBonus ?? 2;
 
-  const doc = await PDFDocument.create();
+  const mods = {
+    strength: abilityMod(sheet.strength),
+    dexterity: abilityMod(sheet.dexterity),
+    constitution: abilityMod(sheet.constitution),
+    intelligence: abilityMod(sheet.intelligence),
+    wisdom: abilityMod(sheet.wisdom),
+    charisma: abilityMod(sheet.charisma),
+  };
+
+  const saveValue = (ability: keyof typeof mods): string => {
+    const base = mods[ability];
+    const total = isProficient(sheet.savingThrows, ability) ? base + profBonus : base;
+    return fmtMod(total);
+  };
+
+  const skillValue = (skillName: string): string => {
+    const ability = SKILL_TO_ABILITY[normalize(skillName)];
+    if (!ability) return "";
+    const base = mods[ability];
+    const total = isProficient(sheet.skills, skillName) ? base + profBonus : base;
+    return fmtMod(total);
+  };
+
+  const passivePerception = 10 + mods.wisdom + (isProficient(sheet.skills, "perception") ? profBonus : 0);
+
+  const values: Record<string, string | undefined> = {
+    // Identity
+    "CharacterName": character.name,
+    "CharacterName 2": character.name,
+    "ClassLevel": `${character.class} ${character.level}`,
+    "Background": sheet.background ?? "",
+    "PlayerName": character.ownerDisplayName ?? "",
+    "Race ": character.race,
+    "Alignment": sheet.alignment ?? "",
+    "XP": typeof sheet.xp === "number" ? String(sheet.xp) : "",
+
+    // Top stats
+    "Inspiration": sheet.inspiration ? "1" : "",
+    "ProfBonus": fmtMod(profBonus),
+    "AC": String(sheet.armorClass ?? 10),
+    "Initiative": fmtMod(sheet.initiative ?? mods.dexterity),
+    "Speed": String(sheet.speed ?? 30),
+
+    // Ability scores
+    "STR": String(sheet.strength ?? 10),
+    "DEX": String(sheet.dexterity ?? 10),
+    "CON": String(sheet.constitution ?? 10),
+    "INT": String(sheet.intelligence ?? 10),
+    "WIS": String(sheet.wisdom ?? 10),
+    "CHA": String(sheet.charisma ?? 10),
+    "STRmod": fmtMod(mods.strength),
+    "DEXmod ": fmtMod(mods.dexterity),
+    "CONmod": fmtMod(mods.constitution),
+    "INTmod": fmtMod(mods.intelligence),
+    "WISmod": fmtMod(mods.wisdom),
+    "CHamod": fmtMod(mods.charisma),
+
+    // Saving throws
+    "ST Strength": saveValue("strength"),
+    "ST Dexterity": saveValue("dexterity"),
+    "ST Constitution": saveValue("constitution"),
+    "ST Intelligence": saveValue("intelligence"),
+    "ST Wisdom": saveValue("wisdom"),
+    "ST Charisma": saveValue("charisma"),
+
+    // HP / Hit Dice
+    "HPMax": typeof sheet.maxHp === "number" ? String(sheet.maxHp) : "",
+    "HPCurrent": typeof sheet.currentHp === "number" ? String(sheet.currentHp) : "",
+    "HPTemp": typeof sheet.tempHp === "number" ? String(sheet.tempHp) : "",
+    "HDTotal": sheet.hitDiceTotal ?? "",
+    "HD": sheet.hitDice ?? "",
+
+    // Skills (note: trailing-space field names mirror the template exactly)
+    "Acrobatics": skillValue("acrobatics"),
+    "Animal": skillValue("animal handling"),
+    "Arcana": skillValue("arcana"),
+    "Athletics": skillValue("athletics"),
+    "Deception ": skillValue("deception"),
+    "History ": skillValue("history"),
+    "Insight": skillValue("insight"),
+    "Intimidation": skillValue("intimidation"),
+    "Investigation ": skillValue("investigation"),
+    "Medicine": skillValue("medicine"),
+    "Nature": skillValue("nature"),
+    "Perception ": skillValue("perception"),
+    "Performance": skillValue("performance"),
+    "Persuasion": skillValue("persuasion"),
+    "Religion": skillValue("religion"),
+    "SleightofHand": skillValue("sleight of hand"),
+    "Stealth ": skillValue("stealth"),
+    "Survival": skillValue("survival"),
+
+    "Passive": String(passivePerception),
+    "ProficienciesLang": sheet.proficiencies ?? "",
+
+    // Equipment & narrative bits we have
+    "Equipment": (sheet.inventory ?? []).join("\n"),
+    "Features and Traits": sheet.notes ?? "",
+  };
+
+  // Drop empty strings so we never overwrite with "" (leaves the field blank instead of
+  // explicitly setting an empty value, which keeps the sheet's default rendering).
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(values)) {
+    if (v !== undefined && v !== "") out[k] = v;
+  }
+  return out;
+}
+
+function setTextFieldSafe(form: PDFForm, name: string, value: string): void {
+  try {
+    const f = form.getTextField(name);
+    f.setText(value);
+  } catch {
+    // Field name doesn't exist on this template variant — silently skip per spec
+    // ("Any field not present in our sheetJson is simply skipped").
+  }
+}
+
+export interface FillOptions {
+  /** When true (default), flatten the form so values render in non-form-aware viewers
+   * and are baked into the printed sheet. */
+  flatten?: boolean;
+}
+
+export async function fillCharacterSheetPdf(
+  character: Character & { ownerDisplayName?: string },
+  options: FillOptions = {},
+): Promise<Uint8Array> {
+  const flatten = options.flatten ?? true;
+
+  const templateBytes = await loadTemplateBytes();
+  // pdf-lib mutates the doc — load a fresh copy each call from the cached bytes.
+  const doc = await PDFDocument.load(templateBytes);
   doc.setTitle(`${character.name} — D&D 5e Character Sheet`);
   doc.setAuthor("Delve");
   doc.setSubject("D&D 5e Character Sheet");
   doc.setCreator("Delve");
 
-  const font = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const italic = await doc.embedFont(StandardFonts.HelveticaOblique);
-  void italic;
-
-  const page = doc.addPage([PAGE_W, PAGE_H]);
-  const ctx: DrawCtx = { page, font, bold, doc, cursor: { y: PAGE_H - MARGIN } };
-
-  // Header
-  ctx.page.drawText(character.name, { x: MARGIN, y: ctx.cursor.y - 18, size: 22, font: bold, color: INK });
-  ctx.cursor.y -= 22;
-  const subtitle = `Level ${character.level} ${character.race} ${character.class}`;
-  ctx.page.drawText(subtitle, { x: MARGIN, y: ctx.cursor.y - 12, size: 11, font, color: MUTED });
-  if (character.ownerDisplayName) {
-    const playerLabel = `Player: ${character.ownerDisplayName}`;
-    const w = font.widthOfTextAtSize(playerLabel, 9);
-    ctx.page.drawText(playerLabel, { x: PAGE_W - MARGIN - w, y: ctx.cursor.y - 12, size: 9, font, color: MUTED });
-  }
-  ctx.cursor.y -= 18;
-
-  // Brand mark (subtle)
-  const brand = "DELVE — D&D 5E CHARACTER SHEET";
-  const brandW = bold.widthOfTextAtSize(brand, 7);
-  ctx.page.drawText(brand, { x: PAGE_W - MARGIN - brandW, y: PAGE_H - MARGIN + 2, size: 7, font: bold, color: ACCENT });
-
-  ctx.cursor.y -= 4;
-  ctx.page.drawLine({
-    start: { x: MARGIN, y: ctx.cursor.y },
-    end: { x: PAGE_W - MARGIN, y: ctx.cursor.y },
-    thickness: 1, color: ACCENT,
-  });
-  ctx.cursor.y -= 16;
-
-  // Top stat row: AC, HP, Speed, Prof Bonus
-  const usable = PAGE_W - MARGIN * 2;
-  const gap = 8;
-  const boxW = (usable - gap * 3) / 4;
-  const boxH = 46;
-  const topY = ctx.cursor.y;
-  statBox(ctx.page, font, bold, MARGIN + 0 * (boxW + gap), topY, boxW, boxH, "Armor Class", String(sheet.armorClass ?? 10));
-  const hpStr = `${sheet.currentHp ?? 0} / ${sheet.maxHp ?? 0}`;
-  statBox(ctx.page, font, bold, MARGIN + 1 * (boxW + gap), topY, boxW, boxH, "Hit Points", hpStr);
-  statBox(ctx.page, font, bold, MARGIN + 2 * (boxW + gap), topY, boxW, boxH, "Speed", `${sheet.speed ?? 30} ft`);
-  const pb = sheet.proficiencyBonus ?? 2;
-  statBox(ctx.page, font, bold, MARGIN + 3 * (boxW + gap), topY, boxW, boxH, "Proficiency", pb >= 0 ? `+${pb}` : `${pb}`);
-  ctx.cursor.y -= boxH + 14;
-
-  // Ability scores row
-  const abilities: Array<[string, number]> = [
-    ["STR", sheet.strength ?? 10],
-    ["DEX", sheet.dexterity ?? 10],
-    ["CON", sheet.constitution ?? 10],
-    ["INT", sheet.intelligence ?? 10],
-    ["WIS", sheet.wisdom ?? 10],
-    ["CHA", sheet.charisma ?? 10],
-  ];
-  const aboxW = (usable - gap * 5) / 6;
-  const aboxH = 64;
-  const aTop = ctx.cursor.y;
-  abilities.forEach(([label, score], i) => {
-    abilityBox(ctx.page, font, bold, MARGIN + i * (aboxW + gap), aTop, aboxW, aboxH, label, score);
-  });
-  ctx.cursor.y -= aboxH + 12;
-
-  // Two-column area for Saving Throws + Skills
-  const savingThrows = sheet.savingThrows ?? [];
-  const skills = sheet.skills ?? [];
-
-  const colGap = 14;
-  const colW = (usable - colGap) / 2;
-
-  if (savingThrows.length > 0 || skills.length > 0) {
-    sectionHeader(ctx, "Proficiencies");
-    const stColX = MARGIN;
-    const skColX = MARGIN + colW + colGap;
-    const startY = ctx.cursor.y;
-
-    // Saving Throws
-    ctx.page.drawText("Saving Throws", { x: stColX, y: startY, size: 9, font: bold, color: INK });
-    let stY = startY - 14;
-    if (savingThrows.length === 0) {
-      ctx.page.drawText("None", { x: stColX, y: stY, size: 9, font: italic, color: MUTED });
-      stY -= 12;
-    } else {
-      for (const st of savingThrows) {
-        ctx.page.drawText("●", { x: stColX, y: stY, size: 7, font, color: ACCENT });
-        ctx.page.drawText(st, { x: stColX + 12, y: stY, size: 9, font, color: INK });
-        stY -= 12;
-      }
-    }
-
-    // Skills
-    ctx.page.drawText("Skills", { x: skColX, y: startY, size: 9, font: bold, color: INK });
-    let skY = startY - 14;
-    if (skills.length === 0) {
-      ctx.page.drawText("None", { x: skColX, y: skY, size: 9, font: italic, color: MUTED });
-      skY -= 12;
-    } else {
-      for (const sk of skills) {
-        ctx.page.drawText("●", { x: skColX, y: skY, size: 7, font, color: ACCENT });
-        ctx.page.drawText(sk, { x: skColX + 12, y: skY, size: 9, font, color: INK });
-        skY -= 12;
-      }
-    }
-
-    ctx.cursor.y = Math.min(stY, skY) - 6;
+  const form = doc.getForm();
+  const values = buildFieldValues(character);
+  for (const [name, value] of Object.entries(values)) {
+    setTextFieldSafe(form, name, value);
   }
 
-  // Attacks
-  if (sheet.attacks && sheet.attacks.length > 0) {
-    sectionHeader(ctx, "Attacks & Spellcasting");
-    const headers: Array<[string, number]> = [["Name", 0.5], ["Bonus", 0.2], ["Damage", 0.3]];
-    const tableW = usable;
-    let x = MARGIN;
-    for (const [label, frac] of headers) {
-      ctx.page.drawText(label.toUpperCase(), { x, y: ctx.cursor.y, size: 7, font: bold, color: MUTED });
-      x += tableW * frac;
-    }
-    ctx.cursor.y -= 10;
-    ctx.page.drawLine({
-      start: { x: MARGIN, y: ctx.cursor.y },
-      end: { x: PAGE_W - MARGIN, y: ctx.cursor.y },
-      thickness: 0.4, color: RULE,
-    });
-    ctx.cursor.y -= 12;
-    for (const atk of sheet.attacks) {
-      ensureSpace(ctx, 14);
-      x = MARGIN;
-      ctx.page.drawText(atk.name, { x, y: ctx.cursor.y, size: 9, font, color: INK });
-      x += tableW * 0.5;
-      const bonusStr = atk.bonus >= 0 ? `+${atk.bonus}` : `${atk.bonus}`;
-      ctx.page.drawText(bonusStr, { x, y: ctx.cursor.y, size: 9, font, color: INK });
-      x += tableW * 0.2;
-      ctx.page.drawText(atk.damage, { x, y: ctx.cursor.y, size: 9, font, color: INK });
-      ctx.cursor.y -= 13;
-    }
-  }
-
-  // Cantrips & spells
-  const hasMagic = (sheet.cantrips && sheet.cantrips.length > 0) || (sheet.spells && sheet.spells.length > 0);
-  if (hasMagic) {
-    sectionHeader(ctx, "Spells");
-    if (sheet.cantrips && sheet.cantrips.length > 0) {
-      ensureSpace(ctx, 14);
-      ctx.page.drawText("Cantrips", { x: MARGIN, y: ctx.cursor.y, size: 9, font: bold, color: INK });
-      ctx.cursor.y -= 12;
-      const text = sheet.cantrips.join(" • ");
-      const lines = wrapText(text, font, 9, usable);
-      for (const line of lines) {
-        ensureSpace(ctx, 12);
-        ctx.page.drawText(line, { x: MARGIN, y: ctx.cursor.y, size: 9, font, color: INK });
-        ctx.cursor.y -= 12;
-      }
-      ctx.cursor.y -= 4;
-    }
-    if (sheet.spells && sheet.spells.length > 0) {
-      for (const sp of sheet.spells) {
-        ensureSpace(ctx, 14);
-        const lvlPart = typeof sp.level === "number" ? ` (lvl ${sp.level})` : "";
-        ctx.page.drawText(`${sp.name}${lvlPart}`, { x: MARGIN, y: ctx.cursor.y, size: 9, font: bold, color: INK });
-        ctx.cursor.y -= 12;
-        if (sp.description) {
-          const lines = wrapText(sp.description, font, 8, usable - 8);
-          for (const line of lines) {
-            ensureSpace(ctx, 11);
-            ctx.page.drawText(line, { x: MARGIN + 8, y: ctx.cursor.y, size: 8, font, color: MUTED });
-            ctx.cursor.y -= 11;
-          }
-          ctx.cursor.y -= 2;
-        }
-      }
-    }
-  }
-
-  // Inventory
-  if (sheet.inventory && sheet.inventory.length > 0) {
-    sectionHeader(ctx, "Inventory");
-    const text = sheet.inventory.join(" • ");
-    const lines = wrapText(text, font, 9, usable);
-    for (const line of lines) {
-      ensureSpace(ctx, 12);
-      ctx.page.drawText(line, { x: MARGIN, y: ctx.cursor.y, size: 9, font, color: INK });
-      ctx.cursor.y -= 12;
-    }
-  }
-
-  // Notes
-  if (sheet.notes && sheet.notes.trim() !== "") {
-    sectionHeader(ctx, "Notes");
-    const lines = wrapText(sheet.notes, font, 9, usable);
-    for (const line of lines) {
-      ensureSpace(ctx, 12);
-      ctx.page.drawText(line, { x: MARGIN, y: ctx.cursor.y, size: 9, font, color: INK });
-      ctx.cursor.y -= 12;
-    }
-  }
+  if (flatten) form.flatten();
 
   return await doc.save();
 }

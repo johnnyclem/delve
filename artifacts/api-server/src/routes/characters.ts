@@ -4,7 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { UpdateCharacterBody, CreateCharacterBody } from "@workspace/api-zod";
-import { fillCharacterSheetPdf } from "../lib/character-pdf";
+import { fillCharacterSheetPdf, TemplateMissingError } from "../lib/character-pdf";
 
 const router: IRouter = Router();
 
@@ -170,13 +170,21 @@ router.get("/characters/:id/pdf", requireAuth, requireCampaignMember, async (req
   try {
     pdfBytes = await fillCharacterSheetPdf({ ...char, ownerDisplayName: owner?.displayName ?? "Unknown" });
   } catch (err) {
+    if (err instanceof TemplateMissingError) {
+      console.error("PDF template missing", err);
+      res.status(503).json({ error: "PDF template not configured" });
+      return;
+    }
     console.error("PDF generation failed", err);
     res.status(500).json({ error: "Failed to generate PDF" });
     return;
   }
 
-  const safeName = char.name.replace(/[^a-z0-9-_ ]/gi, "_").replace(/\s+/g, "_") || `character-${char.id}`;
-  const filename = `${safeName}-character-sheet.pdf`;
+  // Filename: "Delve - <name>.pdf". Allow alphanumerics, space, dash; replace anything
+  // else with an underscore (this also strips quotes and CR/LF, neutralising Content-
+  // Disposition header injection). Cap the character-name portion at 80 chars per spec.
+  const sanitized = char.name.replace(/[^a-z0-9 \-]/gi, "_").trim().slice(0, 80) || `character-${char.id}`;
+  const filename = `Delve - ${sanitized}.pdf`;
   const disposition = req.query.download === "1" ? "attachment" : "inline";
 
   res.setHeader("Content-Type", "application/pdf");
