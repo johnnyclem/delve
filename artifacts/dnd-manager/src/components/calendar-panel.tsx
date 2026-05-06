@@ -413,14 +413,44 @@ function inviteStatusVisual(status: string): { color: string; bg: string; Icon: 
   return { color: "text-muted-foreground", bg: "bg-muted/20", Icon: MailQuestion, label: status };
 }
 
+// Must match INVITE_RESEND_COOLDOWN_MS on the server. The server is the source of truth
+// (and will 429 if the client somehow gets ahead); we mirror it here purely for UX.
+const INVITE_RESEND_COOLDOWN_SECONDS = 30;
+
 function InviteDeliveryPanel({ eventId, scrollIntoView }: { eventId: number; scrollIntoView?: boolean }) {
   const { data, isLoading, refetch, isFetching } = useGetEventInviteLogs(eventId);
   const resendMutation = useResendEventInvites();
   const resendOneMutation = useResendEventInvite();
   const [pendingLogId, setPendingLogId] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const logs = (data as EventInviteLog[] | undefined) ?? [];
+
+  // Tick once a second so the per-row cooldown counter and disabled state stay live.
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  // Most recent successful send per recipient → used to gate the Retry button.
+  const lastSentByUser = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const log of logs) {
+      if (log.status !== "sent") continue;
+      const t = new Date(log.attemptedAt).getTime();
+      const prev = m.get(log.userId);
+      if (prev === undefined || t > prev) m.set(log.userId, t);
+    }
+    return m;
+  }, [logs]);
+
+  const cooldownSecondsFor = (userId: string): number => {
+    const lastSent = lastSentByUser.get(userId);
+    if (lastSent === undefined) return 0;
+    const elapsed = Math.floor((nowMs - lastSent) / 1000);
+    return Math.max(0, INVITE_RESEND_COOLDOWN_SECONDS - elapsed);
+  };
 
   const handleResendOne = (log: EventInviteLog) => {
     setPendingLogId(log.id);
@@ -561,17 +591,34 @@ function InviteDeliveryPanel({ eventId, scrollIntoView }: { eventId: number; scr
                     <v.Icon className="h-3 w-3" /> {v.label}
                   </span>
                   <p className="text-[10px] text-muted-foreground tabular-nums">{when}</p>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleResendOne(log)}
-                    disabled={resendOneMutation.isPending || resendMutation.isPending}
-                    className={`h-6 text-[11px] px-2 gap-1 ${log.status === "failed" ? "text-red-300 hover:text-red-200" : "text-muted-foreground"}`}
-                    data-testid={`button-retry-invite-${log.id}`}
-                  >
-                    <RefreshCw className={`h-3 w-3 ${pendingLogId === log.id ? "animate-spin" : ""}`} />
-                    {pendingLogId === log.id ? "Retrying…" : "Retry"}
-                  </Button>
+                  {(() => {
+                    const cooldown = cooldownSecondsFor(log.userId);
+                    const onCooldown = cooldown > 0;
+                    const tooltip = onCooldown
+                      ? `Just sent — available again in ${cooldown}s`
+                      : log.status === "failed"
+                        ? "Resend invite to this player"
+                        : "Send another invite to this player";
+                    return (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleResendOne(log)}
+                        disabled={resendOneMutation.isPending || resendMutation.isPending || onCooldown}
+                        title={tooltip}
+                        aria-label={tooltip}
+                        className={`h-6 text-[11px] px-2 gap-1 ${log.status === "failed" ? "text-red-300 hover:text-red-200" : "text-muted-foreground"}`}
+                        data-testid={`button-retry-invite-${log.id}`}
+                      >
+                        <RefreshCw className={`h-3 w-3 ${pendingLogId === log.id ? "animate-spin" : ""}`} />
+                        {pendingLogId === log.id
+                          ? "Retrying…"
+                          : onCooldown
+                            ? `Wait ${cooldown}s`
+                            : "Retry"}
+                      </Button>
+                    );
+                  })()}
                 </div>
               </li>
             );

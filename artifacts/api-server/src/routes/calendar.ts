@@ -13,6 +13,9 @@ const router: IRouter = Router();
 
 const MAX_OCCURRENCES = 26;
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Minimum gap between successful invite resends to the same recipient on the same event.
+// Keeps a fast-clicking DM (or a flaky network hammering Retry) from blasting the same player.
+export const INVITE_RESEND_COOLDOWN_MS = 30_000;
 
 export function generateOccurrenceDates(
   start: Date,
@@ -458,6 +461,38 @@ router.post("/calendar/:id/notifications/:logId/resend", requireAuth, requireCam
   if (!originalLog) {
     res.status(404).json({ error: "Invite log not found" });
     return;
+  }
+
+  // Per-recipient cooldown so a click-happy DM can't blast the same player.
+  // Only successful sends count toward the gap — failed/skipped attempts can be retried immediately.
+  const [recentSent] = await db
+    .select({ attemptedAt: notificationLogsTable.attemptedAt })
+    .from(notificationLogsTable)
+    .where(and(
+      eq(notificationLogsTable.calendarEventId, id),
+      eq(notificationLogsTable.campaignId, campaignId),
+      eq(notificationLogsTable.userId, originalLog.userId),
+      eq(notificationLogsTable.kind, "event_invite"),
+      eq(notificationLogsTable.status, "sent"),
+    ))
+    .orderBy(desc(notificationLogsTable.attemptedAt))
+    .limit(1);
+
+  if (recentSent) {
+    const elapsedMs = Date.now() - new Date(recentSent.attemptedAt).getTime();
+    if (elapsedMs < INVITE_RESEND_COOLDOWN_MS) {
+      const remainingMs = INVITE_RESEND_COOLDOWN_MS - elapsedMs;
+      const retryAfterSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+      res
+        .status(429)
+        .set("Retry-After", String(retryAfterSeconds))
+        .json({
+          error: `Just sent an invite to ${originalLog.recipientName}. Please wait ${retryAfterSeconds}s before retrying.`,
+          retryAfterSeconds,
+          retryAt: new Date(Date.now() + remainingMs).toISOString(),
+        });
+      return;
+    }
   }
 
   const newLog = await sendEventInviteForOne({
