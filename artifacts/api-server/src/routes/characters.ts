@@ -112,7 +112,8 @@ router.patch("/characters/:id", requireAuth, requireCampaignMember, async (req, 
     return;
   }
 
-  if (existing.ownerUserId !== userId) {
+  const userIsDm = await isDm(campaignId, userId);
+  if (existing.ownerUserId !== userId && !userIsDm) {
     res.status(403).json({ error: "Not your character" });
     return;
   }

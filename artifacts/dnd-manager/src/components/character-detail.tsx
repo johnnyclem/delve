@@ -1,15 +1,42 @@
 import { useState } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer } from "lucide-react";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership } from "@workspace/api-client-react";
 import type { Character, CharacterSheet } from "@workspace/api-client-react";
 import { useUser } from "@clerk/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
+import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE } from "@/lib/dnd-options";
+
+interface DetailsDraft {
+  name: string;
+  raceSelect: string;
+  customRace: string;
+  classSelect: string;
+  customClass: string;
+  level: number;
+}
+
+const buildDetailsDraft = (char: Character): DetailsDraft => ({
+  name: char.name,
+  raceSelect: DND_RACES.includes(char.race) ? char.race : CUSTOM_OPTION_VALUE,
+  customRace: DND_RACES.includes(char.race) ? "" : char.race,
+  classSelect: DND_CLASSES.includes(char.class) ? char.class : CUSTOM_OPTION_VALUE,
+  customClass: DND_CLASSES.includes(char.class) ? "" : char.class,
+  level: char.level,
+});
 
 export default function CharacterDetail({ id, onBack }: { id: number; onBack?: () => void }) {
   const { user } = useUser();
@@ -20,12 +47,15 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [editSheet, setEditSheet] = useState<CharacterSheet | null>(null);
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailsDraft, setDetailsDraft] = useState<DetailsDraft | null>(null);
 
   const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
   const isDm = membership?.role === "dm";
+  const canEditDetails = (isOwner || isDm) && !!char;
   const canExport = (isOwner || isDm) && !!char;
-  const exportDisabled = editing;
+  const exportDisabled = editing || editingDetails;
   const sheet: CharacterSheet | undefined = editing ? (editSheet ?? undefined) : char?.sheetJson;
 
   const startEditing = () => {
@@ -44,6 +74,57 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
           queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(id) });
           queryClient.invalidateQueries({ queryKey: getListCharactersQueryKey() });
           toast({ title: "Character updated!" });
+        },
+      },
+    );
+  };
+
+  const startEditingDetails = () => {
+    if (!char) return;
+    setDetailsDraft(buildDetailsDraft(char));
+    setEditingDetails(true);
+  };
+
+  const cancelEditingDetails = () => {
+    setEditingDetails(false);
+    setDetailsDraft(null);
+  };
+
+  const resolvedDraftRace = detailsDraft
+    ? (detailsDraft.raceSelect === CUSTOM_OPTION_VALUE ? detailsDraft.customRace : detailsDraft.raceSelect)
+    : "";
+  const resolvedDraftClass = detailsDraft
+    ? (detailsDraft.classSelect === CUSTOM_OPTION_VALUE ? detailsDraft.customClass : detailsDraft.classSelect)
+    : "";
+  const detailsValid = !!detailsDraft
+    && detailsDraft.name.trim() !== ""
+    && resolvedDraftRace.trim() !== ""
+    && resolvedDraftClass.trim() !== ""
+    && detailsDraft.level >= 1
+    && detailsDraft.level <= 20;
+
+  const saveDetails = () => {
+    if (!detailsDraft || !detailsValid) return;
+    updateMutation.mutate(
+      {
+        id,
+        data: {
+          name: detailsDraft.name.trim(),
+          race: resolvedDraftRace.trim(),
+          class: resolvedDraftClass.trim(),
+          level: detailsDraft.level,
+        },
+      },
+      {
+        onSuccess: () => {
+          setEditingDetails(false);
+          setDetailsDraft(null);
+          queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListCharactersQueryKey() });
+          toast({ title: "Character updated!" });
+        },
+        onError: () => {
+          toast({ title: "Failed to update character", variant: "destructive" });
         },
       },
     );
@@ -68,10 +149,16 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
             Back
           </Button>
         )}
-        {isOwner && !editing && (
+        {isOwner && !editing && !editingDetails && (
           <Button variant="outline" size="sm" onClick={startEditing} data-testid="button-edit-character">
             <Edit className="h-4 w-4 mr-1" />
             Edit
+          </Button>
+        )}
+        {canEditDetails && !editing && !editingDetails && (
+          <Button variant="outline" size="sm" onClick={startEditingDetails} data-testid="button-edit-details">
+            <Pencil className="h-4 w-4 mr-1" />
+            Edit details
           </Button>
         )}
         {editing && (
@@ -116,12 +203,111 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
         )}
       </div>
 
-      <div>
-        <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-character-name">{char.name}</h2>
-        <p className="text-muted-foreground">
-          Level <span className="font-mono tabular-nums">{char.level}</span> {char.race} {char.class} — played by {char.ownerDisplayName}
-        </p>
-      </div>
+      {editingDetails && detailsDraft ? (
+        <div className="rounded-2xl glass-panel p-5 space-y-4" data-testid="edit-details-form">
+          <div className="space-y-2">
+            <Label htmlFor="edit-name">Character Name</Label>
+            <Input
+              id="edit-name"
+              value={detailsDraft.name}
+              onChange={(e) => setDetailsDraft({ ...detailsDraft, name: e.target.value })}
+              data-testid="input-edit-name"
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Race</Label>
+              <Select
+                value={detailsDraft.raceSelect}
+                onValueChange={(v) => setDetailsDraft({ ...detailsDraft, raceSelect: v })}
+              >
+                <SelectTrigger data-testid="select-edit-race">
+                  <SelectValue placeholder="Select a race" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DND_RACES.map((r) => (
+                    <SelectItem key={r} value={r}>{r}</SelectItem>
+                  ))}
+                  <SelectItem value={CUSTOM_OPTION_VALUE}>Other (custom)</SelectItem>
+                </SelectContent>
+              </Select>
+              {detailsDraft.raceSelect === CUSTOM_OPTION_VALUE && (
+                <Input
+                  value={detailsDraft.customRace}
+                  onChange={(e) => setDetailsDraft({ ...detailsDraft, customRace: e.target.value })}
+                  placeholder="Enter custom race"
+                  data-testid="input-edit-custom-race"
+                />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Class</Label>
+              <Select
+                value={detailsDraft.classSelect}
+                onValueChange={(v) => setDetailsDraft({ ...detailsDraft, classSelect: v })}
+              >
+                <SelectTrigger data-testid="select-edit-class">
+                  <SelectValue placeholder="Select a class" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DND_CLASSES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                  <SelectItem value={CUSTOM_OPTION_VALUE}>Other (custom)</SelectItem>
+                </SelectContent>
+              </Select>
+              {detailsDraft.classSelect === CUSTOM_OPTION_VALUE && (
+                <Input
+                  value={detailsDraft.customClass}
+                  onChange={(e) => setDetailsDraft({ ...detailsDraft, customClass: e.target.value })}
+                  placeholder="Enter custom class"
+                  data-testid="input-edit-custom-class"
+                />
+              )}
+            </div>
+          </div>
+          <div className="space-y-2 max-w-[200px]">
+            <Label htmlFor="edit-level">Level</Label>
+            <Input
+              id="edit-level"
+              type="number"
+              min={1}
+              max={20}
+              value={detailsDraft.level}
+              onChange={(e) => setDetailsDraft({
+                ...detailsDraft,
+                level: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)),
+              })}
+              data-testid="input-edit-level"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={saveDetails}
+              disabled={updateMutation.isPending || !detailsValid}
+              data-testid="button-save-details"
+            >
+              Save
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={cancelEditingDetails}
+              data-testid="button-cancel-details"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div>
+          <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-character-name">{char.name}</h2>
+          <p className="text-muted-foreground">
+            Level <span className="font-mono tabular-nums">{char.level}</span> {char.race} {char.class} — played by {char.ownerDisplayName}
+          </p>
+        </div>
+      )}
 
       {sheet && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

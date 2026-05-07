@@ -15,17 +15,7 @@ import { useCreateCharacter, getListCharactersQueryKey } from "@workspace/api-cl
 import type { CreateCharacterBody, CharacterSheet } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-
-const DND_RACES = [
-  "Dragonborn", "Dwarf", "Elf", "Gnome", "Half-Elf",
-  "Halfling", "Half-Orc", "Human", "Tiefling",
-];
-
-const DND_CLASSES = [
-  "Barbarian", "Bard", "Cleric", "Druid", "Fighter",
-  "Monk", "Paladin", "Ranger", "Rogue", "Sorcerer",
-  "Warlock", "Wizard",
-];
+import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE } from "@/lib/dnd-options";
 
 const DND_SKILLS = [
   "Acrobatics", "Animal Handling", "Arcana", "Athletics",
@@ -106,8 +96,8 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const resolvedRace = form.race === "__custom" ? form.customRace : form.race;
-  const resolvedClass = form.charClass === "__custom" ? form.customClass : form.charClass;
+  const resolvedRace = form.race === CUSTOM_OPTION_VALUE ? form.customRace : form.race;
+  const resolvedClass = form.charClass === CUSTOM_OPTION_VALUE ? form.customClass : form.charClass;
 
   const canProceedStep0 = form.name.trim() !== "" && resolvedRace.trim() !== "" && resolvedClass.trim() !== "";
 
@@ -229,10 +219,10 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                     {DND_RACES.map((r) => (
                       <SelectItem key={r} value={r}>{r}</SelectItem>
                     ))}
-                    <SelectItem value="__custom">Other (custom)</SelectItem>
+                    <SelectItem value={CUSTOM_OPTION_VALUE}>Other (custom)</SelectItem>
                   </SelectContent>
                 </Select>
-                {form.race === "__custom" && (
+                {form.race === CUSTOM_OPTION_VALUE && (
                   <Input
                     value={form.customRace}
                     onChange={(e) => update("customRace", e.target.value)}
@@ -252,10 +242,10 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                     {DND_CLASSES.map((c) => (
                       <SelectItem key={c} value={c}>{c}</SelectItem>
                     ))}
-                    <SelectItem value="__custom">Other (custom)</SelectItem>
+                    <SelectItem value={CUSTOM_OPTION_VALUE}>Other (custom)</SelectItem>
                   </SelectContent>
                 </Select>
-                {form.charClass === "__custom" && (
+                {form.charClass === CUSTOM_OPTION_VALUE && (
                   <Input
                     value={form.customClass}
                     onChange={(e) => update("customClass", e.target.value)}
