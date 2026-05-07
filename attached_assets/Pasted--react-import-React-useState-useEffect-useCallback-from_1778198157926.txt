@@ -1,0 +1,489 @@
+```react
+import React, { useState, useEffect, useCallback } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, onSnapshot, query, deleteDoc, getDoc } from 'firebase/firestore';
+import { 
+  Map as MapIcon, Eye, EyeOff, Save, Trash2, Plus, Grid, MousePointer2, Eraser, 
+  Share2, Settings, Info, Copy, Check, Users, Sword, Ghost, UserPlus, 
+  Dices, History, Home, Tent, Mountain, Compass, ChevronLeft
+} from 'lucide-react';
+
+// --- Firebase Setup ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'dnd-vtt-v2';
+
+// --- Constants ---
+const MAP_TYPES = {
+  dungeon: { label: 'Dungeon', icon: <Tent size={18}/>, color: '#1c1917' },
+  town: { label: 'Town/Tavern', icon: <Home size={18}/>, color: '#451a03' },
+  world: { label: 'World Map', icon: <Mountain size={18}/>, color: '#064e3b' }
+};
+
+const TILE_SETS = {
+  dungeon: [
+    { id: 'stone', label: 'Stone', emoji: '🪨', color: '#44403c' },
+    { id: 'wall', label: 'Wall', emoji: '🧱', color: '#1c1917' },
+    { id: 'water', label: 'Water', emoji: '💧', color: '#0c4a6e' },
+    { id: 'pit', label: 'Pit', emoji: '🕳️', color: '#000000' },
+  ],
+  town: [
+    { id: 'wood', label: 'Wood', emoji: '🪵', color: '#78350f' },
+    { id: 'cobble', label: 'Cobble', emoji: '🔘', color: '#57534e' },
+    { id: 'rug', label: 'Rug', emoji: '🧶', color: '#991b1b' },
+    { id: 'table', label: 'Table', emoji: '🍱', color: '#451a03' },
+  ],
+  world: [
+    { id: 'grass', label: 'Plains', emoji: '🌿', color: '#3f6212' },
+    { id: 'forest', label: 'Forest', emoji: '🌲', color: '#14532d' },
+    { id: 'mountain', label: 'Peak', emoji: '🏔️', color: '#71717a' },
+    { id: 'ocean', label: 'Ocean', emoji: '🌊', color: '#1e3a8a' },
+  ]
+};
+
+const TOKEN_GROUPS = {
+  PLAYER: { id: 'player', label: 'Players', color: 'bg-blue-600', emojis: ['🧙‍♂️', '🧝‍♀️', '🧔', '🏹', '🛡️', '🐈‍⬛'] },
+  MONSTER: { id: 'monster', label: 'Monsters', color: 'bg-red-600', emojis: ['🐉', '👹', '💀', '🐺', '🕷️', '🧟'] },
+  NPC: { id: 'npc', label: 'NPCs', color: 'bg-amber-600', emojis: ['👨‍🌾', '👵', '👳‍♂️', '👸', '🧙', '🐶'] },
+};
+
+const DICE_TYPES = [4, 6, 8, 10, 12, 20, 100];
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [view, setView] = useState('menu'); // 'menu' or 'editor'
+  const [mapsList, setMapsList] = useState([]);
+  const [activeMap, setActiveMap] = useState(null);
+  
+  const [isDM, setIsDM] = useState(true);
+  const [activeTab, setActiveTab] = useState('tools');
+  const [selectedTool, setSelectedTool] = useState('brush');
+  const [selectedTile, setSelectedTile] = useState('stone');
+  const [selectedToken, setSelectedToken] = useState(null);
+  const [diceHistory, setDiceHistory] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [draggedTokenId, setDraggedTokenId] = useState(null);
+
+  // --- Initialization & Auth ---
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // --- Listen to all maps (for Menu) ---
+  useEffect(() => {
+    if (!user) return;
+    const mapsRef = collection(db, 'artifacts', appId, 'public', 'data', 'maps');
+    const unsubscribe = onSnapshot(query(mapsRef), (snapshot) => {
+      setMapsList(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // --- Listen to the specific Active Map (for Editor) ---
+  useEffect(() => {
+    if (!user || !activeMap?.id) return;
+    const mapRef = doc(db, 'artifacts', appId, 'public', 'data', 'maps', activeMap.id);
+    const unsubscribe = onSnapshot(mapRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setActiveMap(docSnap.data());
+      }
+    });
+    return () => unsubscribe();
+  }, [user, activeMap?.id]);
+
+  const showStatus = (msg) => {
+    setStatus(msg);
+    setTimeout(() => setStatus(null), 3000);
+  };
+
+  // --- Map Management ---
+  const handleCreateMap = async (type) => {
+    const rows = 15, cols = 15;
+    const defaultTile = TILE_SETS[type][0].id;
+    const newMapId = `map_${Date.now()}`;
+    const newMap = {
+      id: newMapId,
+      name: `Untitled ${MAP_TYPES[type].label}`,
+      type: type,
+      rows,
+      cols,
+      tiles: Array(rows * cols).fill(null).map((_, i) => ({ id: i, type: defaultTile, revealed: false })),
+      tokens: [],
+      updatedAt: Date.now()
+    };
+
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'maps', newMapId), newMap);
+      setActiveMap(newMap);
+      setSelectedTile(defaultTile);
+      setView('editor');
+    } catch (err) {
+      showStatus("Error creating map");
+    }
+  };
+
+  const handleOpenMap = (map) => {
+    setActiveMap(map);
+    setSelectedTile(TILE_SETS[map.type][0].id);
+    setView('editor');
+  };
+
+  const handleDeleteMap = async (e, id) => {
+    e.stopPropagation();
+    if (!confirm("Delete this map?")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'maps', id));
+      showStatus("Map deleted");
+    } catch (err) {
+      showStatus("Delete failed");
+    }
+  };
+
+  const syncMap = async (updatedData) => {
+    if (!activeMap?.id) return;
+    try {
+      const mapRef = doc(db, 'artifacts', appId, 'public', 'data', 'maps', activeMap.id);
+      await setDoc(mapRef, { ...updatedData, updatedAt: Date.now() }, { merge: true });
+    } catch (err) {
+      console.error("Sync failed", err);
+    }
+  };
+
+  // --- Map Interaction ---
+  const handleTileInteraction = (index) => {
+    if (!isDM && selectedTool !== 'move') return;
+
+    const newTiles = [...activeMap.tiles];
+    const tile = { ...newTiles[index] };
+
+    if (selectedTool === 'brush') {
+      tile.type = selectedTile;
+    } else if (selectedTool === 'reveal') {
+      tile.revealed = true;
+    } else if (selectedTool === 'hide') {
+      tile.revealed = false;
+    } else if (selectedTool === 'eraser') {
+      tile.type = TILE_SETS[activeMap.type][0].id;
+      tile.revealed = false;
+    } else if (selectedTool === 'token' && selectedToken) {
+      const newToken = {
+        id: `tkn_${Date.now()}`,
+        index,
+        ...selectedToken,
+        name: `${selectedToken.label} ${activeMap.tokens.length + 1}`
+      };
+      syncMap({ ...activeMap, tokens: [...activeMap.tokens, newToken] });
+      return;
+    }
+
+    newTiles[index] = tile;
+    syncMap({ ...activeMap, tiles: newTiles });
+  };
+
+  const moveToken = (tokenId, targetIndex) => {
+    const newTokens = activeMap.tokens.map(t => 
+      t.id === tokenId ? { ...t, index: targetIndex } : t
+    );
+    syncMap({ ...activeMap, tokens: newTokens });
+    setDraggedTokenId(null);
+  };
+
+  const handleRoll = (sides) => {
+    const result = Math.floor(Math.random() * sides) + 1;
+    const roll = { id: Date.now(), sides, result, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    setDiceHistory(prev => [roll, ...prev].slice(0, 15));
+  };
+
+  // --- Views ---
+  if (view === 'menu') {
+    return (
+      <div className="min-h-screen bg-stone-950 text-stone-200 flex flex-col items-center justify-center p-6 font-sans">
+        <div className="max-w-4xl w-full bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row">
+          <div className="p-8 md:w-1/2 flex flex-col justify-center border-b md:border-b-0 md:border-r border-stone-800">
+            <div className="w-16 h-16 bg-amber-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg rotate-3">
+              <Compass className="w-10 h-10 text-white" />
+            </div>
+            <h1 className="text-4xl font-black text-white mb-2">Dungeon VTT</h1>
+            <p className="text-stone-400 mb-8 leading-relaxed">Create, manage, and share D&D maps with real-time Fog of War and token tracking.</p>
+            
+            <h2 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-4">Start New Campaign</h2>
+            <div className="grid grid-cols-1 gap-3">
+              {Object.entries(MAP_TYPES).map(([id, cfg]) => (
+                <button 
+                  key={id}
+                  onClick={() => handleCreateMap(id)}
+                  className="group flex items-center gap-4 p-4 bg-stone-800/50 hover:bg-stone-800 border border-stone-700 hover:border-amber-500/50 rounded-xl transition-all"
+                >
+                  <div className="w-12 h-12 bg-stone-900 rounded-lg flex items-center justify-center text-amber-500 group-hover:scale-110 transition-transform">
+                    {cfg.icon}
+                  </div>
+                  <div className="text-left">
+                    <div className="font-bold text-stone-100">{cfg.label}</div>
+                    <div className="text-[10px] text-stone-500 uppercase tracking-tighter">Initialize {id} grid</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-8 md:w-1/2 bg-stone-900/50 flex flex-col">
+            <h2 className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-4">Saved Adventures</h2>
+            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-3 min-h-[300px]">
+              {mapsList.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center opacity-30 text-stone-500">
+                  <MapIcon size={40} className="mb-2" />
+                  <p className="text-sm">No maps found</p>
+                </div>
+              ) : (
+                mapsList.map(m => (
+                  <div 
+                    key={m.id} 
+                    onClick={() => handleOpenMap(m)}
+                    className="flex items-center justify-between p-4 bg-stone-800 border border-stone-700 hover:border-stone-500 rounded-xl cursor-pointer transition-all group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-stone-950 rounded text-stone-400">{MAP_TYPES[m.type]?.icon || <MapIcon size={14}/>}</div>
+                      <div>
+                        <div className="font-bold text-sm truncate w-32">{m.name}</div>
+                        <div className="text-[10px] text-stone-500 uppercase">{m.type} • {m.rows}x{m.cols}</div>
+                      </div>
+                    </div>
+                    <button onClick={(e) => handleDeleteMap(e, m.id)} className="text-stone-600 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+        {status && <div className="mt-4 px-4 py-2 bg-amber-600 text-white rounded-full text-xs font-bold animate-bounce">{status}</div>}
+      </div>
+    );
+  }
+
+  // --- Editor View ---
+  const currentTileSet = TILE_SETS[activeMap.type] || TILE_SETS.dungeon;
+
+  return (
+    <div className="h-screen bg-stone-950 text-stone-200 flex flex-col font-sans overflow-hidden">
+      {/* Header */}
+      <header className="h-14 border-b border-stone-800 bg-stone-900 px-4 flex items-center justify-between shrink-0 z-30">
+        <div className="flex items-center gap-3">
+          <button onClick={() => setView('menu')} className="p-2 hover:bg-stone-800 rounded-lg text-stone-400 flex items-center gap-2 text-xs font-bold">
+            <ChevronLeft size={16} /> Back
+          </button>
+          <div className="h-6 w-[1px] bg-stone-800 mx-1"></div>
+          <div className="flex items-center gap-2">
+            <div className="text-amber-500">{MAP_TYPES[activeMap.type]?.icon}</div>
+            <input 
+              value={activeMap.name}
+              onChange={(e) => syncMap({ ...activeMap, name: e.target.value })}
+              className="bg-transparent font-bold text-sm focus:ring-1 focus:ring-amber-500 rounded px-2 outline-none w-48"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="flex bg-stone-950 rounded-lg p-1 border border-stone-800">
+            <button onClick={() => setIsDM(true)} className={`px-4 py-1 rounded text-[10px] font-bold uppercase transition-all ${isDM ? 'bg-amber-600 text-white' : 'text-stone-500'}`}>DM View</button>
+            <button onClick={() => setIsDM(false)} className={`px-4 py-1 rounded text-[10px] font-bold uppercase transition-all ${!isDM ? 'bg-amber-600 text-white' : 'text-stone-500'}`}>Player</button>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        {isDM && (
+          <aside className="w-72 bg-stone-900 border-r border-stone-800 flex flex-col shrink-0">
+            <div className="flex border-b border-stone-800">
+              <button onClick={() => setActiveTab('tools')} className={`flex-1 p-3 flex justify-center ${activeTab === 'tools' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-stone-500'}`}><MousePointer2 size={18}/></button>
+              <button onClick={() => setActiveTab('tokens')} className={`flex-1 p-3 flex justify-center ${activeTab === 'tokens' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-stone-500'}`}><Users size={18}/></button>
+              <button onClick={() => setActiveTab('dice')} className={`flex-1 p-3 flex justify-center ${activeTab === 'dice' ? 'text-amber-500 border-b-2 border-amber-500' : 'text-stone-500'}`}><Dices size={18}/></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6">
+              {activeTab === 'tools' && (
+                <>
+                  <section>
+                    <Label>Tools</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <EditorTool active={selectedTool === 'brush'} icon={<MousePointer2 size={14}/>} label="Paint" onClick={() => setSelectedTool('brush')} />
+                      <EditorTool active={selectedTool === 'reveal'} icon={<Eye size={14}/>} label="Reveal" onClick={() => setSelectedTool('reveal')} />
+                      <EditorTool active={selectedTool === 'hide'} icon={<EyeOff size={14}/>} label="Hide" onClick={() => setSelectedTool('hide')} />
+                      <EditorTool active={selectedTool === 'eraser'} icon={<Eraser size={14}/>} label="Wipe" onClick={() => setSelectedTool('eraser')} />
+                    </div>
+                  </section>
+                  <section>
+                    <Label>Palette ({activeMap.type})</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {currentTileSet.map(tile => (
+                        <button
+                          key={tile.id}
+                          onClick={() => { setSelectedTile(tile.id); setSelectedTool('brush'); }}
+                          className={`flex items-center gap-2 p-2 rounded border-2 transition-all ${selectedTile === tile.id && selectedTool === 'brush' ? 'border-amber-500 bg-amber-500/10' : 'border-stone-800 bg-stone-800/50'}`}
+                        >
+                          <span className="text-xl">{tile.emoji}</span>
+                          <span className="text-[10px] font-bold uppercase truncate">{tile.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {activeTab === 'tokens' && (
+                <section className="space-y-4">
+                  {Object.values(TOKEN_GROUPS).map(group => (
+                    <div key={group.id}>
+                      <Label>{group.label}</Label>
+                      <div className="grid grid-cols-4 gap-1">
+                        {group.emojis.map((emo, i) => (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              setSelectedToken({ type: group.id, emoji: emo, color: group.color, label: group.label.slice(0,-1) });
+                              setSelectedTool('token');
+                            }}
+                            className={`h-10 flex items-center justify-center text-xl rounded bg-stone-800 border-2 transition-all ${selectedToken?.emoji === emo && selectedTool === 'token' ? 'border-amber-500 scale-105' : 'border-transparent'}`}
+                          >
+                            {emo}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <Label>On Map ({activeMap.tokens.length})</Label>
+                  <div className="space-y-1">
+                    {activeMap.tokens.map(t => (
+                      <div key={t.id} className="flex items-center justify-between p-2 bg-stone-800 rounded text-xs">
+                        <span className="flex items-center gap-2">{t.emoji} <span className="text-stone-400">{t.name}</span></span>
+                        <button onClick={() => syncMap({ ...activeMap, tokens: activeMap.tokens.filter(tk => tk.id !== t.id) })} className="text-stone-600 hover:text-red-500"><Trash2 size={12}/></button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {activeTab === 'dice' && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-4 gap-2">
+                    {DICE_TYPES.map(d => (
+                      <button key={d} onClick={() => handleRoll(d)} className="flex flex-col items-center justify-center p-3 bg-stone-800 hover:bg-stone-700 border border-stone-700 rounded-lg active:scale-95 transition-all">
+                        <span className="text-[10px] font-black text-amber-500">d{d}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="space-y-1 max-h-[300px] overflow-y-auto custom-scrollbar">
+                    {diceHistory.map(roll => (
+                      <div key={roll.id} className="p-2 flex justify-between items-center bg-stone-950/40 rounded border border-stone-800">
+                        <span className="text-[10px] text-stone-500">d{roll.sides} • {roll.time}</span>
+                        <span className={`font-black ${roll.result === roll.sides ? 'text-amber-400' : 'text-white'}`}>{roll.result}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+
+        {/* Board */}
+        <main className="flex-1 bg-stone-950 p-8 overflow-auto flex items-start justify-center custom-scrollbar">
+          <div 
+            className="grid shadow-[0_0_100px_rgba(0,0,0,0.5)] bg-stone-900 p-2 rounded"
+            style={{ 
+              gridTemplateColumns: `repeat(${activeMap.cols}, 52px)`,
+              gridTemplateRows: `repeat(${activeMap.rows}, 52px)` 
+            }}
+          >
+            {activeMap.tiles.map((tile, idx) => {
+              const tileData = currentTileSet.find(t => t.id === tile.type) || currentTileSet[0];
+              const isRevealed = tile.revealed;
+              const tokens = activeMap.tokens.filter(t => t.index === idx);
+              
+              const displayContent = isDM || isRevealed;
+              
+              return (
+                <div
+                  key={idx}
+                  onMouseDown={() => {
+                    if (draggedTokenId) moveToken(draggedTokenId, idx);
+                    else handleTileInteraction(idx);
+                  }}
+                  onMouseEnter={(e) => {
+                    if (e.buttons === 1 && isDM && selectedTool !== 'token' && !draggedTokenId) handleTileInteraction(idx);
+                  }}
+                  className={`w-[52px] h-[52px] flex items-center justify-center text-2xl relative border-[0.5px] border-black/20 ${isDM ? 'cursor-crosshair' : ''}`}
+                  style={{ 
+                    backgroundColor: displayContent ? tileData.color : '#000',
+                    opacity: (isDM && !isRevealed) ? 0.4 : 1
+                  }}
+                >
+                  {displayContent && <span>{tileData.emoji}</span>}
+                  
+                  {/* Tokens Layer */}
+                  {tokens.map(token => (
+                    <div 
+                      key={token.id}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setDraggedTokenId(token.id);
+                      }}
+                      className={`absolute z-10 w-9 h-9 rounded-full border-2 border-white/50 flex items-center justify-center text-lg shadow-xl cursor-grab active:cursor-grabbing ${token.color} ${draggedTokenId === token.id ? 'ring-4 ring-amber-500 scale-125 z-20' : ''}`}
+                    >
+                      {token.emoji}
+                    </div>
+                  ))}
+
+                  {isDM && !isRevealed && (
+                    <div className="absolute top-1 right-1 opacity-20"><EyeOff size={10} /></div>
+                  )}
+                  {isDM && (
+                    <div className="absolute inset-0 opacity-0 hover:opacity-100 bg-white/5 pointer-events-none transition-opacity"></div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </main>
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #444; }
+      `}} />
+    </div>
+  );
+};
+
+const Label = ({ children }) => (
+  <h3 className="text-[9px] font-black text-stone-600 uppercase tracking-widest mb-3">{children}</h3>
+);
+
+const EditorTool = ({ active, icon, label, onClick }) => (
+  <button 
+    onClick={onClick}
+    className={`flex items-center gap-2 px-3 py-2 rounded text-[10px] font-bold uppercase transition-all ${active ? 'bg-amber-600 text-white shadow-lg' : 'bg-stone-800 text-stone-500 border border-stone-700'}`}
+  >
+    {icon} <span>{label}</span>
+  </button>
+);
+
+export default App;
+
+```
