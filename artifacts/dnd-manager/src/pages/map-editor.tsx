@@ -261,19 +261,19 @@ export default function MapEditorPage() {
     );
   }
 
-  if (isLoading || !local) {
-    return (
-      <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground p-8 flex items-center gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground p-8 space-y-3">
         <p className="text-sm text-red-400">Could not load this map.</p>
         <Button variant="outline" onClick={() => setLocation("/maps")}>Back to maps</Button>
+      </div>
+    );
+  }
+
+  if (isLoading || !local) {
+    return (
+      <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground p-8 flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
       </div>
     );
   }
