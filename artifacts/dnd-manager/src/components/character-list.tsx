@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, ChevronRight, Plus } from "lucide-react";
+import { BookOpen, ChevronRight, Plus, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useListCharacters } from "@workspace/api-client-react";
@@ -31,6 +31,36 @@ export default function CharacterListPanel() {
       onSelect={(id) => setView({ mode: "detail", id })}
       onCreate={() => setView({ mode: "create" })}
     />
+  );
+}
+
+function resolvePortraitSrc(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("/objects/")) return `${import.meta.env.BASE_URL}api/storage${url}`;
+  return url;
+}
+
+function CharacterPortraitThumb({ url, name }: { url: string | null | undefined; name: string }) {
+  const src = resolvePortraitSrc(url);
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={`${name} portrait`}
+        loading="lazy"
+        className="h-14 w-14 rounded-xl object-cover shrink-0 border border-[rgba(255,255,255,0.08)]"
+        data-testid="img-character-thumb"
+      />
+    );
+  }
+  return (
+    <div
+      className="h-14 w-14 rounded-xl shrink-0 flex items-center justify-center bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]"
+      data-testid="img-character-thumb-placeholder"
+    >
+      <User className="h-6 w-6 text-muted-foreground" />
+    </div>
   );
 }
 
@@ -75,15 +105,16 @@ function CharacterGrid({ onSelect, onCreate }: { onSelect: (id: number) => void;
               className="text-left rounded-2xl glass-panel-hover p-5"
               data-testid={`card-character-${char.id}`}
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-foreground">{char.name}</h3>
+              <div className="flex items-center gap-4">
+                <CharacterPortraitThumb url={char.portraitUrl} name={char.name} />
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-foreground truncate">{char.name}</h3>
                   <p className="text-sm text-muted-foreground">
                     Level <span className="font-mono tabular-nums">{char.level}</span> {char.race} {char.class}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">Played by {char.ownerDisplayName}</p>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">Played by {char.ownerDisplayName}</p>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </div>
             </motion.button>
           ))}
