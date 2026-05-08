@@ -170,7 +170,17 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
       });
-      if (!reqRes.ok) throw new Error("upload-url");
+      if (!reqRes.ok) {
+        let description: string | undefined;
+        try {
+          const body = (await reqRes.json()) as { error?: string };
+          description = body?.error;
+        } catch {
+          // ignore non-JSON error bodies
+        }
+        toast({ title: "Upload failed", description, variant: "destructive" });
+        return;
+      }
       const { uploadURL, objectPath } = (await reqRes.json()) as { uploadURL: string; objectPath: string };
       const putRes = await fetch(uploadURL, {
         method: "PUT",
@@ -188,8 +198,24 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   };
 
   const handlePortraitFile = (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Please choose an image file", variant: "destructive" });
+    const MAX_PORTRAIT_BYTES = 5 * 1024 * 1024;
+    const ALLOWED_PORTRAIT_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    const fileType = (file.type || "").toLowerCase();
+    if (!ALLOWED_PORTRAIT_TYPES.includes(fileType)) {
+      toast({
+        title: "Unsupported file type",
+        description: "Please choose a PNG, JPEG, or WebP image.",
+        variant: "destructive",
+      });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (file.size > MAX_PORTRAIT_BYTES) {
+      toast({
+        title: "Image is too large",
+        description: `Portraits must be 5MB or smaller (this one is ${(file.size / (1024 * 1024)).toFixed(1)}MB).`,
+        variant: "destructive",
+      });
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }

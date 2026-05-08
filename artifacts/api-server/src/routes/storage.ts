@@ -10,6 +10,9 @@ import { requireAuth, requireCampaignMember } from "../middlewares/requireAuth";
 const router: IRouter = Router();
 const objectStorageService = new ObjectStorageService();
 
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+const ALLOWED_UPLOAD_CONTENT_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"] as const;
+
 /**
  * POST /storage/uploads/request-url
  *
@@ -26,6 +29,21 @@ router.post("/storage/uploads/request-url", requireAuth, requireCampaignMember, 
 
   try {
     const { name, size, contentType } = parsed.data;
+
+    const normalizedType = contentType.toLowerCase().split(";")[0].trim();
+    if (!(ALLOWED_UPLOAD_CONTENT_TYPES as readonly string[]).includes(normalizedType)) {
+      res.status(400).json({
+        error: `Unsupported file type. Allowed types: PNG, JPEG, WebP.`,
+      });
+      return;
+    }
+    if (size > MAX_UPLOAD_BYTES) {
+      const maxMb = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024));
+      res.status(400).json({
+        error: `File is too large. Maximum size is ${maxMb}MB.`,
+      });
+      return;
+    }
 
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
