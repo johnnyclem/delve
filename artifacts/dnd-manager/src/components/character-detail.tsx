@@ -19,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE } from "@/lib/dnd-options";
+import { PortraitCropperDialog } from "@/components/portrait-cropper-dialog";
 
 interface DetailsDraft {
   name: string;
@@ -53,6 +54,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const [urlInputOpen, setUrlInputOpen] = useState(false);
   const [urlInputValue, setUrlInputValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [cropSource, setCropSource] = useState<{ src: string; name: string; type: string } | null>(null);
 
   const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
@@ -160,11 +162,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
     );
   };
 
-  const handlePortraitFile = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast({ title: "Please choose an image file", variant: "destructive" });
-      return;
-    }
+  const uploadPortraitFile = async (file: File) => {
     setUploading(true);
     try {
       const reqRes = await fetch(`${import.meta.env.BASE_URL}api/storage/uploads/request-url`, {
@@ -187,6 +185,39 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handlePortraitFile = (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please choose an image file", variant: "destructive" });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === "string" ? reader.result : null;
+      if (!src) {
+        toast({ title: "Could not read image", variant: "destructive" });
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        return;
+      }
+      setCropSource({ src, name: file.name, type: file.type });
+    };
+    reader.onerror = () => {
+      toast({ title: "Could not read image", variant: "destructive" });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropCancel = () => {
+    setCropSource(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleCropDone = async (file: File) => {
+    setCropSource(null);
+    await uploadPortraitFile(file);
   };
 
   if (isLoading) {
@@ -556,6 +587,15 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
           )}
         </div>
       )}
+
+      <PortraitCropperDialog
+        open={!!cropSource}
+        imageSrc={cropSource?.src ?? null}
+        fileName={cropSource?.name ?? "portrait"}
+        mimeType={cropSource?.type ?? "image/jpeg"}
+        onCancel={handleCropCancel}
+        onCropped={handleCropDone}
+      />
     </div>
   );
 }
