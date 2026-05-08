@@ -18,7 +18,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
-import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE } from "@/lib/dnd-options";
+import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE, proficiencyBonusForLevel } from "@/lib/dnd-options";
 import { PortraitCropperDialog } from "@/components/portrait-cropper-dialog";
 
 interface DetailsDraft {
@@ -109,18 +109,36 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
     && detailsDraft.level >= 1
     && detailsDraft.level <= 20;
 
+  const levelChanged = !!detailsDraft && !!char && detailsDraft.level !== char.level;
+  const currentProficiencyBonus = char?.sheetJson?.proficiencyBonus ?? 2;
+  const expectedForOldLevel = char ? proficiencyBonusForLevel(char.level) : 2;
+  const hasHomebrewOverride = !!char && currentProficiencyBonus !== expectedForOldLevel;
+  const newProficiencyBonus = detailsDraft ? proficiencyBonusForLevel(detailsDraft.level) : 2;
+  const proficiencyBonusWillChange =
+    levelChanged && !hasHomebrewOverride && newProficiencyBonus !== currentProficiencyBonus;
+
   const saveDetails = () => {
-    if (!detailsDraft || !detailsValid) return;
+    if (!detailsDraft || !detailsValid || !char) return;
+    const data: {
+      name: string;
+      race: string;
+      class: string;
+      level: number;
+      sheetJson?: CharacterSheet;
+    } = {
+      name: detailsDraft.name.trim(),
+      race: resolvedDraftRace.trim(),
+      class: resolvedDraftClass.trim(),
+      level: detailsDraft.level,
+    };
+    if (detailsDraft.level !== char.level && !hasHomebrewOverride) {
+      data.sheetJson = {
+        ...char.sheetJson,
+        proficiencyBonus: proficiencyBonusForLevel(detailsDraft.level),
+      };
+    }
     updateMutation.mutate(
-      {
-        id,
-        data: {
-          name: detailsDraft.name.trim(),
-          race: resolvedDraftRace.trim(),
-          class: resolvedDraftClass.trim(),
-          level: detailsDraft.level,
-        },
-      },
+      { id, data },
       {
         onSuccess: () => {
           setEditingDetails(false);
@@ -394,6 +412,14 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
               })}
               data-testid="input-edit-level"
             />
+            {proficiencyBonusWillChange && (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="text-proficiency-bonus-preview"
+              >
+                Proficiency bonus will become +{newProficiencyBonus}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <Button

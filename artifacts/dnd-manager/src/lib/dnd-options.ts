@@ -10,3 +10,8 @@ export const DND_CLASSES = [
 ];
 
 export const CUSTOM_OPTION_VALUE = "__custom";
+
+export function proficiencyBonusForLevel(level: number): number {
+  const lvl = Math.max(1, Math.min(20, Math.floor(level)));
+  return Math.ceil(lvl / 4) + 1;
+}

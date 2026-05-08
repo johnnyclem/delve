@@ -15,7 +15,7 @@ import { useCreateCharacter, getListCharactersQueryKey } from "@workspace/api-cl
 import type { CreateCharacterBody, CharacterSheet } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE } from "@/lib/dnd-options";
+import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE, proficiencyBonusForLevel } from "@/lib/dnd-options";
 
 const DND_SKILLS = [
   "Acrobatics", "Animal Handling", "Arcana", "Athletics",
@@ -264,7 +264,14 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                 min={1}
                 max={20}
                 value={form.level}
-                onChange={(e) => update("level", Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+                onChange={(e) => {
+                  const lvl = Math.max(1, Math.min(20, parseInt(e.target.value) || 1));
+                  setForm((prev) => ({
+                    ...prev,
+                    level: lvl,
+                    proficiencyBonus: proficiencyBonusForLevel(lvl),
+                  }));
+                }}
                 data-testid="input-level"
               />
             </div>
