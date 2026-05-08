@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil } from "lucide-react";
+import { useState, useRef } from "react";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership } from "@workspace/api-client-react";
 import type { Character, CharacterSheet } from "@workspace/api-client-react";
@@ -49,6 +49,10 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const [editSheet, setEditSheet] = useState<CharacterSheet | null>(null);
   const [editingDetails, setEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState<DetailsDraft | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [urlInputOpen, setUrlInputOpen] = useState(false);
+  const [urlInputValue, setUrlInputValue] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
@@ -131,6 +135,59 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   };
 
   const pdfUrl = `${import.meta.env.BASE_URL}api/characters/${id}/pdf`;
+
+  // Build the public-facing URL for the stored portrait. App Storage paths look
+  // like `/objects/...`; external URLs (http/https) are passed through.
+  const portraitSrc = (() => {
+    const url = char?.portraitUrl;
+    if (!url) return null;
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith("/objects/")) return `${import.meta.env.BASE_URL}api/storage${url}`;
+    return url;
+  })();
+
+  const savePortraitUrl = (portraitUrl: string | null) => {
+    updateMutation.mutate(
+      { id, data: { portraitUrl } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListCharactersQueryKey() });
+          toast({ title: portraitUrl ? "Portrait updated" : "Portrait removed" });
+        },
+        onError: () => toast({ title: "Could not save portrait", variant: "destructive" }),
+      },
+    );
+  };
+
+  const handlePortraitFile = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Please choose an image file", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const reqRes = await fetch(`${import.meta.env.BASE_URL}api/storage/uploads/request-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: file.name, size: file.size, contentType: file.type }),
+      });
+      if (!reqRes.ok) throw new Error("upload-url");
+      const { uploadURL, objectPath } = (await reqRes.json()) as { uploadURL: string; objectPath: string };
+      const putRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+      if (!putRes.ok) throw new Error("upload");
+      savePortraitUrl(objectPath);
+    } catch {
+      toast({ title: "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   if (isLoading) {
     return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-64 rounded-2xl" /></div>;
@@ -301,11 +358,110 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
           </div>
         </div>
       ) : (
-        <div>
+        <div className="flex items-start gap-4">
+          <div
+            className="relative h-24 w-24 flex-shrink-0 rounded-2xl overflow-hidden bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]"
+            data-testid="character-portrait"
+          >
+            {portraitSrc ? (
+              <img
+                src={portraitSrc}
+                alt={`${char.name} portrait`}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  // Fallback gracefully when the URL is unreachable.
+                  (e.currentTarget as HTMLImageElement).style.display = "none";
+                }}
+                data-testid="img-character-portrait"
+              />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-muted-foreground">
+                <UserIcon className="h-10 w-10" />
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
           <h2 className="text-2xl font-semibold text-foreground tracking-tight" data-testid="text-character-name">{char.name}</h2>
           <p className="text-muted-foreground">
             Level <span className="font-mono tabular-nums">{char.level}</span> {char.race} {char.class} — played by {char.ownerDisplayName}
           </p>
+          {isOwner && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handlePortraitFile(f);
+                }}
+                data-testid="input-portrait-file"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={uploading}
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="button-upload-portrait"
+              >
+                <Upload className="h-4 w-4 mr-1" />
+                {uploading ? "Uploading…" : portraitSrc ? "Change portrait" : "Upload portrait"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={uploading}
+                onClick={() => {
+                  setUrlInputValue(typeof char.portraitUrl === "string" && /^https?:/i.test(char.portraitUrl) ? char.portraitUrl : "");
+                  setUrlInputOpen((v) => !v);
+                }}
+                data-testid="button-portrait-url-toggle"
+              >
+                <LinkIcon className="h-4 w-4 mr-1" />
+                Use URL
+              </Button>
+              {portraitSrc && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={uploading}
+                  onClick={() => savePortraitUrl(null)}
+                  data-testid="button-remove-portrait"
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          )}
+          {isOwner && urlInputOpen && (
+            <div className="mt-2 flex gap-2 max-w-md">
+              <Input
+                type="url"
+                placeholder="https://example.com/portrait.png"
+                value={urlInputValue}
+                onChange={(e) => setUrlInputValue(e.target.value)}
+                data-testid="input-portrait-url"
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  const trimmed = urlInputValue.trim();
+                  if (!trimmed) return;
+                  if (!/^https?:\/\//i.test(trimmed)) {
+                    toast({ title: "URL must start with http:// or https://", variant: "destructive" });
+                    return;
+                  }
+                  savePortraitUrl(trimmed);
+                  setUrlInputOpen(false);
+                }}
+                data-testid="button-save-portrait-url"
+              >
+                Save
+              </Button>
+            </div>
+          )}
+          </div>
         </div>
       )}
 

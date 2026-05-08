@@ -258,6 +258,20 @@ export interface FillOptions {
   /** When true (default), flatten the form so values render in non-form-aware viewers
    * and are baked into the printed sheet. */
   flatten?: boolean;
+  /** Optional portrait image bytes to embed in the sheet header. The caller is
+   * responsible for fetching the image; this function silently skips embedding
+   * when bytes are missing or the format isn't supported. */
+  portrait?: { bytes: Uint8Array; contentType?: string } | null;
+}
+
+function detectImageKind(bytes: Uint8Array, contentType?: string): "png" | "jpg" | null {
+  const ct = (contentType ?? "").toLowerCase();
+  if (ct.includes("png")) return "png";
+  if (ct.includes("jpeg") || ct.includes("jpg")) return "jpg";
+  // Magic-byte sniff as a fallback (e.g. when content-type is missing/octet-stream).
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "png";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpg";
+  return null;
 }
 
 export async function fillCharacterSheetPdf(
@@ -278,6 +292,34 @@ export async function fillCharacterSheetPdf(
   const values = buildFieldValues(character);
   for (const [name, value] of Object.entries(values)) {
     setTextFieldSafe(form, name, value);
+  }
+
+  // Embed the portrait next to the character name in the header. The official 5e
+  // sheet has a blank rectangle in the upper-right of page 1; we draw the image
+  // there at a fixed size so it sits beside the CharacterName field.
+  if (options.portrait?.bytes && options.portrait.bytes.length > 0) {
+    const kind = detectImageKind(options.portrait.bytes, options.portrait.contentType);
+    if (kind) {
+      try {
+        const img = kind === "png"
+          ? await doc.embedPng(options.portrait.bytes)
+          : await doc.embedJpg(options.portrait.bytes);
+        const page = doc.getPage(0);
+        const { width, height } = page.getSize();
+        // Target a square box ~110pt in the upper-right header area, scaled to
+        // preserve aspect ratio.
+        const boxSize = 110;
+        const scale = Math.min(boxSize / img.width, boxSize / img.height);
+        const drawW = img.width * scale;
+        const drawH = img.height * scale;
+        const x = width - drawW - 36; // 36pt right margin
+        const y = height - drawH - 36; // 36pt top margin
+        page.drawImage(img, { x, y, width: drawW, height: drawH });
+      } catch {
+        // Embedding failed (corrupt bytes, unsupported variant, etc.) — fall
+        // back gracefully to a portrait-less sheet.
+      }
+    }
   }
 
   if (flatten) form.flatten();

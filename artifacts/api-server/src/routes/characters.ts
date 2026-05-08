@@ -5,6 +5,29 @@ import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/re
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { UpdateCharacterBody, CreateCharacterBody } from "@workspace/api-zod";
 import { fillCharacterSheetPdf, TemplateMissingError } from "../lib/character-pdf";
+import { ObjectStorageService, ObjectNotFoundError } from "../lib/objectStorage";
+
+const objectStorageService = new ObjectStorageService();
+
+async function fetchPortraitBytes(portraitUrl: string | null): Promise<{ bytes: Uint8Array; contentType?: string } | null> {
+  if (!portraitUrl) return null;
+  // Only embed assets stored in our own App Storage bucket. Server-fetching an
+  // arbitrary user-supplied http(s) URL would be an SSRF sink (internal services,
+  // cloud metadata endpoints, etc.), and the PDF spec explicitly allows graceful
+  // fallback when the portrait can't be embedded — so externally hosted portraits
+  // simply don't appear in the PDF (they still render in the browser via the
+  // user's own client fetching the URL directly).
+  if (!portraitUrl.startsWith("/objects/")) return null;
+  try {
+    const file = await objectStorageService.getObjectEntityFile(portraitUrl);
+    const [buf] = await file.download();
+    const [meta] = await file.getMetadata();
+    return { bytes: new Uint8Array(buf), contentType: typeof meta.contentType === "string" ? meta.contentType : undefined };
+  } catch (err) {
+    if (err instanceof ObjectNotFoundError) return null;
+    return null;
+  }
+}
 
 const router: IRouter = Router();
 
@@ -169,7 +192,11 @@ router.get("/characters/:id/pdf", requireAuth, requireCampaignMember, async (req
 
   let pdfBytes: Uint8Array;
   try {
-    pdfBytes = await fillCharacterSheetPdf({ ...char, ownerDisplayName: owner?.displayName ?? "Unknown" });
+    const portrait = await fetchPortraitBytes(char.portraitUrl ?? null);
+    pdfBytes = await fillCharacterSheetPdf(
+      { ...char, ownerDisplayName: owner?.displayName ?? "Unknown" },
+      { portrait },
+    );
   } catch (err) {
     if (err instanceof TemplateMissingError) {
       console.error("PDF template missing", err);
