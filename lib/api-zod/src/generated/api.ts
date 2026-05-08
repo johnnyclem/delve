@@ -1154,6 +1154,168 @@ export const RollDiceBody = zod.object({
 });
 
 /**
+ * @summary List all maps in the campaign
+ */
+export const ListMapsResponseItem = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["dungeon", "town", "world"]),
+  rows: zod.number(),
+  cols: zod.number(),
+  tokenCount: zod.number(),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListMapsResponse = zod.array(ListMapsResponseItem);
+
+/**
+ * @summary Create a new map (DM only)
+ */
+export const createMapBodyNameMax = 80;
+
+export const createMapBodyRowsMax = 30;
+
+export const createMapBodyColsMax = 30;
+
+export const CreateMapBody = zod.object({
+  name: zod.string().min(1).max(createMapBodyNameMax),
+  type: zod.enum(["dungeon", "town", "world"]),
+  rows: zod.number().min(1).max(createMapBodyRowsMax),
+  cols: zod.number().min(1).max(createMapBodyColsMax),
+});
+
+/**
+ * @summary Get a single map (fog-filtered for non-DMs)
+ */
+export const GetMapParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetMapResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["dungeon", "town", "world"]),
+  rows: zod.number(),
+  cols: zod.number(),
+  tiles: zod.array(
+    zod.object({
+      index: zod.number(),
+      type: zod
+        .string()
+        .nullable()
+        .describe(
+          "Tile type id from the palette. Null when unrevealed and the requester is not the DM.",
+        ),
+      revealed: zod.boolean(),
+    }),
+  ),
+  tokens: zod.array(
+    zod.object({
+      id: zod.string(),
+      index: zod.number(),
+      type: zod.enum(["player", "monster", "npc"]),
+      emoji: zod.string(),
+      color: zod.string(),
+      label: zod.string(),
+      name: zod.string(),
+    }),
+  ),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update a map's name, tiles, or tokens (DM only)
+ */
+export const UpdateMapParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateMapBodyNameMax = 80;
+
+export const updateMapBodyTokensMax = 50;
+
+export const UpdateMapBody = zod
+  .object({
+    name: zod.string().min(1).max(updateMapBodyNameMax).optional(),
+    tiles: zod
+      .array(
+        zod.object({
+          index: zod.number(),
+          type: zod
+            .string()
+            .nullable()
+            .describe(
+              "Tile type id from the palette. Null when unrevealed and the requester is not the DM.",
+            ),
+          revealed: zod.boolean(),
+        }),
+      )
+      .optional(),
+    tokens: zod
+      .array(
+        zod.object({
+          id: zod.string(),
+          index: zod.number(),
+          type: zod.enum(["player", "monster", "npc"]),
+          emoji: zod.string(),
+          color: zod.string(),
+          label: zod.string(),
+          name: zod.string(),
+        }),
+      )
+      .max(updateMapBodyTokensMax)
+      .optional(),
+  })
+  .describe("Partial update. Send only the fields you want to change.");
+
+export const UpdateMapResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  name: zod.string(),
+  type: zod.enum(["dungeon", "town", "world"]),
+  rows: zod.number(),
+  cols: zod.number(),
+  tiles: zod.array(
+    zod.object({
+      index: zod.number(),
+      type: zod
+        .string()
+        .nullable()
+        .describe(
+          "Tile type id from the palette. Null when unrevealed and the requester is not the DM.",
+        ),
+      revealed: zod.boolean(),
+    }),
+  ),
+  tokens: zod.array(
+    zod.object({
+      id: zod.string(),
+      index: zod.number(),
+      type: zod.enum(["player", "monster", "npc"]),
+      emoji: zod.string(),
+      color: zod.string(),
+      label: zod.string(),
+      name: zod.string(),
+    }),
+  ),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Delete a map (DM only)
+ */
+export const DeleteMapParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+/**
  * @summary Get the 20 most recent dice rolls
  */
 export const GetRecentRollsResponseItem = zod.object({

@@ -112,6 +112,14 @@ Public (no auth — HMAC-signed tokens):
 - GET /rsvp/:token?response=yes|no|maybe — idempotently records the RSVP and renders a themed confirmation page (idempotent + HMAC-signed → email-prefetch is harmless)
 - POST /dice/roll — roll dice
 - GET /dice/recent — recent rolls
+- GET /maps — list all maps in the campaign (summary; everyone)
+- POST /maps — create map (DM only)
+- GET /maps/:id — get map (server filters fog for non-DM: `tile.type` set to null and `tile.revealed` forced true on unrevealed cells; tokens always visible)
+- PATCH /maps/:id — update name/tiles/tokens (DM only; ≤50 tokens, rows/cols 1–30, body ≤50KB)
+- DELETE /maps/:id — delete map (DM only)
+
+## Maps / Fog-of-War VTT
+Frontend lives at `/maps` (menu) and `/maps/:id` (editor) as wouter routes (separate from dashboard tabs; dashboard sidebar `Maps` item routes to `/maps`). Three map types — `dungeon`, `town`, `world` — each with their own 4-tile palette and a default starting tile (stone/wood/grass). Editor stores all state on the server; player view polls every 5s via `useGetMap` `refetchInterval`. DM tools: brush, reveal, hide, eraser, plus drag-to-place tokens (player/monster/npc). Painting strokes are batched: all cell mutations apply locally on mousedown/enter, then a single `PATCH` flushes on mouseup. DM has a "Preview as player" toggle that simulates fog client-side without touching server data. Server-enforced fog: in `applyFogFilter`, any tile with `revealed=false` has its `type` set to `null` (player renders as black square) and is forced `revealed=true` so the client can't infer fog. Tokens are always sent. 50KB request cap and ≤50 tokens enforced server-side.
 
 ## Theme / Brand — "Delve"
 

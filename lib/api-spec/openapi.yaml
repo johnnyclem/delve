@@ -25,6 +25,8 @@ tags:
     description: AI recap generation
   - name: dashboard
     description: Dashboard summary
+  - name: maps
+    description: Battle maps with server-enforced fog of war
   - name: Storage
     description: Object storage upload and serving endpoints.
 
@@ -829,6 +831,147 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DiceRoll"
+
+  /maps:
+    get:
+      operationId: listMaps
+      tags: [maps]
+      summary: List all maps in the campaign
+      responses:
+        "200":
+          description: Map summaries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MapSummary"
+    post:
+      operationId: createMap
+      tags: [maps]
+      summary: Create a new map (DM only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMapBody"
+      responses:
+        "201":
+          description: Map created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Map"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Only the DM can create maps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /maps/{id}:
+    get:
+      operationId: getMap
+      tags: [maps]
+      summary: Get a single map (fog-filtered for non-DMs)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Map (with unrevealed tile types nulled for non-DMs)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Map"
+        "404":
+          description: Map not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateMap
+      tags: [maps]
+      summary: Update a map's name, tiles, or tokens (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMapBody"
+      responses:
+        "200":
+          description: Updated map
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Map"
+        "400":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Only the DM can edit maps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Map not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Patch body too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMap
+      tags: [maps]
+      summary: Delete a map (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Map deleted
+        "403":
+          description: Only the DM can delete maps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Map not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /dice/recent:
     get:
@@ -1736,6 +1879,173 @@ components:
         timezone:
           type: ["string", "null"]
           description: IANA timezone identifier (e.g. "America/Los_Angeles"). Pass null to clear and fall back to the campaign timezone.
+
+    MapTile:
+      type: object
+      properties:
+        index:
+          type: integer
+        type:
+          type: ["string", "null"]
+          description: Tile type id from the palette. Null when unrevealed and the requester is not the DM.
+        revealed:
+          type: boolean
+      required:
+        - index
+        - type
+        - revealed
+
+    MapToken:
+      type: object
+      properties:
+        id:
+          type: string
+        index:
+          type: integer
+        type:
+          type: string
+          enum: [player, monster, npc]
+        emoji:
+          type: string
+        color:
+          type: string
+        label:
+          type: string
+        name:
+          type: string
+      required:
+        - id
+        - index
+        - type
+        - emoji
+        - color
+        - label
+        - name
+
+    MapSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [dungeon, town, world]
+        rows:
+          type: integer
+        cols:
+          type: integer
+        tokenCount:
+          type: integer
+        createdByUserId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - name
+        - type
+        - rows
+        - cols
+        - tokenCount
+        - createdByUserId
+        - createdAt
+        - updatedAt
+
+    Map:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+          enum: [dungeon, town, world]
+        rows:
+          type: integer
+        cols:
+          type: integer
+        tiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapTile"
+        tokens:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapToken"
+        createdByUserId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - name
+        - type
+        - rows
+        - cols
+        - tiles
+        - tokens
+        - createdByUserId
+        - createdAt
+        - updatedAt
+
+    CreateMapBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        type:
+          type: string
+          enum: [dungeon, town, world]
+        rows:
+          type: integer
+          minimum: 1
+          maximum: 30
+        cols:
+          type: integer
+          minimum: 1
+          maximum: 30
+      required:
+        - name
+        - type
+        - rows
+        - cols
+
+    UpdateMapBody:
+      type: object
+      description: Partial update. Send only the fields you want to change.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        tiles:
+          type: array
+          items:
+            $ref: "#/components/schemas/MapTile"
+        tokens:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/MapToken"
 
     PartyMemberSummary:
       type: object

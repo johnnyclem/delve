@@ -526,6 +526,120 @@ export interface UpdateNotificationPrefsBody {
   timezone?: string | null;
 }
 
+export interface MapTile {
+  index: number;
+  /**
+   * Tile type id from the palette. Null when unrevealed and the requester is not the DM.
+   * @nullable
+   */
+  type: string | null;
+  revealed: boolean;
+}
+
+export type MapTokenType = (typeof MapTokenType)[keyof typeof MapTokenType];
+
+export const MapTokenType = {
+  player: "player",
+  monster: "monster",
+  npc: "npc",
+} as const;
+
+export interface MapToken {
+  id: string;
+  index: number;
+  type: MapTokenType;
+  emoji: string;
+  color: string;
+  label: string;
+  name: string;
+}
+
+export type MapSummaryType =
+  (typeof MapSummaryType)[keyof typeof MapSummaryType];
+
+export const MapSummaryType = {
+  dungeon: "dungeon",
+  town: "town",
+  world: "world",
+} as const;
+
+export interface MapSummary {
+  id: number;
+  campaignId: number;
+  name: string;
+  type: MapSummaryType;
+  rows: number;
+  cols: number;
+  tokenCount: number;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MapType = (typeof MapType)[keyof typeof MapType];
+
+export const MapType = {
+  dungeon: "dungeon",
+  town: "town",
+  world: "world",
+} as const;
+
+export interface Map {
+  id: number;
+  campaignId: number;
+  name: string;
+  type: MapType;
+  rows: number;
+  cols: number;
+  tiles: MapTile[];
+  tokens: MapToken[];
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CreateMapBodyType =
+  (typeof CreateMapBodyType)[keyof typeof CreateMapBodyType];
+
+export const CreateMapBodyType = {
+  dungeon: "dungeon",
+  town: "town",
+  world: "world",
+} as const;
+
+export interface CreateMapBody {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name: string;
+  type: CreateMapBodyType;
+  /**
+   * @minimum 1
+   * @maximum 30
+   */
+  rows: number;
+  /**
+   * @minimum 1
+   * @maximum 30
+   */
+  cols: number;
+}
+
+/**
+ * Partial update. Send only the fields you want to change.
+ */
+export interface UpdateMapBody {
+  /**
+   * @minLength 1
+   * @maxLength 80
+   */
+  name?: string;
+  tiles?: MapTile[];
+  /** @maxItems 50 */
+  tokens?: MapToken[];
+}
+
 export type DeleteEventParams = {
   series?: boolean;
 };

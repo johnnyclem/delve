@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon
 } from "lucide-react";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "dice";
+type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "dice";
 
 interface NavItem {
   id: NavId;
@@ -42,6 +43,7 @@ function buildNavItems(opts: { showMyCharacter: boolean }): NavItem[] {
     { id: "characters", label: "Characters", icon: BookOpen },
     { id: "sessions", label: "Sessions", icon: ScrollText },
     { id: "calendar", label: "Schedule", icon: Calendar },
+    { id: "maps", label: "Maps", icon: MapIcon },
     { id: "dice", label: "Dice", icon: Dice5 },
   );
   return items;
@@ -50,11 +52,16 @@ function buildNavItems(opts: { showMyCharacter: boolean }): NavItem[] {
 export default function DashboardPage() {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTabState] = useState<NavId>("overview");
   const [hasAutoLanded, setHasAutoLanded] = useState(false);
   // Wraps setActiveTab so any user-initiated navigation locks out the auto-land effect.
   const setActiveTab = (next: NavId) => {
     setHasAutoLanded(true);
+    if (next === "maps") {
+      setLocation("/maps");
+      return;
+    }
     setActiveTabState(next);
   };
   const [calendarDeepLink, setCalendarDeepLink] = useState<{ eventId: number; scrollToDelivery?: boolean } | null>(null);

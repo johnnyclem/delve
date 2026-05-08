@@ -10,6 +10,7 @@ import unsubscribeRouter from "./unsubscribe";
 import rsvpRouter from "./rsvp";
 import adminRouter from "./admin";
 import storageRouter from "./storage";
+import mapsRouter from "./maps";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(unsubscribeRouter);
 router.use(rsvpRouter);
 router.use(adminRouter);
 router.use(storageRouter);
+router.use(mapsRouter);
 
 export default router;
