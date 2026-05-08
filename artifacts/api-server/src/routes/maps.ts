@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, mapsTable, type MapRow, type MapTile, type MapToken, type MapType } from "@workspace/db";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateMapBody, UpdateMapBody } from "@workspace/api-zod";
@@ -36,7 +36,7 @@ export function applyFogFilter(
   // state from server data: strip the type AND force revealed=true. The
   // client treats `type === null` as a black/fog square.
   const tiles = map.tiles.map((t) =>
-    t.revealed ? t : { ...t, type: null as unknown as string, revealed: true },
+    t.revealed ? t : { ...t, type: null, revealed: true },
   );
   return { tiles, tokens: map.tokens };
 }
@@ -249,8 +249,6 @@ router.delete("/maps/:id", requireAuth, requireCampaignMember, async (req, res):
   }
 
   res.status(204).end();
-  // Touch sql so the import isn't unused if a future refactor needs it.
-  void sql;
 });
 
 export default router;

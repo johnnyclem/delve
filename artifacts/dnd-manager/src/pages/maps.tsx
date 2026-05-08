@@ -20,8 +20,6 @@ const MAP_TYPES = [
   { id: "world" as const, label: "World Map", icon: Mountain, blurb: "Plains, forest, peaks, ocean" },
 ];
 
-const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 export default function MapsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -206,7 +204,6 @@ export default function MapsPage() {
           )}
         </section>
       </main>
-      <div className="hidden">{basePath}</div>
     </div>
   );
 }

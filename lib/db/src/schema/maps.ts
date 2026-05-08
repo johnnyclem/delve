@@ -5,7 +5,8 @@ export type MapType = "dungeon" | "town" | "world";
 
 export type MapTile = {
   index: number;
-  type: string;
+  /** Tile type id from the palette, or null for fogged cells in non-DM responses. */
+  type: string | null;
   revealed: boolean;
 };
 

@@ -478,12 +478,10 @@ export default function MapEditorPage() {
           >
             {local.tiles.map((tile, idx) => {
               // Two views:
-              //  - Real player: server already nulled t.type for unrevealed → fog black.
-              //  - DM (default): full info; DM (preview-as-player): client-side fog using revealed flag.
-              const previewFogged = viewingAsPlayer && !tile.revealed;
+              //  - Real player: server already nulled t.type for unrevealed → render as fog.
+              //  - DM (default): full info; DM (preview-as-player): client-side fog from revealed flag.
               const showAsFog =
-                tile.type === null || // server-stripped (real player view)
-                (previewAsPlayer && !tile.revealed); // DM preview
+                tile.type === null || (previewAsPlayer && !tile.revealed);
               const tileType = tile.type;
               const tileMeta = tileType
                 ? palette.find((p) => p.id === tileType)
@@ -528,8 +526,6 @@ export default function MapEditorPage() {
                       <EyeOff className="h-2.5 w-2.5" />
                     </div>
                   )}
-                  {/* Use previewFogged so the linter is happy and as a hook for a future tooltip. */}
-                  <span data-preview-fogged={previewFogged ? "1" : "0"} className="hidden" />
                 </div>
               );
             })}
