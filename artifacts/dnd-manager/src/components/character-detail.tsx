@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp } from "lucide-react";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check } from "lucide-react";
 import LevelUpModal from "@/components/level-up-modal";
 import { Button } from "@/components/ui/button";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership, useGetCampaign } from "@workspace/api-client-react";
@@ -7,6 +7,17 @@ import type { Character, CharacterSheet } from "@workspace/api-client-react";
 import { useUser } from "@clerk/react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,11 +38,24 @@ import {
   proficiencyBonusForLevel,
   computeLevelUpSuggestion,
   suggestionHasChanges,
+  ABILITY_ORDER,
+  type AbilityName,
   type LevelUpSuggestion,
   type SpellSlotMap,
 } from "@/lib/dnd-options";
 import { getFeat } from "@/lib/dnd-feats";
 import { PortraitCropperDialog } from "@/components/portrait-cropper-dialog";
+
+type AsiEntry = NonNullable<CharacterSheet["asiHistory"]>[number];
+
+const ABILITY_SHORT: Record<AbilityName, string> = {
+  strength: "STR",
+  dexterity: "DEX",
+  constitution: "CON",
+  intelligence: "INT",
+  wisdom: "WIS",
+  charisma: "CHA",
+};
 
 interface DetailsDraft {
   name: string;
@@ -72,6 +96,10 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const [cropSource, setCropSource] = useState<{ src: string; name: string; type: string } | null>(null);
   const [levelUpOpen, setLevelUpOpen] = useState(false);
   const [levelUpTarget, setLevelUpTarget] = useState<number | null>(null);
+  const [asiPopoverOpenIdx, setAsiPopoverOpenIdx] = useState<number | null>(null);
+  const [asiEditingIdx, setAsiEditingIdx] = useState<number | null>(null);
+  const [asiEditDraft, setAsiEditDraft] = useState<AsiEntry | null>(null);
+  const [asiRemoveIdx, setAsiRemoveIdx] = useState<number | null>(null);
 
   const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
@@ -235,6 +263,77 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
       },
     );
   };
+
+  const canEditAsi = (isOwner || isDm) && !!char;
+
+  const startAsiEdit = (idx: number, entry: AsiEntry) => {
+    setAsiEditingIdx(idx);
+    setAsiEditDraft({ ...entry });
+  };
+
+  const cancelAsiEdit = () => {
+    setAsiEditingIdx(null);
+    setAsiEditDraft(null);
+  };
+
+  const saveAsiEdit = () => {
+    if (!char || asiEditingIdx === null || !asiEditDraft) return;
+    const history = char.sheetJson.asiHistory ?? [];
+    const old = history[asiEditingIdx];
+    if (!old) return;
+    const sheet: CharacterSheet = { ...char.sheetJson };
+    const oldScore = (sheet[old.ability] as number | undefined) ?? 10;
+    sheet[old.ability] = Math.max(1, oldScore - old.delta);
+    const targetScore = (sheet[asiEditDraft.ability] as number | undefined) ?? 10;
+    sheet[asiEditDraft.ability] = Math.max(1, targetScore + asiEditDraft.delta);
+    sheet.asiHistory = history.map((e, i) => (i === asiEditingIdx ? asiEditDraft : e));
+    updateMutation.mutate(
+      { id, data: { sheetJson: sheet } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListCharactersQueryKey() });
+          toast({ title: "Level-up entry updated" });
+          cancelAsiEdit();
+          setAsiPopoverOpenIdx(null);
+        },
+        onError: () => toast({ title: "Could not update entry", variant: "destructive" }),
+      },
+    );
+  };
+
+  const confirmAsiRemove = () => {
+    if (!char || asiRemoveIdx === null) return;
+    const history = char.sheetJson.asiHistory ?? [];
+    const entry = history[asiRemoveIdx];
+    if (!entry) return;
+    const sheet: CharacterSheet = { ...char.sheetJson };
+    const oldScore = (sheet[entry.ability] as number | undefined) ?? 10;
+    sheet[entry.ability] = Math.max(1, oldScore - entry.delta);
+    sheet.asiHistory = history.filter((_, i) => i !== asiRemoveIdx);
+    updateMutation.mutate(
+      { id, data: { sheetJson: sheet } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListCharactersQueryKey() });
+          toast({ title: "Level-up entry removed" });
+          setAsiRemoveIdx(null);
+          setAsiPopoverOpenIdx(null);
+        },
+        onError: () => toast({ title: "Could not remove entry", variant: "destructive" }),
+      },
+    );
+  };
+
+  const pendingRemoveEntry: AsiEntry | null =
+    char && asiRemoveIdx !== null ? (char.sheetJson.asiHistory ?? [])[asiRemoveIdx] ?? null : null;
+  const pendingRemoveOldScore = pendingRemoveEntry
+    ? ((char!.sheetJson[pendingRemoveEntry.ability] as number | undefined) ?? 10)
+    : 0;
+  const pendingRemoveNewScore = pendingRemoveEntry
+    ? Math.max(1, pendingRemoveOldScore - pendingRemoveEntry.delta)
+    : 0;
 
   const pdfUrl = `${import.meta.env.BASE_URL}api/characters/${id}/pdf`;
 
@@ -778,8 +877,147 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
                 {(["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"] as const).map((stat) => {
                   const val = sheet[stat] ?? 10;
                   const mod = Math.floor((val - 10) / 2);
-                  const entries = (sheet.asiHistory ?? []).filter((e) => e.ability === stat);
-                  const totalDelta = entries.reduce((sum, e) => sum + e.delta, 0);
+                  const allHistory = sheet.asiHistory ?? [];
+                  const entries = allHistory
+                    .map((e, originalIndex) => ({ entry: e, originalIndex }))
+                    .filter(({ entry }) => entry.ability === stat);
+                  const totalDelta = entries.reduce((sum, { entry }) => sum + entry.delta, 0);
+                  const badgeLabel = `+${totalDelta} ${
+                    entries.length === 1 ? `(L${entries[0].entry.level})` : `(×${entries.length})`
+                  }`;
+                  const badgeAria = `Ability score increased by ${totalDelta} from level-up boosts`;
+                  const renderEntries = (
+                    <div className="space-y-2" data-testid={`asi-tooltip-${stat}`}>
+                      <p className="text-xs font-semibold">From level-up boosts:</p>
+                      <ul className="space-y-1.5">
+                        {entries.map(({ entry, originalIndex }) => {
+                          const isEditingThis = asiEditingIdx === originalIndex && asiEditDraft;
+                          return (
+                            <li
+                              key={originalIndex}
+                              className="flex items-center gap-2 text-xs"
+                              data-testid={`asi-entry-${stat}-${originalIndex}`}
+                            >
+                              {isEditingThis ? (
+                                <div className="flex items-center gap-1.5 flex-1">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={20}
+                                    value={asiEditDraft.level}
+                                    onChange={(e) =>
+                                      setAsiEditDraft({
+                                        ...asiEditDraft,
+                                        level: Math.max(1, Math.min(20, parseInt(e.target.value) || 1)),
+                                      })
+                                    }
+                                    className="h-7 w-14 px-2 font-mono text-xs"
+                                    data-testid={`input-asi-edit-level-${originalIndex}`}
+                                    aria-label="Level"
+                                  />
+                                  <Select
+                                    value={asiEditDraft.ability}
+                                    onValueChange={(v) =>
+                                      setAsiEditDraft({ ...asiEditDraft, ability: v as AbilityName })
+                                    }
+                                  >
+                                    <SelectTrigger
+                                      className="h-7 w-24 text-xs"
+                                      data-testid={`select-asi-edit-ability-${originalIndex}`}
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {ABILITY_ORDER.map((a) => (
+                                        <SelectItem key={a} value={a}>
+                                          {ABILITY_SHORT[a]}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={2}
+                                    value={asiEditDraft.delta}
+                                    onChange={(e) =>
+                                      setAsiEditDraft({
+                                        ...asiEditDraft,
+                                        delta: Math.max(1, Math.min(2, parseInt(e.target.value) || 1)),
+                                      })
+                                    }
+                                    className="h-7 w-12 px-2 font-mono text-xs"
+                                    data-testid={`input-asi-edit-delta-${originalIndex}`}
+                                    aria-label="Delta"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={saveAsiEdit}
+                                    disabled={updateMutation.isPending}
+                                    aria-label="Save entry"
+                                    data-testid={`button-asi-save-${originalIndex}`}
+                                  >
+                                    <Check className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={cancelAsiEdit}
+                                    aria-label="Cancel edit"
+                                    data-testid={`button-asi-edit-cancel-${originalIndex}`}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <>
+                                  <span className="font-mono flex-1">
+                                    Level {entry.level}: +{entry.delta}
+                                  </span>
+                                  {canEditAsi && (
+                                    <>
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7"
+                                        onClick={() => startAsiEdit(originalIndex, entry)}
+                                        aria-label="Edit entry"
+                                        data-testid={`button-asi-edit-${originalIndex}`}
+                                      >
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-7 w-7 text-destructive hover:text-destructive"
+                                        onClick={() => setAsiRemoveIdx(originalIndex)}
+                                        aria-label="Remove entry"
+                                        data-testid={`button-asi-remove-${originalIndex}`}
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {!canEditAsi && (
+                        <p className="text-[10px] text-muted-foreground italic">
+                          Only the character&apos;s player or the DM can edit these.
+                        </p>
+                      )}
+                    </div>
+                  );
                   return (
                     <div key={stat} className="relative text-center p-2 rounded-lg bg-[rgba(255,255,255,0.03)]">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{stat.slice(0, 3)}</p>
@@ -796,29 +1034,47 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
                       )}
                       <p className="text-xs text-muted-foreground font-mono tabular-nums">{mod >= 0 ? `+${mod}` : mod}</p>
                       {!editing && entries.length > 0 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <button
-                              type="button"
-                              className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-primary/20 border border-primary/40 text-primary text-[10px] font-mono font-semibold tabular-nums leading-none hover:bg-primary/30 cursor-help"
-                              data-testid={`asi-badge-${stat}`}
-                              aria-label={`Ability score increased by ${totalDelta} from level-up boosts`}
-                            >
-                              +{totalDelta}{" "}
-                              {entries.length === 1 ? `(L${entries[0].level})` : `(×${entries.length})`}
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <div className="space-y-0.5" data-testid={`asi-tooltip-${stat}`}>
-                              <p className="font-semibold">From level-up boosts:</p>
-                              {entries.map((e, i) => (
-                                <p key={i} className="font-mono">
-                                  Level {e.level}: +{e.delta}
-                                </p>
-                              ))}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
+                        canEditAsi ? (
+                          <Popover
+                            open={asiPopoverOpenIdx === entries[0].originalIndex}
+                            onOpenChange={(o) => {
+                              if (o) {
+                                setAsiPopoverOpenIdx(entries[0].originalIndex);
+                              } else {
+                                setAsiPopoverOpenIdx(null);
+                                cancelAsiEdit();
+                              }
+                            }}
+                          >
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-primary/20 border border-primary/40 text-primary text-[10px] font-mono font-semibold tabular-nums leading-none hover:bg-primary/30 cursor-pointer"
+                                data-testid={`asi-badge-${stat}`}
+                                aria-label={badgeAria}
+                              >
+                                {badgeLabel}
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto min-w-[260px] p-3" align="end">
+                              {renderEntries}
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-primary/20 border border-primary/40 text-primary text-[10px] font-mono font-semibold tabular-nums leading-none hover:bg-primary/30 cursor-help"
+                                data-testid={`asi-badge-${stat}`}
+                                aria-label={badgeAria}
+                              >
+                                {badgeLabel}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>{renderEntries}</TooltipContent>
+                          </Tooltip>
+                        )
                       )}
                     </div>
                   );
@@ -907,6 +1163,41 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
           onClose={() => { setLevelUpOpen(false); setLevelUpTarget(null); }}
         />
       )}
+
+      <AlertDialog
+        open={asiRemoveIdx !== null}
+        onOpenChange={(o) => { if (!o) setAsiRemoveIdx(null); }}
+      >
+        <AlertDialogContent data-testid="asi-remove-confirm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove level-up boost?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRemoveEntry ? (
+                <>
+                  This will remove the +{pendingRemoveEntry.delta} {ABILITY_SHORT[pendingRemoveEntry.ability]}{" "}
+                  boost recorded at level {pendingRemoveEntry.level}.{" "}
+                  <span className="font-mono">
+                    {ABILITY_SHORT[pendingRemoveEntry.ability]} {pendingRemoveOldScore} → {pendingRemoveNewScore}
+                  </span>
+                  .
+                </>
+              ) : (
+                "This will remove the selected level-up boost entry."
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-asi-remove-cancel">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmAsiRemove}
+              disabled={updateMutation.isPending}
+              data-testid="button-asi-remove-confirm"
+            >
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <PortraitCropperDialog
         open={!!cropSource}
