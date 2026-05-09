@@ -25,13 +25,40 @@ router.patch("/campaign", requireAuth, async (req, res): Promise<void> => {
   }
 
   const updates: Record<string, unknown> = {};
-  const { timezone } = (req.body ?? {}) as { timezone?: unknown };
+  const { timezone, homebrewRules } = (req.body ?? {}) as {
+    timezone?: unknown;
+    homebrewRules?: unknown;
+  };
   if (timezone !== undefined) {
     if (typeof timezone !== "string" || !isValidTimeZone(timezone)) {
       res.status(400).json({ error: "Invalid IANA timezone identifier" });
       return;
     }
     updates.timezone = timezone;
+  }
+  if (homebrewRules !== undefined) {
+    if (typeof homebrewRules !== "object" || homebrewRules === null || Array.isArray(homebrewRules)) {
+      res.status(400).json({ error: "homebrewRules must be an object" });
+      return;
+    }
+    const raw = homebrewRules as Record<string, unknown>;
+    const normalized: Record<string, unknown> = {};
+    if (raw.disableProficiencyAutoProgression !== undefined) {
+      if (typeof raw.disableProficiencyAutoProgression !== "boolean") {
+        res.status(400).json({ error: "disableProficiencyAutoProgression must be a boolean" });
+        return;
+      }
+      normalized.disableProficiencyAutoProgression = raw.disableProficiencyAutoProgression;
+    }
+    if (raw.proficiencyBonusByLevel !== undefined && raw.proficiencyBonusByLevel !== null) {
+      const table = raw.proficiencyBonusByLevel;
+      if (!Array.isArray(table) || table.length !== 20 || !table.every((n) => typeof n === "number" && Number.isInteger(n) && n >= 1)) {
+        res.status(400).json({ error: "proficiencyBonusByLevel must be a 20-entry array of positive integers" });
+        return;
+      }
+      normalized.proficiencyBonusByLevel = table;
+    }
+    updates.homebrewRules = normalized;
   }
 
   if (Object.keys(updates).length === 0) {

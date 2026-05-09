@@ -53,6 +53,10 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Get current campaign
  */
+
+export const getCampaignResponseHomebrewRulesProficiencyBonusByLevelMin = 20;
+export const getCampaignResponseHomebrewRulesProficiencyBonusByLevelMax = 20;
+
 export const GetCampaignResponse = zod.object({
   id: zod.number(),
   name: zod.string(),
@@ -63,18 +67,66 @@ export const GetCampaignResponse = zod.object({
     .describe(
       'IANA time-zone identifier (e.g. \"America\/New_York\"). Defaults to \"UTC\".',
     ),
+  homebrewRules: zod
+    .object({
+      disableProficiencyAutoProgression: zod
+        .boolean()
+        .optional()
+        .describe(
+          "When true, changing a character's level does not auto-recalculate\ntheir proficiency bonus.\n",
+        ),
+      proficiencyBonusByLevel: zod
+        .array(zod.number().min(1))
+        .min(getCampaignResponseHomebrewRulesProficiencyBonusByLevelMin)
+        .max(getCampaignResponseHomebrewRulesProficiencyBonusByLevelMax)
+        .optional()
+        .describe(
+          "Custom 20-entry proficiency-bonus-by-level table. Index `level - 1`\nyields the bonus for that level. When omitted, the standard 5e\nformula is used.\n",
+        ),
+    })
+    .describe(
+      "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
+    ),
   createdAt: zod.coerce.date(),
 });
 
 /**
  * @summary Update campaign settings (DM only)
  */
+
+export const updateCampaignBodyHomebrewRulesProficiencyBonusByLevelMin = 20;
+export const updateCampaignBodyHomebrewRulesProficiencyBonusByLevelMax = 20;
+
 export const UpdateCampaignBody = zod.object({
   timezone: zod
     .string()
     .optional()
     .describe('IANA time-zone identifier (e.g. \"America\/Los_Angeles\").'),
+  homebrewRules: zod
+    .object({
+      disableProficiencyAutoProgression: zod
+        .boolean()
+        .optional()
+        .describe(
+          "When true, changing a character's level does not auto-recalculate\ntheir proficiency bonus.\n",
+        ),
+      proficiencyBonusByLevel: zod
+        .array(zod.number().min(1))
+        .min(updateCampaignBodyHomebrewRulesProficiencyBonusByLevelMin)
+        .max(updateCampaignBodyHomebrewRulesProficiencyBonusByLevelMax)
+        .optional()
+        .describe(
+          "Custom 20-entry proficiency-bonus-by-level table. Index `level - 1`\nyields the bonus for that level. When omitted, the standard 5e\nformula is used.\n",
+        ),
+    })
+    .optional()
+    .describe(
+      "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
+    ),
 });
+
+export const updateCampaignResponseHomebrewRulesProficiencyBonusByLevelMin = 20;
+export const updateCampaignResponseHomebrewRulesProficiencyBonusByLevelMax = 20;
 
 export const UpdateCampaignResponse = zod.object({
   id: zod.number(),
@@ -86,12 +138,36 @@ export const UpdateCampaignResponse = zod.object({
     .describe(
       'IANA time-zone identifier (e.g. \"America\/New_York\"). Defaults to \"UTC\".',
     ),
+  homebrewRules: zod
+    .object({
+      disableProficiencyAutoProgression: zod
+        .boolean()
+        .optional()
+        .describe(
+          "When true, changing a character's level does not auto-recalculate\ntheir proficiency bonus.\n",
+        ),
+      proficiencyBonusByLevel: zod
+        .array(zod.number().min(1))
+        .min(updateCampaignResponseHomebrewRulesProficiencyBonusByLevelMin)
+        .max(updateCampaignResponseHomebrewRulesProficiencyBonusByLevelMax)
+        .optional()
+        .describe(
+          "Custom 20-entry proficiency-bonus-by-level table. Index `level - 1`\nyields the bonus for that level. When omitted, the standard 5e\nformula is used.\n",
+        ),
+    })
+    .describe(
+      "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
+    ),
   createdAt: zod.coerce.date(),
 });
 
 /**
  * @summary Dashboard summary (next session, party roster, latest recap)
  */
+
+export const getDashboardResponseCampaignHomebrewRulesProficiencyBonusByLevelMin = 20;
+export const getDashboardResponseCampaignHomebrewRulesProficiencyBonusByLevelMax = 20;
+
 export const GetDashboardResponse = zod.object({
   campaign: zod.object({
     id: zod.number(),
@@ -102,6 +178,30 @@ export const GetDashboardResponse = zod.object({
       .string()
       .describe(
         'IANA time-zone identifier (e.g. \"America\/New_York\"). Defaults to \"UTC\".',
+      ),
+    homebrewRules: zod
+      .object({
+        disableProficiencyAutoProgression: zod
+          .boolean()
+          .optional()
+          .describe(
+            "When true, changing a character's level does not auto-recalculate\ntheir proficiency bonus.\n",
+          ),
+        proficiencyBonusByLevel: zod
+          .array(zod.number().min(1))
+          .min(
+            getDashboardResponseCampaignHomebrewRulesProficiencyBonusByLevelMin,
+          )
+          .max(
+            getDashboardResponseCampaignHomebrewRulesProficiencyBonusByLevelMax,
+          )
+          .optional()
+          .describe(
+            "Custom 20-entry proficiency-bonus-by-level table. Index `level - 1`\nyields the bonus for that level. When omitted, the standard 5e\nformula is used.\n",
+          ),
+      })
+      .describe(
+        "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
       ),
     createdAt: zod.coerce.date(),
   }),

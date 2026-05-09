@@ -1045,6 +1045,8 @@ components:
         timezone:
           type: string
           description: IANA time-zone identifier (e.g. "America/New_York"). Defaults to "UTC".
+        homebrewRules:
+          $ref: "#/components/schemas/CampaignHomebrewRules"
         createdAt:
           type: string
           format: date-time
@@ -1053,7 +1055,31 @@ components:
         - name
         - dmUserId
         - timezone
+        - homebrewRules
         - createdAt
+
+    CampaignHomebrewRules:
+      type: object
+      description: |
+        DM-managed overrides for standard 5e mechanics. Empty object means the
+        campaign uses standard 5e rules.
+      properties:
+        disableProficiencyAutoProgression:
+          type: boolean
+          description: |
+            When true, changing a character's level does not auto-recalculate
+            their proficiency bonus.
+        proficiencyBonusByLevel:
+          type: array
+          minItems: 20
+          maxItems: 20
+          items:
+            type: integer
+            minimum: 1
+          description: |
+            Custom 20-entry proficiency-bonus-by-level table. Index `level - 1`
+            yields the bonus for that level. When omitted, the standard 5e
+            formula is used.
 
     UpdateCampaignBody:
       type: object
@@ -1061,6 +1087,8 @@ components:
         timezone:
           type: string
           description: IANA time-zone identifier (e.g. "America/Los_Angeles").
+        homebrewRules:
+          $ref: "#/components/schemas/CampaignHomebrewRules"
 
     CampaignMember:
       type: object

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Sparkles, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCreateCharacter, getListCharactersQueryKey } from "@workspace/api-client-react";
+import { useCreateCharacter, getListCharactersQueryKey, useGetCampaign } from "@workspace/api-client-react";
 import type { CreateCharacterBody, CharacterSheet } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -91,6 +91,29 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   const createMutation = useCreateCharacter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: campaign } = useGetCampaign();
+  const homebrewRules = campaign?.homebrewRules ?? null;
+
+  // When the campaign rules first load (or change), seed the form's
+  // proficiency bonus to match the campaign's rule for the current level.
+  // We only do this while the user hasn't manually adjusted the bonus —
+  // i.e. it still equals what the rule would produce for the level. This
+  // keeps the create wizard consistent with campaigns that override the
+  // standard 5e level-1 bonus, without clobbering an intentional change.
+  useEffect(() => {
+    if (!campaign) return;
+    const auto = proficiencyBonusForLevel(form.level, homebrewRules);
+    if (auto === null) return;
+    setForm((prev) => {
+      if (prev.proficiencyBonus === auto) return prev;
+      const standardForPrev = proficiencyBonusForLevel(prev.level, null);
+      if (prev.proficiencyBonus !== standardForPrev) return prev;
+      return { ...prev, proficiencyBonus: auto };
+    });
+    // Only react to campaign rule changes; intentionally not depending on
+    // form state here to avoid fighting user edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id, JSON.stringify(homebrewRules)]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -266,11 +289,14 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                 value={form.level}
                 onChange={(e) => {
                   const lvl = Math.max(1, Math.min(20, parseInt(e.target.value) || 1));
-                  setForm((prev) => ({
-                    ...prev,
-                    level: lvl,
-                    proficiencyBonus: proficiencyBonusForLevel(lvl),
-                  }));
+                  setForm((prev) => {
+                    const auto = proficiencyBonusForLevel(lvl, homebrewRules);
+                    return {
+                      ...prev,
+                      level: lvl,
+                      proficiencyBonus: auto ?? prev.proficiencyBonus,
+                    };
+                  });
                 }}
                 data-testid="input-level"
               />

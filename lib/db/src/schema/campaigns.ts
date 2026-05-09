@@ -1,6 +1,19 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+
+// Campaign-level homebrew rules that override standard 5e mechanics.
+// Currently supports overriding the proficiency-bonus-by-level table.
+// Either field is optional; when both are absent the standard 5e formula
+// is used.
+export interface CampaignHomebrewRules {
+  // When true, character level changes do not auto-recalculate the
+  // proficiency bonus — DMs/players manage it manually.
+  disableProficiencyAutoProgression?: boolean;
+  // Custom proficiency bonus per level. Must be a 20-element array indexed
+  // by `level - 1`. Each entry must be a positive integer.
+  proficiencyBonusByLevel?: number[];
+}
 
 export const campaignsTable = pgTable("campaigns", {
   id: serial("id").primaryKey(),
@@ -12,6 +25,9 @@ export const campaignsTable = pgTable("campaigns", {
   // recurring-session wall-clock times stable across DST transitions and
   // to format invite emails in the campaign's local time.
   timezone: text("timezone").notNull().default("UTC"),
+  // DM-managed overrides for standard 5e mechanics. See
+  // `CampaignHomebrewRules` for the supported shape.
+  homebrewRules: jsonb("homebrew_rules").$type<CampaignHomebrewRules>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

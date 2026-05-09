@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership } from "@workspace/api-client-react";
+import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership, useGetCampaign } from "@workspace/api-client-react";
 import type { Character, CharacterSheet } from "@workspace/api-client-react";
 import { useUser } from "@clerk/react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,6 +42,8 @@ const buildDetailsDraft = (char: Character): DetailsDraft => ({
 export default function CharacterDetail({ id, onBack }: { id: number; onBack?: () => void }) {
   const { user } = useUser();
   const { data: membership } = useGetMyMembership();
+  const { data: campaign } = useGetCampaign();
+  const homebrewRules = campaign?.homebrewRules ?? null;
   const { data: character, isLoading } = useGetCharacter(id, { query: { queryKey: getGetCharacterQueryKey(id) } });
   const updateMutation = useUpdateCharacter();
   const queryClient = useQueryClient();
@@ -111,11 +113,23 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
 
   const levelChanged = !!detailsDraft && !!char && detailsDraft.level !== char.level;
   const currentProficiencyBonus = char?.sheetJson?.proficiencyBonus ?? 2;
-  const expectedForOldLevel = char ? proficiencyBonusForLevel(char.level) : 2;
-  const hasHomebrewOverride = !!char && currentProficiencyBonus !== expectedForOldLevel;
-  const newProficiencyBonus = detailsDraft ? proficiencyBonusForLevel(detailsDraft.level) : 2;
+  const expectedForOldLevel = char ? proficiencyBonusForLevel(char.level, homebrewRules) : 2;
+  // Auto-progression is suppressed in two cases:
+  //   1. The campaign disables proficiency auto-progression entirely
+  //      (proficiencyBonusForLevel returns null).
+  //   2. The character's existing bonus already diverges from what the
+  //      active rule would produce for their current level — treat that
+  //      as an intentional per-character override and don't clobber it.
+  const autoProgressionDisabled = expectedForOldLevel === null;
+  const hasPerCharacterOverride =
+    !!char && expectedForOldLevel !== null && currentProficiencyBonus !== expectedForOldLevel;
+  const skipAutoRecalc = autoProgressionDisabled || hasPerCharacterOverride;
+  const newProficiencyBonus = detailsDraft ? proficiencyBonusForLevel(detailsDraft.level, homebrewRules) : null;
   const proficiencyBonusWillChange =
-    levelChanged && !hasHomebrewOverride && newProficiencyBonus !== currentProficiencyBonus;
+    levelChanged
+    && !skipAutoRecalc
+    && newProficiencyBonus !== null
+    && newProficiencyBonus !== currentProficiencyBonus;
 
   const saveDetails = () => {
     if (!detailsDraft || !detailsValid || !char) return;
@@ -131,10 +145,10 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
       class: resolvedDraftClass.trim(),
       level: detailsDraft.level,
     };
-    if (detailsDraft.level !== char.level && !hasHomebrewOverride) {
+    if (detailsDraft.level !== char.level && !skipAutoRecalc && newProficiencyBonus !== null) {
       data.sheetJson = {
         ...char.sheetJson,
-        proficiencyBonus: proficiencyBonusForLevel(detailsDraft.level),
+        proficiencyBonus: newProficiencyBonus,
       };
     }
     updateMutation.mutate(

@@ -28,6 +28,27 @@ export interface ErrorResponse {
   error: string;
 }
 
+/**
+ * DM-managed overrides for standard 5e mechanics. Empty object means the
+campaign uses standard 5e rules.
+
+ */
+export interface CampaignHomebrewRules {
+  /** When true, changing a character's level does not auto-recalculate
+their proficiency bonus.
+ */
+  disableProficiencyAutoProgression?: boolean;
+  /**
+   * Custom 20-entry proficiency-bonus-by-level table. Index `level - 1`
+yields the bonus for that level. When omitted, the standard 5e
+formula is used.
+
+   * @minItems 20
+   * @maxItems 20
+   */
+  proficiencyBonusByLevel?: number[];
+}
+
 export interface Campaign {
   id: number;
   name: string;
@@ -36,12 +57,14 @@ export interface Campaign {
   dmUserId: string;
   /** IANA time-zone identifier (e.g. "America/New_York"). Defaults to "UTC". */
   timezone: string;
+  homebrewRules: CampaignHomebrewRules;
   createdAt: string;
 }
 
 export interface UpdateCampaignBody {
   /** IANA time-zone identifier (e.g. "America/Los_Angeles"). */
   timezone?: string;
+  homebrewRules?: CampaignHomebrewRules;
 }
 
 export type CampaignMemberRole =
