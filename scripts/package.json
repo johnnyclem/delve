@@ -9,10 +9,12 @@
     "srd:setup": "tsx ./src/srd/setup.ts",
     "srd:extract": "tsx ./src/srd/extract.ts",
     "srd:ingest": "tsx ./src/srd/ingest.ts",
+    "backfill:entity-embeddings": "tsx ./src/backfill-entity-embeddings.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@workspace/db": "workspace:*",
+    "@workspace/entity-embeddings": "workspace:*",
     "@workspace/integrations-openai-ai-server": "workspace:*",
     "drizzle-orm": "catalog:",
     "openai": "^6.27.0",

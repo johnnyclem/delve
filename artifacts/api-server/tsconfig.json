@@ -11,6 +11,9 @@
       "path": "../../lib/db"
     },
     {
+      "path": "../../lib/entity-embeddings"
+    },
+    {
       "path": "../../lib/api-zod"
     },
     {

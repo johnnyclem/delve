@@ -181,6 +181,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/entity-embeddings':
+        specifier: workspace:*
+        version: link:../../lib/entity-embeddings
       '@workspace/integrations-openai-ai-server':
         specifier: workspace:*
         version: link:../../lib/integrations-openai-ai-server
@@ -707,6 +710,22 @@ importers:
         specifier: ^0.31.9
         version: 0.31.9
 
+  lib/entity-embeddings:
+    dependencies:
+      '@workspace/db':
+        specifier: workspace:*
+        version: link:../db
+      '@workspace/integrations-openai-ai-server':
+        specifier: workspace:*
+        version: link:../integrations-openai-ai-server
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2(@types/pg@8.18.0)(pg@8.20.0)
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 25.3.5
+
   lib/integrations-openai-ai-server:
     dependencies:
       openai:
@@ -747,6 +766,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../lib/db
+      '@workspace/entity-embeddings':
+        specifier: workspace:*
+        version: link:../lib/entity-embeddings
       '@workspace/integrations-openai-ai-server':
         specifier: workspace:*
         version: link:../lib/integrations-openai-ai-server
