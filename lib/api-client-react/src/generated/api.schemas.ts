@@ -973,6 +973,11 @@ export interface ChatRequest {
    * @maxLength 2000
    */
   message: string;
+  /**
+   * Existing thread ID to continue. If omitted or null, a new thread is created.
+   * @nullable
+   */
+  conversationId?: number | null;
 }
 
 export interface HomebrewRule {
@@ -1059,6 +1064,35 @@ export interface ChatResponse {
   answer: string;
   citations: ChatCitation[];
   edition: ChatResponseEdition;
+  /** Thread ID this message belongs to. Send it back on follow-ups to keep the conversation going. */
+  conversationId: number;
+}
+
+export interface ChatThread {
+  id: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ChatThreadMessageRole =
+  (typeof ChatThreadMessageRole)[keyof typeof ChatThreadMessageRole];
+
+export const ChatThreadMessageRole = {
+  user: "user",
+  assistant: "assistant",
+} as const;
+
+export interface ChatThreadMessage {
+  id: number;
+  role: ChatThreadMessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatThreadDetail {
+  thread: ChatThread;
+  messages: ChatThreadMessage[];
 }
 
 export type SearchRulesParams = {

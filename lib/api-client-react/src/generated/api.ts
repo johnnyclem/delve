@@ -25,6 +25,8 @@ import type {
   Character,
   ChatRequest,
   ChatResponse,
+  ChatThread,
+  ChatThreadDetail,
   ConflictError,
   CreateCharacterBody,
   CreateEntityBody,
@@ -5198,4 +5200,250 @@ export const usePostChat = <
   TContext
 > => {
   return useMutation(getPostChatMutationOptions(options));
+};
+
+/**
+ * @summary List the current user's chat conversations for this campaign (most recent first)
+ */
+export const getListChatThreadsUrl = () => {
+  return `/api/chat/threads`;
+};
+
+export const listChatThreads = async (
+  options?: RequestInit,
+): Promise<ChatThread[]> => {
+  return customFetch<ChatThread[]>(getListChatThreadsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListChatThreadsQueryKey = () => {
+  return [`/api/chat/threads`] as const;
+};
+
+export const getListChatThreadsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listChatThreads>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listChatThreads>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListChatThreadsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listChatThreads>>> = ({
+    signal,
+  }) => listChatThreads({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listChatThreads>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListChatThreadsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listChatThreads>>
+>;
+export type ListChatThreadsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List the current user's chat conversations for this campaign (most recent first)
+ */
+
+export function useListChatThreads<
+  TData = Awaited<ReturnType<typeof listChatThreads>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listChatThreads>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListChatThreadsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get one chat thread along with its messages
+ */
+export const getGetChatThreadUrl = (id: number) => {
+  return `/api/chat/threads/${id}`;
+};
+
+export const getChatThread = async (
+  id: number,
+  options?: RequestInit,
+): Promise<ChatThreadDetail> => {
+  return customFetch<ChatThreadDetail>(getGetChatThreadUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetChatThreadQueryKey = (id: number) => {
+  return [`/api/chat/threads/${id}`] as const;
+};
+
+export const getGetChatThreadQueryOptions = <
+  TData = Awaited<ReturnType<typeof getChatThread>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChatThread>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetChatThreadQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getChatThread>>> = ({
+    signal,
+  }) => getChatThread(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getChatThread>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetChatThreadQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getChatThread>>
+>;
+export type GetChatThreadQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get one chat thread along with its messages
+ */
+
+export function useGetChatThread<
+  TData = Awaited<ReturnType<typeof getChatThread>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getChatThread>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetChatThreadQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Delete one of the current user's chat threads
+ */
+export const getDeleteChatThreadUrl = (id: number) => {
+  return `/api/chat/threads/${id}`;
+};
+
+export const deleteChatThread = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getDeleteChatThreadUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteChatThreadMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteChatThread>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteChatThread>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteChatThread"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteChatThread>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteChatThread(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteChatThreadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteChatThread>>
+>;
+
+export type DeleteChatThreadMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete one of the current user's chat threads
+ */
+export const useDeleteChatThread = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteChatThread>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteChatThread>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteChatThreadMutationOptions(options));
 };

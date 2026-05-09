@@ -2432,6 +2432,12 @@ export const postChatBodyMessageMax = 2000;
 
 export const PostChatBody = zod.object({
   message: zod.string().min(1).max(postChatBodyMessageMax),
+  conversationId: zod
+    .number()
+    .nullish()
+    .describe(
+      "Existing thread ID to continue. If omitted or null, a new thread is created.",
+    ),
 });
 
 export const PostChatResponse = zod.object({
@@ -2450,4 +2456,55 @@ export const PostChatResponse = zod.object({
     }),
   ),
   edition: zod.enum(["2014", "2024"]),
+  conversationId: zod
+    .number()
+    .describe(
+      "Thread ID this message belongs to. Send it back on follow-ups to keep the conversation going.",
+    ),
+});
+
+/**
+ * @summary List the current user's chat conversations for this campaign (most recent first)
+ */
+export const ListChatThreadsResponseItem = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListChatThreadsResponse = zod.array(ListChatThreadsResponseItem);
+
+/**
+ * @summary Get one chat thread along with its messages
+ */
+export const GetChatThreadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetChatThreadResponse = zod.object({
+  thread: zod.object({
+    id: zod.number(),
+    title: zod.string(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  }),
+  messages: zod.array(
+    zod.object({
+      id: zod.number(),
+      role: zod.enum(["user", "assistant"]),
+      content: zod.string(),
+      createdAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
+ * @summary Delete one of the current user's chat threads
+ */
+export const DeleteChatThreadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteChatThreadResponse = zod.object({
+  success: zod.boolean(),
 });

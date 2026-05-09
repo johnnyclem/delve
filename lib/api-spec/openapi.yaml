@@ -1426,8 +1426,77 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Conversation not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: LLM service temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /chat/threads:
+    get:
+      operationId: listChatThreads
+      tags: [chat]
+      summary: List the current user's chat conversations for this campaign (most recent first)
+      responses:
+        "200":
+          description: Chat threads
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatThread"
+
+  /chat/threads/{id}:
+    get:
+      operationId: getChatThread
+      tags: [chat]
+      summary: Get one chat thread along with its messages
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Thread + ordered messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatThreadDetail"
+        "404":
+          description: Thread not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteChatThread
+      tags: [chat]
+      summary: Delete one of the current user's chat threads
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "404":
+          description: Thread not found
           content:
             application/json:
               schema:
@@ -2950,6 +3019,9 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
+        conversationId:
+          type: ["integer", "null"]
+          description: Existing thread ID to continue. If omitted or null, a new thread is created.
 
     HomebrewRule:
       type: object
@@ -3047,7 +3119,52 @@ components:
         edition:
           type: string
           enum: ["2014", "2024"]
+        conversationId:
+          type: integer
+          description: Thread ID this message belongs to. Send it back on follow-ups to keep the conversation going.
       required:
         - answer
         - citations
         - edition
+        - conversationId
+
+    ChatThread:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, title, createdAt, updatedAt]
+
+    ChatThreadMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, role, content, createdAt]
+
+    ChatThreadDetail:
+      type: object
+      properties:
+        thread:
+          $ref: "#/components/schemas/ChatThread"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatThreadMessage"
+      required: [thread, messages]

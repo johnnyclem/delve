@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll } from "lucide-react";
+import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { postChat, useGetMyMembership } from "@workspace/api-client-react";
-import type { ChatResponse, ChatCitation } from "@workspace/api-client-react";
+import {
+  postChat,
+  useGetMyMembership,
+  useListChatThreads,
+  getChatThread,
+  deleteChatThread,
+  getListChatThreadsQueryKey,
+  getGetChatThreadQueryKey,
+} from "@workspace/api-client-react";
+import type { ChatResponse, ChatCitation, ChatThread } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface ChatTurn {
   id: string;
@@ -87,19 +96,101 @@ function CitationBadge({ citation, index, isDm }: { citation: ChatCitation; inde
   );
 }
 
+function formatThreadTimestamp(d: string): string {
+  const dt = new Date(d);
+  const now = new Date();
+  const sameDay = dt.toDateString() === now.toDateString();
+  return sameDay
+    ? dt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : dt.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
 export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [loadingThread, setLoadingThread] = useState(false);
+  const queryClient = useQueryClient();
   const { data: membership } = useGetMyMembership();
   const isDm = membership?.role === "dm";
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const { data: threads = [] } = useListChatThreads();
+  const sortedThreads = useMemo<ChatThread[]>(
+    () => [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+    [threads],
+  );
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [turns]);
+
+  const startNewConversation = () => {
+    setConversationId(null);
+    setTurns([]);
+    setInput("");
+    setHistoryOpen(false);
+  };
+
+  const loadThread = async (threadId: number) => {
+    setHistoryOpen(false);
+    if (threadId === conversationId) return;
+    setLoadingThread(true);
+    try {
+      const detail = await getChatThread(threadId);
+      const loaded: ChatTurn[] = [];
+      for (let i = 0; i < detail.messages.length; i += 1) {
+        const m = detail.messages[i];
+        if (m.role === "user") {
+          const next = detail.messages[i + 1];
+          loaded.push({
+            id: `msg-${m.id}`,
+            question: m.content,
+            answer: next && next.role === "assistant" ? next.content : null,
+            citations: [],
+            edition: null,
+            error: null,
+            loading: false,
+          });
+          if (next && next.role === "assistant") i += 1;
+        } else {
+          loaded.push({
+            id: `msg-${m.id}`,
+            question: "",
+            answer: m.content,
+            citations: [],
+            edition: null,
+            error: null,
+            loading: false,
+          });
+        }
+      }
+      setTurns(loaded);
+      setConversationId(threadId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load conversation";
+      setTurns([{ id: `err-${Date.now()}`, question: "", answer: null, citations: [], edition: null, error: msg, loading: false }]);
+    } finally {
+      setLoadingThread(false);
+    }
+  };
+
+  const handleDeleteThread = async (threadId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await deleteChatThread(threadId);
+      await queryClient.invalidateQueries({ queryKey: getListChatThreadsQueryKey() });
+      if (threadId === conversationId) {
+        startNewConversation();
+      }
+    } catch {
+      // best-effort delete; ignore.
+    }
+  };
 
   const handleSubmit = async () => {
     const message = input.trim();
@@ -118,7 +209,8 @@ export default function ChatPanel() {
     setTurns((prev) => [...prev, turn]);
     setInput("");
     try {
-      const res: ChatResponse = await postChat({ message });
+      const res: ChatResponse = await postChat({ message, conversationId });
+      setConversationId(res.conversationId);
       setTurns((prev) =>
         prev.map((t) =>
           t.id === id
@@ -126,6 +218,8 @@ export default function ChatPanel() {
             : t,
         ),
       );
+      await queryClient.invalidateQueries({ queryKey: getListChatThreadsQueryKey() });
+      await queryClient.invalidateQueries({ queryKey: getGetChatThreadQueryKey(res.conversationId) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to get a response";
       setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, error: msg, loading: false } : t)));
@@ -136,23 +230,91 @@ export default function ChatPanel() {
 
   return (
     <div className="space-y-6 flex flex-col h-full" data-testid="chat-panel">
-      <div>
-        <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2 tracking-tight">
-          <MessageSquare className="h-6 w-6 text-primary" />
-          Ask the Lorekeeper
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1">
-          Ask questions about D&D rules or this campaign's lore. Answers cite their sources — campaign-specific
-          information is preferred over generic SRD when both apply.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2 tracking-tight">
+            <MessageSquare className="h-6 w-6 text-primary" />
+            Ask the Lorekeeper
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Ask questions about D&D rules or this campaign's lore. Follow-ups remember the conversation — citations
+            still appear on each answer.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setHistoryOpen((v) => !v)}
+            data-testid="chat-history-toggle"
+          >
+            <History className="h-4 w-4 mr-1" />
+            History
+            {sortedThreads.length > 0 && (
+              <span className="ml-1 text-[10px] opacity-70">({sortedThreads.length})</span>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={startNewConversation}
+            disabled={turns.length === 0 && conversationId === null}
+            data-testid="chat-new-conversation"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New
+          </Button>
+        </div>
       </div>
 
+      {historyOpen && (
+        <div className="rounded-2xl glass-panel p-3 max-h-64 overflow-auto" data-testid="chat-history-list">
+          {sortedThreads.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No prior conversations yet.</p>
+          ) : (
+            <ul className="divide-y divide-[rgba(255,255,255,0.06)]">
+              {sortedThreads.map((t) => (
+                <li
+                  key={t.id}
+                  className={`flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-primary/10 rounded ${
+                    t.id === conversationId ? "bg-primary/10" : ""
+                  }`}
+                  onClick={() => loadThread(t.id)}
+                  data-testid={`chat-history-item-${t.id}`}
+                >
+                  <MessageSquare className="h-4 w-4 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground truncate">{t.title}</p>
+                    <p className="text-[10px] text-muted-foreground">{formatThreadTimestamp(t.updatedAt)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteThread(t.id, e)}
+                    className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                    aria-label="Delete conversation"
+                    data-testid={`chat-history-delete-${t.id}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       <div ref={scrollRef} className="flex-1 overflow-auto space-y-6 pr-1" data-testid="chat-scroll">
-        {turns.length === 0 && (
+        {loadingThread && (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm justify-center py-6">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading conversation…
+          </div>
+        )}
+        {!loadingThread && turns.length === 0 && (
           <div className="rounded-2xl glass-panel p-8 text-center text-muted-foreground" data-testid="chat-empty">
             <Sparkles className="h-6 w-6 mx-auto mb-3 text-primary" />
             <p className="text-sm">Try: <span className="text-foreground">"Who was the bartender in Tessringale?"</span></p>
-            <p className="text-sm mt-1">Or: <span className="text-foreground">"How does grappling work?"</span></p>
+            <p className="text-sm mt-1">Then follow up: <span className="text-foreground">"What about her sister?"</span></p>
           </div>
         )}
         <AnimatePresence initial={false}>
@@ -164,33 +326,37 @@ export default function ChatPanel() {
               className="space-y-3"
               data-testid={`chat-turn-${turn.id}`}
             >
-              <div className="flex justify-end">
-                <div className="rounded-2xl glass-panel px-4 py-2 max-w-[80%]" data-testid="chat-question">
-                  <p className="text-sm text-foreground whitespace-pre-wrap">{turn.question}</p>
+              {turn.question && (
+                <div className="flex justify-end">
+                  <div className="rounded-2xl glass-panel px-4 py-2 max-w-[80%]" data-testid="chat-question">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{turn.question}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-2xl glass-panel p-4 space-y-3" data-testid="chat-answer">
-                {turn.loading && (
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Searching the archives…
-                  </div>
-                )}
-                {turn.error && <p className="text-sm text-destructive">{turn.error}</p>}
-                {turn.answer && (
-                  <div
-                    className="prose prose-sm prose-invert max-w-none text-foreground/90"
-                    dangerouslySetInnerHTML={{ __html: renderAnswer(turn.answer) }}
-                  />
-                )}
-                {turn.citations.length > 0 && (
-                  <div className="flex flex-wrap gap-2 pt-2 border-t border-[rgba(255,255,255,0.06)]">
-                    {turn.citations.map((c, i) => (
-                      <CitationBadge key={`${turn.id}-${i}`} citation={c} index={i} isDm={!!isDm} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
+              {(turn.loading || turn.error || turn.answer) && (
+                <div className="rounded-2xl glass-panel p-4 space-y-3" data-testid="chat-answer">
+                  {turn.loading && (
+                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Searching the archives…
+                    </div>
+                  )}
+                  {turn.error && <p className="text-sm text-destructive">{turn.error}</p>}
+                  {turn.answer && (
+                    <div
+                      className="prose prose-sm prose-invert max-w-none text-foreground/90"
+                      dangerouslySetInnerHTML={{ __html: renderAnswer(turn.answer) }}
+                    />
+                  )}
+                  {turn.citations.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-[rgba(255,255,255,0.06)]">
+                      {turn.citations.map((c, i) => (
+                        <CitationBadge key={`${turn.id}-${i}`} citation={c} index={i} isDm={!!isDm} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </motion.div>
           ))}
         </AnimatePresence>
@@ -206,7 +372,11 @@ export default function ChatPanel() {
               void handleSubmit();
             }
           }}
-          placeholder="Ask about a rule or someone in the campaign…"
+          placeholder={
+            conversationId
+              ? "Ask a follow-up — the assistant remembers earlier turns…"
+              : "Ask about a rule or someone in the campaign…"
+          }
           rows={2}
           className="resize-none bg-transparent border-0 focus-visible:ring-0 text-sm"
           data-testid="chat-input"
