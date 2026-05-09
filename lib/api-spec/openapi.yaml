@@ -1178,6 +1178,9 @@ components:
             type: string
         notes:
           type: string
+        background:
+          type: string
+          description: Optional 5e SRD background label (e.g. "Soldier", "Acolyte"). Not required for back-compat with characters created before backgrounds were tracked.
         asiHistory:
           type: array
           items:
