@@ -4,7 +4,6 @@ import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll, Plus, T
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  postChat,
   useGetMyMembership,
   useListChatThreads,
   getChatThread,
@@ -12,7 +11,7 @@ import {
   getListChatThreadsQueryKey,
   getGetChatThreadQueryKey,
 } from "@workspace/api-client-react";
-import type { ChatResponse, ChatCitation, ChatThread } from "@workspace/api-client-react";
+import type { ChatCitation, ChatThread } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 interface ChatTurn {
@@ -192,6 +191,10 @@ export default function ChatPanel() {
     }
   };
 
+  const updateTurn = (id: string, patch: Partial<ChatTurn>) => {
+    setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  };
+
   const handleSubmit = async () => {
     const message = input.trim();
     if (!message || submitting) return;
@@ -208,21 +211,120 @@ export default function ChatPanel() {
     };
     setTurns((prev) => [...prev, turn]);
     setInput("");
+
+    let accumulated = "";
+    let buffer = "";
+    let resolvedConversationId: number | null = conversationId;
+
+    const handleEvent = (raw: string) => {
+      const lines = raw.split("\n");
+      const dataLines: string[] = [];
+      for (const line of lines) {
+        if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).replace(/^ /, ""));
+        }
+      }
+      if (dataLines.length === 0) return;
+      const data = dataLines.join("\n");
+      let payload: {
+        type: string;
+        value?: string;
+        error?: string;
+        citations?: ChatCitation[];
+        edition?: "2014" | "2024";
+        conversationId?: number;
+      };
+      try {
+        payload = JSON.parse(data);
+      } catch {
+        return;
+      }
+      if (payload.type === "metadata" && typeof payload.conversationId === "number") {
+        resolvedConversationId = payload.conversationId;
+        setConversationId(payload.conversationId);
+      } else if (payload.type === "token" && typeof payload.value === "string") {
+        accumulated += payload.value;
+        updateTurn(id, { answer: accumulated, loading: true });
+      } else if (payload.type === "citations") {
+        updateTurn(id, {
+          citations: payload.citations ?? [],
+          edition: payload.edition ?? null,
+        });
+      } else if (payload.type === "done") {
+        if (typeof payload.conversationId === "number") {
+          resolvedConversationId = payload.conversationId;
+          setConversationId(payload.conversationId);
+        }
+        updateTurn(id, { loading: false });
+      } else if (payload.type === "error") {
+        updateTurn(id, {
+          error: payload.error ?? "The assistant ran into a problem.",
+          loading: false,
+        });
+      }
+    };
+
     try {
-      const res: ChatResponse = await postChat({ message, conversationId });
-      setConversationId(res.conversationId);
+      const response = await fetch("/api/chat/stream", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({ message, conversationId }),
+      });
+
+      if (!response.ok || !response.body) {
+        let detail = `Request failed (${response.status})`;
+        try {
+          const j = await response.json();
+          if (j?.error) detail = j.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let sepIndex: number;
+        while ((sepIndex = buffer.indexOf("\n\n")) !== -1) {
+          const eventChunk = buffer.slice(0, sepIndex);
+          buffer = buffer.slice(sepIndex + 2);
+          if (eventChunk.trim()) handleEvent(eventChunk);
+        }
+      }
+      if (buffer.trim()) handleEvent(buffer);
+
+      setTurns((prev) =>
+        prev.map((t) => (t.id === id && t.loading ? { ...t, loading: false } : t)),
+      );
+      await queryClient.invalidateQueries({ queryKey: getListChatThreadsQueryKey() });
+      if (resolvedConversationId !== null) {
+        await queryClient.invalidateQueries({
+          queryKey: getGetChatThreadQueryKey(resolvedConversationId),
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to get a response";
       setTurns((prev) =>
         prev.map((t) =>
           t.id === id
-            ? { ...t, answer: res.answer, citations: res.citations, edition: res.edition, loading: false }
+            ? {
+                ...t,
+                answer: accumulated || t.answer,
+                error: msg,
+                loading: false,
+              }
             : t,
         ),
       );
-      await queryClient.invalidateQueries({ queryKey: getListChatThreadsQueryKey() });
-      await queryClient.invalidateQueries({ queryKey: getGetChatThreadQueryKey(res.conversationId) });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to get a response";
-      setTurns((prev) => prev.map((t) => (t.id === id ? { ...t, error: msg, loading: false } : t)));
     } finally {
       setSubmitting(false);
     }
@@ -335,18 +437,31 @@ export default function ChatPanel() {
               )}
               {(turn.loading || turn.error || turn.answer) && (
                 <div className="rounded-2xl glass-panel p-4 space-y-3" data-testid="chat-answer">
-                  {turn.loading && (
-                    <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  {turn.loading && !turn.answer && (
+                    <div
+                      className="flex items-center gap-2 text-muted-foreground text-sm"
+                      data-testid="chat-loading"
+                    >
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Searching the archives…
                     </div>
                   )}
-                  {turn.error && <p className="text-sm text-destructive">{turn.error}</p>}
                   {turn.answer && (
                     <div
                       className="prose prose-sm prose-invert max-w-none text-foreground/90"
-                      dangerouslySetInnerHTML={{ __html: renderAnswer(turn.answer) }}
+                      dangerouslySetInnerHTML={{
+                        __html:
+                          renderAnswer(turn.answer) +
+                          (turn.loading
+                            ? '<span class="inline-block w-2 h-4 ml-0.5 align-middle bg-primary/70 animate-pulse" data-testid="chat-cursor"></span>'
+                            : ""),
+                      }}
                     />
+                  )}
+                  {turn.error && (
+                    <p className="text-sm text-destructive" data-testid="chat-error">
+                      {turn.error}
+                    </p>
                   )}
                   {turn.citations.length > 0 && (
                     <div className="flex flex-wrap gap-2 pt-2 border-t border-[rgba(255,255,255,0.06)]">

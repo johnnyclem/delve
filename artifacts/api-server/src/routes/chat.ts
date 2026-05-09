@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import {
   db,
@@ -30,13 +30,7 @@ const router: IRouter = Router();
 
 const CHAT_MODEL = "gpt-4o-mini";
 const MAX_MESSAGE_LEN = 2000;
-// How many recent (user+assistant) messages from history to include verbatim
-// in the LLM context. Older turns get folded into the thread summary so we
-// don't blow the token budget.
 const HISTORY_VERBATIM_TURNS = 6;
-// When the verbatim window slides forward, summarize the displaced messages
-// into the thread `summary` field. We only summarize once we have enough
-// older turns to make it worthwhile.
 const SUMMARIZE_AFTER_TURNS = HISTORY_VERBATIM_TURNS + 4;
 
 const chatBody = z.object({
@@ -49,8 +43,6 @@ interface Citation {
   entityKind: string;
   entityName: string;
   chunkId: number;
-  // For player citations on campaign chunks the source field is omitted; for
-  // DMs we expose which secret field the chunk came from.
   sourceField?: "public_md" | "secret_md" | "dm_notes";
   sourceUrl?: string | null;
 }
@@ -138,7 +130,10 @@ function deriveTitle(message: string): string {
   return `${cleaned.slice(0, 57)}…`;
 }
 
-async function summarizeOlderTurns(existingSummary: string | null, olderMessages: { role: "user" | "assistant"; content: string }[]): Promise<string> {
+async function summarizeOlderTurns(
+  existingSummary: string | null,
+  olderMessages: { role: "user" | "assistant"; content: string }[],
+): Promise<string> {
   if (olderMessages.length === 0) return existingSummary ?? "";
   const transcript = olderMessages
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
@@ -241,13 +236,27 @@ router.delete("/chat/threads/:id", requireAuth, requireCampaignMember, async (re
   res.json({ success: true });
 });
 
-router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
-  const parsed = chatBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
-  }
+type LlmMessage = { role: "system" | "user" | "assistant"; content: string };
+type PriorMessage = { role: string; content: string };
 
+interface PreparedRequest {
+  threadId: number;
+  threadSummary: string | null;
+  priorMessages: PriorMessage[];
+  edition: SrdEdition;
+  citations: Citation[];
+  llmMessages: LlmMessage[];
+}
+
+type PrepareResult =
+  | { ok: true; prepared: PreparedRequest }
+  | { ok: false; status: number; error: string };
+
+async function prepareChatRequest(
+  req: Request,
+  message: string,
+  conversationId: number | null | undefined,
+): Promise<PrepareResult> {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
   const dmRequester = await isDm(campaignId, userId);
@@ -256,25 +265,22 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
     .select({ defaultEdition: campaignsTable.defaultEdition })
     .from(campaignsTable)
     .where(eq(campaignsTable.id, campaignId));
-  const edition = (campaign?.defaultEdition as SrdEdition | undefined) ?? "2024";
+  const edition =
+    (campaign?.defaultEdition as SrdEdition | undefined) ?? "2024";
 
-  const message = parsed.data.message.trim();
-
-  // Resolve or create the thread.
   let threadId: number;
   let threadSummary: string | null = null;
-  if (parsed.data.conversationId) {
+  if (conversationId) {
     const [existing] = await db
       .select()
       .from(chatThreadsTable)
       .where(and(
-        eq(chatThreadsTable.id, parsed.data.conversationId),
+        eq(chatThreadsTable.id, conversationId),
         eq(chatThreadsTable.campaignId, campaignId),
         eq(chatThreadsTable.userId, userId),
       ));
     if (!existing) {
-      res.status(404).json({ error: "Conversation not found" });
-      return;
+      return { ok: false, status: 404, error: "Conversation not found" };
     }
     threadId = existing.id;
     threadSummary = existing.summary;
@@ -286,7 +292,6 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
     threadId = created.id;
   }
 
-  // Load prior messages for history context.
   const priorMessages = await db
     .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
     .from(chatMessagesTable)
@@ -302,7 +307,9 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
       logger.error({ err }, "[chat] reference retrieval failed");
       return [] as ReferenceHit[];
     }),
-    retrieveCampaign(message, queryEmbedding, campaignId, { isDm: dmRequester }).catch((err) => {
+    retrieveCampaign(message, queryEmbedding, campaignId, {
+      isDm: dmRequester,
+    }).catch((err) => {
       logger.error({ err }, "[chat] campaign retrieval failed");
       return [] as CampaignHit[];
     }),
@@ -312,7 +319,12 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
     }),
   ]);
 
-  const { context, citations } = buildContextBlock(refHits, campHits, homeHits, dmRequester);
+  const { context, citations } = buildContextBlock(
+    refHits,
+    campHits,
+    homeHits,
+    dmRequester,
+  );
 
   const contextBlock = context
     ? `Retrieved context for this turn:\n\n${context}\n\n`
@@ -322,11 +334,80 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
     : "";
   const userPrompt = `${summaryBlock}${contextBlock}Question: ${message}`;
 
-  const llmMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
+  const llmMessages: LlmMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },
     ...verbatim.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     { role: "user", content: userPrompt },
   ];
+
+  return {
+    ok: true,
+    prepared: {
+      threadId,
+      threadSummary,
+      priorMessages,
+      edition,
+      citations,
+      llmMessages,
+    },
+  };
+}
+
+async function persistTurn(
+  threadId: number,
+  question: string,
+  answer: string,
+  priorMessages: PriorMessage[],
+  threadSummary: string | null,
+): Promise<void> {
+  await db.insert(chatMessagesTable).values([
+    { threadId, role: "user", content: question },
+    { threadId, role: "assistant", content: answer },
+  ]);
+  await db
+    .update(chatThreadsTable)
+    .set({ updatedAt: new Date() })
+    .where(eq(chatThreadsTable.id, threadId));
+
+  const totalAfter = priorMessages.length + 2;
+  if (totalAfter >= SUMMARIZE_AFTER_TURNS) {
+    const olderToFold = priorMessages.slice(
+      0,
+      Math.max(0, priorMessages.length - HISTORY_VERBATIM_TURNS),
+    );
+    if (olderToFold.length > 0) {
+      const newSummary = await summarizeOlderTurns(
+        threadSummary,
+        olderToFold.map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        })),
+      );
+      if (newSummary && newSummary !== threadSummary) {
+        await db
+          .update(chatThreadsTable)
+          .set({ summary: newSummary })
+          .where(eq(chatThreadsTable.id, threadId));
+      }
+    }
+  }
+}
+
+router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const parsed = chatBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const message = parsed.data.message.trim();
+  const result = await prepareChatRequest(req, message, parsed.data.conversationId);
+  if (!result.ok) {
+    res.status(result.status).json({ error: result.error });
+    return;
+  }
+  const { threadId, threadSummary, priorMessages, edition, citations, llmMessages } =
+    result.prepared;
 
   let answer: string;
   try {
@@ -337,42 +418,15 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
       max_tokens: 800,
     });
     answer = completion.choices[0]?.message?.content?.trim() ?? "";
-    if (!answer) answer = "I couldn't produce a response. Try rephrasing your question.";
+    if (!answer)
+      answer = "I couldn't produce a response. Try rephrasing your question.";
   } catch (err) {
     logger.error({ err }, "[chat] LLM completion failed");
     res.status(502).json({ error: "Chat service is temporarily unavailable" });
     return;
   }
 
-  // Persist the new turn.
-  await db.insert(chatMessagesTable).values([
-    { threadId, role: "user", content: message },
-    { threadId, role: "assistant", content: answer },
-  ]);
-  await db
-    .update(chatThreadsTable)
-    .set({ updatedAt: new Date() })
-    .where(eq(chatThreadsTable.id, threadId));
-
-  // If we now have enough older history to warrant summarizing, fold the
-  // displaced (older-than-verbatim) turns into the running thread summary so
-  // future calls keep context without growing the prompt unbounded.
-  const totalAfter = priorMessages.length + 2;
-  if (totalAfter >= SUMMARIZE_AFTER_TURNS) {
-    const olderToFold = priorMessages.slice(0, Math.max(0, priorMessages.length - HISTORY_VERBATIM_TURNS));
-    if (olderToFold.length > 0) {
-      const newSummary = await summarizeOlderTurns(threadSummary, olderToFold.map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })));
-      if (newSummary && newSummary !== threadSummary) {
-        await db
-          .update(chatThreadsTable)
-          .set({ summary: newSummary })
-          .where(eq(chatThreadsTable.id, threadId));
-      }
-    }
-  }
+  await persistTurn(threadId, message, answer, priorMessages, threadSummary);
 
   res.json({
     answer,
@@ -381,5 +435,121 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
     conversationId: threadId,
   });
 });
+
+function writeSseEvent(res: Response, payload: unknown): void {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+router.post(
+  "/chat/stream",
+  requireAuth,
+  requireCampaignMember,
+  async (req, res): Promise<void> => {
+    const parsed = chatBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    let clientClosed = false;
+    req.on("close", () => {
+      clientClosed = true;
+    });
+
+    const message = parsed.data.message.trim();
+
+    let result: PrepareResult;
+    try {
+      result = await prepareChatRequest(req, message, parsed.data.conversationId);
+    } catch (err) {
+      logger.error({ err }, "[chat/stream] retrieval failed");
+      writeSseEvent(res, {
+        type: "error",
+        error: "Failed to prepare context. Please try again.",
+      });
+      res.end();
+      return;
+    }
+
+    if (!result.ok) {
+      writeSseEvent(res, { type: "error", error: result.error });
+      res.end();
+      return;
+    }
+
+    const { threadId, threadSummary, priorMessages, edition, citations, llmMessages } =
+      result.prepared;
+
+    // Surface the conversation id immediately so the client can record it
+    // (especially important when starting a brand-new thread).
+    writeSseEvent(res, { type: "metadata", conversationId: threadId });
+
+    if (clientClosed) {
+      res.end();
+      return;
+    }
+
+    let produced = "";
+    try {
+      const stream = await openai.chat.completions.create({
+        model: CHAT_MODEL,
+        messages: llmMessages,
+        temperature: 0.3,
+        max_tokens: 800,
+        stream: true,
+      });
+
+      for await (const chunk of stream) {
+        if (clientClosed) {
+          stream.controller.abort();
+          return;
+        }
+        const delta = chunk.choices[0]?.delta?.content;
+        if (delta) {
+          produced += delta;
+          writeSseEvent(res, { type: "token", value: delta });
+        }
+      }
+
+      let answer = produced.trim();
+      if (!answer) {
+        answer = "I couldn't produce a response. Try rephrasing your question.";
+        writeSseEvent(res, { type: "token", value: answer });
+      }
+
+      writeSseEvent(res, {
+        type: "citations",
+        citations,
+        edition,
+      });
+
+      try {
+        await persistTurn(threadId, message, answer, priorMessages, threadSummary);
+      } catch (err) {
+        logger.error({ err }, "[chat/stream] failed to persist turn");
+      }
+
+      writeSseEvent(res, { type: "done", conversationId: threadId });
+      res.end();
+    } catch (err) {
+      logger.error({ err }, "[chat/stream] LLM streaming failed");
+      writeSseEvent(res, {
+        type: "error",
+        error:
+          produced.length > 0
+            ? "The connection to the assistant was interrupted."
+            : "Chat service is temporarily unavailable.",
+      });
+      res.end();
+    }
+  },
+);
 
 export default router;
