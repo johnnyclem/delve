@@ -9,6 +9,7 @@
     "srd:setup": "tsx ./src/srd/setup.ts",
     "srd:extract": "tsx ./src/srd/extract.ts",
     "srd:ingest": "tsx ./src/srd/ingest.ts",
+    "srd:ingest-api": "tsx ./src/srd/ingest-api.ts",
     "backfill:entity-embeddings": "tsx ./src/backfill-entity-embeddings.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
