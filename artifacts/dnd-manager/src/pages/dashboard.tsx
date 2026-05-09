@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -20,13 +20,14 @@ import SessionsPanel from "@/components/sessions-panel";
 import CalendarPanel from "@/components/calendar-panel";
 import RulesLookupPanel from "@/components/rules-lookup";
 import WorldPanel from "@/components/world-panel";
+import ChatPanel from "@/components/chat-panel";
 import { useClerk } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules";
+type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules" | "chat";
 
 interface NavItem {
   id: NavId;
@@ -49,6 +50,7 @@ function buildNavItems(opts: { showMyCharacter: boolean }): NavItem[] {
     { id: "world", label: "World", icon: Compass },
     { id: "dice", label: "Dice", icon: Dice5 },
     { id: "rules", label: "Rules Lookup", icon: Library },
+    { id: "chat", label: "Ask", icon: MessageSquare },
   );
   return items;
 }
@@ -353,6 +355,7 @@ export default function DashboardPage() {
           {activeTab === "dice" && <DiceRollerPanel />}
           {activeTab === "rules" && <RulesLookupPanel />}
           {activeTab === "world" && <WorldPanel />}
+          {activeTab === "chat" && <ChatPanel />}
         </main>
       </div>
     </div>

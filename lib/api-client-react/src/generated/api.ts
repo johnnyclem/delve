@@ -23,6 +23,8 @@ import type {
   CampaignEntity,
   CampaignMember,
   Character,
+  ChatRequest,
+  ChatResponse,
   ConflictError,
   CreateCharacterBody,
   CreateEntityBody,
@@ -4689,3 +4691,89 @@ export function useGetEntityAudit<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore
+ */
+export const getPostChatUrl = () => {
+  return `/api/chat`;
+};
+
+export const postChat = async (
+  chatRequest: ChatRequest,
+  options?: RequestInit,
+): Promise<ChatResponse> => {
+  return customFetch<ChatResponse>(getPostChatUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(chatRequest),
+  });
+};
+
+export const getPostChatMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChat>>,
+    TError,
+    { data: BodyType<ChatRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postChat>>,
+  TError,
+  { data: BodyType<ChatRequest> },
+  TContext
+> => {
+  const mutationKey = ["postChat"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postChat>>,
+    { data: BodyType<ChatRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return postChat(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PostChatMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postChat>>
+>;
+export type PostChatMutationBody = BodyType<ChatRequest>;
+export type PostChatMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore
+ */
+export const usePostChat = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postChat>>,
+    TError,
+    { data: BodyType<ChatRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof postChat>>,
+  TError,
+  { data: BodyType<ChatRequest> },
+  TContext
+> => {
+  return useMutation(getPostChatMutationOptions(options));
+};

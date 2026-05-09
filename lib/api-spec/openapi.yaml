@@ -31,6 +31,8 @@ tags:
     description: SRD reference lookup
   - name: entities
     description: Campaign wiki entities (NPCs, quests, locations, etc.) with reveal gating
+  - name: chat
+    description: AI chat with hybrid retrieval over SRD rules and campaign lore
   - name: Storage
     description: Object storage upload and serving endpoints.
 
@@ -1296,6 +1298,37 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/EntityAuditEntry"
+
+  /chat:
+    post:
+      operationId: postChat
+      tags: [chat]
+      summary: Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Chat answer with citations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: LLM service temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
@@ -2805,3 +2838,53 @@ components:
         - userId
         - displayName
         - role
+
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    ChatCitation:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [srd-2014, srd-2024, campaign]
+        entityKind:
+          type: string
+        entityName:
+          type: string
+        chunkId:
+          type: integer
+        sourceField:
+          type: string
+          enum: [public_md, secret_md, dm_notes]
+          description: DM-only — which authored field a campaign chunk came from.
+        sourceUrl:
+          type: ["string", "null"]
+      required:
+        - source
+        - entityKind
+        - entityName
+        - chunkId
+
+    ChatResponse:
+      type: object
+      properties:
+        answer:
+          type: string
+        citations:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatCitation"
+        edition:
+          type: string
+          enum: ["2014", "2024"]
+      required:
+        - answer
+        - citations
+        - edition

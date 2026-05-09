@@ -37,6 +37,26 @@ const SQL = `
   ALTER TABLE campaigns
     ADD CONSTRAINT campaigns_default_edition_check
       CHECK (default_edition IN ('2014', '2024'));
+
+  -- campaign_entity_chunks: generated tsvector + GIN + HNSW + check
+  ALTER TABLE campaign_entity_chunks DROP COLUMN IF EXISTS tsv;
+  ALTER TABLE campaign_entity_chunks
+    ADD COLUMN tsv tsvector
+      GENERATED ALWAYS AS (
+        to_tsvector('english', coalesce(body_md, ''))
+      ) STORED;
+
+  CREATE INDEX IF NOT EXISTS campaign_entity_chunks_tsv_gin_idx
+    ON campaign_entity_chunks USING gin (tsv);
+
+  CREATE INDEX IF NOT EXISTS campaign_entity_chunks_embedding_hnsw_idx
+    ON campaign_entity_chunks USING hnsw (embedding halfvec_cosine_ops);
+
+  ALTER TABLE campaign_entity_chunks
+    DROP CONSTRAINT IF EXISTS campaign_entity_chunks_source_field_check;
+  ALTER TABLE campaign_entity_chunks
+    ADD CONSTRAINT campaign_entity_chunks_source_field_check
+      CHECK (source_field IN ('public_md', 'secret_md', 'dm_notes'));
 `;
 
 async function main() {

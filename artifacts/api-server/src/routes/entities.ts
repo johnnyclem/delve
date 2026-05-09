@@ -12,6 +12,7 @@ import { eq, and, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
+import { syncEntityChunks } from "../lib/entityEmbeddings";
 
 const router: IRouter = Router();
 
@@ -305,6 +306,12 @@ router.post("/entities", requireAuth, requireCampaignMember, async (req, res): P
     })
     .returning();
 
+  await syncEntityChunks(created.id, campaignId, [
+    { field: "public_md", body: created.publicMd },
+    { field: "secret_md", body: created.secretMd },
+    { field: "dm_notes", body: created.dmNotes },
+  ]);
+
   res.status(201).json(toResponse(created, true));
 });
 
@@ -396,6 +403,21 @@ router.patch("/entities/:id", requireAuth, requireCampaignMember, async (req, re
       actor: userId,
       diff: null,
     });
+  }
+
+  // Re-embed only the fields that actually changed.
+  const fieldUpdates: Array<{ field: "public_md" | "secret_md" | "dm_notes"; body: string | null }> = [];
+  if (parsed.data.publicMd !== undefined) {
+    fieldUpdates.push({ field: "public_md", body: updated.publicMd });
+  }
+  if (parsed.data.secretMd !== undefined) {
+    fieldUpdates.push({ field: "secret_md", body: updated.secretMd });
+  }
+  if (parsed.data.dmNotes !== undefined) {
+    fieldUpdates.push({ field: "dm_notes", body: updated.dmNotes });
+  }
+  if (fieldUpdates.length > 0) {
+    await syncEntityChunks(id, campaignId, fieldUpdates);
   }
 
   res.json(toResponse(updated, true));

@@ -967,6 +967,60 @@ export interface EntityAuditEntry {
   at: string;
 }
 
+export interface ChatRequest {
+  /**
+   * @minLength 1
+   * @maxLength 2000
+   */
+  message: string;
+}
+
+export type ChatCitationSource =
+  (typeof ChatCitationSource)[keyof typeof ChatCitationSource];
+
+export const ChatCitationSource = {
+  "srd-2014": "srd-2014",
+  "srd-2024": "srd-2024",
+  campaign: "campaign",
+} as const;
+
+/**
+ * DM-only — which authored field a campaign chunk came from.
+ */
+export type ChatCitationSourceField =
+  (typeof ChatCitationSourceField)[keyof typeof ChatCitationSourceField];
+
+export const ChatCitationSourceField = {
+  public_md: "public_md",
+  secret_md: "secret_md",
+  dm_notes: "dm_notes",
+} as const;
+
+export interface ChatCitation {
+  source: ChatCitationSource;
+  entityKind: string;
+  entityName: string;
+  chunkId: number;
+  /** DM-only — which authored field a campaign chunk came from. */
+  sourceField?: ChatCitationSourceField;
+  /** @nullable */
+  sourceUrl?: string | null;
+}
+
+export type ChatResponseEdition =
+  (typeof ChatResponseEdition)[keyof typeof ChatResponseEdition];
+
+export const ChatResponseEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export interface ChatResponse {
+  answer: string;
+  citations: ChatCitation[];
+  edition: ChatResponseEdition;
+}
+
 export type SearchRulesParams = {
   /**
    * @minLength 1

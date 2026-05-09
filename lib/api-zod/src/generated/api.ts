@@ -2337,3 +2337,30 @@ export const GetEntityAuditResponseItem = zod.object({
   at: zod.coerce.date(),
 });
 export const GetEntityAuditResponse = zod.array(GetEntityAuditResponseItem);
+
+/**
+ * @summary Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore
+ */
+export const postChatBodyMessageMax = 2000;
+
+export const PostChatBody = zod.object({
+  message: zod.string().min(1).max(postChatBodyMessageMax),
+});
+
+export const PostChatResponse = zod.object({
+  answer: zod.string(),
+  citations: zod.array(
+    zod.object({
+      source: zod.enum(["srd-2014", "srd-2024", "campaign"]),
+      entityKind: zod.string(),
+      entityName: zod.string(),
+      chunkId: zod.number(),
+      sourceField: zod
+        .enum(["public_md", "secret_md", "dm_notes"])
+        .optional()
+        .describe("DM-only — which authored field a campaign chunk came from."),
+      sourceUrl: zod.string().nullish(),
+    }),
+  ),
+  edition: zod.enum(["2014", "2024"]),
+});

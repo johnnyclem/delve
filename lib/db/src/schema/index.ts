@@ -11,3 +11,4 @@ export * from "./maps";
 export * from "./npcs";
 export * from "./reference_chunks";
 export * from "./campaign_entities";
+export * from "./campaign_entity_chunks";
