@@ -29,6 +29,7 @@ import type {
   CreateCharacterBody,
   CreateEntityBody,
   CreateEventBody,
+  CreateHomebrewRuleBody,
   CreateMapBody,
   CreateNpcBody,
   CreateSessionBody,
@@ -42,6 +43,7 @@ import type {
   GeneratedRecap,
   GetRuleParams,
   HealthStatus,
+  HomebrewRule,
   ListEntitiesParams,
   Map,
   MapSummary,
@@ -64,6 +66,7 @@ import type {
   UpdateCharacterBody,
   UpdateEntityBody,
   UpdateEventBody,
+  UpdateHomebrewRuleBody,
   UpdateMapBody,
   UpdateNotificationPrefsBody,
   UpdateSessionBody,
@@ -4691,6 +4694,425 @@ export function useGetEntityAudit<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary List house rules for the campaign. Players see only active rules.
+ */
+export const getListHomebrewRulesUrl = () => {
+  return `/api/homebrew`;
+};
+
+export const listHomebrewRules = async (
+  options?: RequestInit,
+): Promise<HomebrewRule[]> => {
+  return customFetch<HomebrewRule[]>(getListHomebrewRulesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListHomebrewRulesQueryKey = () => {
+  return [`/api/homebrew`] as const;
+};
+
+export const getListHomebrewRulesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listHomebrewRules>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listHomebrewRules>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListHomebrewRulesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listHomebrewRules>>
+  > = ({ signal }) => listHomebrewRules({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listHomebrewRules>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListHomebrewRulesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listHomebrewRules>>
+>;
+export type ListHomebrewRulesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List house rules for the campaign. Players see only active rules.
+ */
+
+export function useListHomebrewRules<
+  TData = Awaited<ReturnType<typeof listHomebrewRules>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listHomebrewRules>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListHomebrewRulesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a house rule (DM only)
+ */
+export const getCreateHomebrewRuleUrl = () => {
+  return `/api/homebrew`;
+};
+
+export const createHomebrewRule = async (
+  createHomebrewRuleBody: CreateHomebrewRuleBody,
+  options?: RequestInit,
+): Promise<HomebrewRule> => {
+  return customFetch<HomebrewRule>(getCreateHomebrewRuleUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createHomebrewRuleBody),
+  });
+};
+
+export const getCreateHomebrewRuleMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHomebrewRule>>,
+    TError,
+    { data: BodyType<CreateHomebrewRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createHomebrewRule>>,
+  TError,
+  { data: BodyType<CreateHomebrewRuleBody> },
+  TContext
+> => {
+  const mutationKey = ["createHomebrewRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createHomebrewRule>>,
+    { data: BodyType<CreateHomebrewRuleBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createHomebrewRule(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateHomebrewRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createHomebrewRule>>
+>;
+export type CreateHomebrewRuleMutationBody = BodyType<CreateHomebrewRuleBody>;
+export type CreateHomebrewRuleMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a house rule (DM only)
+ */
+export const useCreateHomebrewRule = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHomebrewRule>>,
+    TError,
+    { data: BodyType<CreateHomebrewRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createHomebrewRule>>,
+  TError,
+  { data: BodyType<CreateHomebrewRuleBody> },
+  TContext
+> => {
+  return useMutation(getCreateHomebrewRuleMutationOptions(options));
+};
+
+/**
+ * @summary Get a single house rule
+ */
+export const getGetHomebrewRuleUrl = (id: number) => {
+  return `/api/homebrew/${id}`;
+};
+
+export const getHomebrewRule = async (
+  id: number,
+  options?: RequestInit,
+): Promise<HomebrewRule> => {
+  return customFetch<HomebrewRule>(getGetHomebrewRuleUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHomebrewRuleQueryKey = (id: number) => {
+  return [`/api/homebrew/${id}`] as const;
+};
+
+export const getGetHomebrewRuleQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHomebrewRule>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHomebrewRule>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHomebrewRuleQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHomebrewRule>>> = ({
+    signal,
+  }) => getHomebrewRule(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHomebrewRule>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHomebrewRuleQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHomebrewRule>>
+>;
+export type GetHomebrewRuleQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a single house rule
+ */
+
+export function useGetHomebrewRule<
+  TData = Awaited<ReturnType<typeof getHomebrewRule>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHomebrewRule>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHomebrewRuleQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update a house rule (DM only)
+ */
+export const getUpdateHomebrewRuleUrl = (id: number) => {
+  return `/api/homebrew/${id}`;
+};
+
+export const updateHomebrewRule = async (
+  id: number,
+  updateHomebrewRuleBody: UpdateHomebrewRuleBody,
+  options?: RequestInit,
+): Promise<HomebrewRule> => {
+  return customFetch<HomebrewRule>(getUpdateHomebrewRuleUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateHomebrewRuleBody),
+  });
+};
+
+export const getUpdateHomebrewRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateHomebrewRule>>,
+    TError,
+    { id: number; data: BodyType<UpdateHomebrewRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateHomebrewRule>>,
+  TError,
+  { id: number; data: BodyType<UpdateHomebrewRuleBody> },
+  TContext
+> => {
+  const mutationKey = ["updateHomebrewRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateHomebrewRule>>,
+    { id: number; data: BodyType<UpdateHomebrewRuleBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateHomebrewRule(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateHomebrewRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateHomebrewRule>>
+>;
+export type UpdateHomebrewRuleMutationBody = BodyType<UpdateHomebrewRuleBody>;
+export type UpdateHomebrewRuleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update a house rule (DM only)
+ */
+export const useUpdateHomebrewRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateHomebrewRule>>,
+    TError,
+    { id: number; data: BodyType<UpdateHomebrewRuleBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateHomebrewRule>>,
+  TError,
+  { id: number; data: BodyType<UpdateHomebrewRuleBody> },
+  TContext
+> => {
+  return useMutation(getUpdateHomebrewRuleMutationOptions(options));
+};
+
+/**
+ * @summary Soft-delete a house rule by setting active=false (DM only)
+ */
+export const getDeleteHomebrewRuleUrl = (id: number) => {
+  return `/api/homebrew/${id}`;
+};
+
+export const deleteHomebrewRule = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getDeleteHomebrewRuleUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteHomebrewRuleMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHomebrewRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteHomebrewRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteHomebrewRule"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteHomebrewRule>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteHomebrewRule(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteHomebrewRuleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteHomebrewRule>>
+>;
+
+export type DeleteHomebrewRuleMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Soft-delete a house rule by setting active=false (DM only)
+ */
+export const useDeleteHomebrewRule = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHomebrewRule>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteHomebrewRule>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteHomebrewRuleMutationOptions(options));
+};
 
 /**
  * @summary Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore

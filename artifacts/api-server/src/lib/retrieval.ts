@@ -7,6 +7,13 @@ const SEM_LIMIT = 30;
 const BM25_LIMIT = 30;
 const FINAL_LIMIT = 8;
 
+// websearch_to_tsquery ANDs every term, which kills recall on natural-language
+// questions ("how do critical hits work in this campaign according to our house
+// rules?"). Convert it to an OR-joined query so any single content word can
+// match — ts_rank still surfaces the most relevant chunk first.
+const OR_TSQUERY_SQL = (q: string) =>
+  sql`NULLIF(replace(websearch_to_tsquery('english', ${q})::text, '&', '|'), '')::tsquery`;
+
 export interface ReferenceHit {
   chunkId: number;
   edition: SrdEdition;
@@ -26,6 +33,13 @@ export interface CampaignHit {
   entityName: string;
   entitySlug: string;
   sourceField: EntityChunkSourceField;
+  bodyMd: string;
+  score: number;
+}
+
+export interface HomebrewHit {
+  ruleId: number;
+  title: string;
   bodyMd: string;
   score: number;
 }
@@ -67,11 +81,11 @@ export async function retrieveReference(
     ),
     keyword AS (
       SELECT id, ROW_NUMBER() OVER (
-        ORDER BY ts_rank(tsv, websearch_to_tsquery('english', ${query})) DESC
+        ORDER BY ts_rank(tsv, ${OR_TSQUERY_SQL(query)}) DESC
       ) AS rnk
       FROM reference_chunks
       WHERE edition = ${edition}
-        AND tsv @@ websearch_to_tsquery('english', ${query})
+        AND tsv @@ ${OR_TSQUERY_SQL(query)}
       LIMIT ${BM25_LIMIT}
     ),
     fused AS (
@@ -150,12 +164,12 @@ export async function retrieveCampaign(
     ),
     keyword AS (
       SELECT cec.id, ROW_NUMBER() OVER (
-        ORDER BY ts_rank(cec.tsv, websearch_to_tsquery('english', ${query})) DESC
+        ORDER BY ts_rank(cec.tsv, ${OR_TSQUERY_SQL(query)}) DESC
       ) AS rnk
       FROM campaign_entity_chunks cec
       ${gatingJoin}
       WHERE cec.campaign_id = ${campaignId}
-        AND cec.tsv @@ websearch_to_tsquery('english', ${query})
+        AND cec.tsv @@ ${OR_TSQUERY_SQL(query)}
       LIMIT ${BM25_LIMIT}
     ),
     fused AS (
@@ -183,6 +197,73 @@ export async function retrieveCampaign(
     entityName: r.entity_name,
     entitySlug: r.entity_slug,
     sourceField: r.source_field as EntityChunkSourceField,
+    bodyMd: r.body_md,
+    score: Number(r.score),
+  }));
+}
+
+export async function retrieveHomebrew(
+  query: string,
+  queryEmbedding: number[] | null,
+  campaignId: number,
+  limit: number = FINAL_LIMIT,
+): Promise<HomebrewHit[]> {
+  if (!query.trim()) return [];
+
+  await db.execute(sql`SET LOCAL hnsw.iterative_scan = 'relaxed_order'`).catch(() => {});
+
+  const semanticPart = queryEmbedding
+    ? sql`
+        SELECT id, ROW_NUMBER() OVER (
+          ORDER BY embedding <=> ${vectorToSqlLiteral(queryEmbedding)}::halfvec(1536) ASC
+        ) AS rnk
+        FROM homebrew_rules
+        WHERE campaign_id = ${campaignId}
+          AND active = true
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> ${vectorToSqlLiteral(queryEmbedding)}::halfvec(1536)
+        LIMIT ${SEM_LIMIT}
+      `
+    : sql`SELECT NULL::int AS id, NULL::int AS rnk WHERE false`;
+
+  const result = await db.execute<{
+    id: number;
+    title: string;
+    body_md: string;
+    score: number;
+  }>(sql`
+    WITH semantic AS (
+      ${semanticPart}
+    ),
+    keyword AS (
+      SELECT id, ROW_NUMBER() OVER (
+        ORDER BY ts_rank(tsv, ${OR_TSQUERY_SQL(query)}) DESC
+      ) AS rnk
+      FROM homebrew_rules
+      WHERE campaign_id = ${campaignId}
+        AND active = true
+        AND tsv @@ ${OR_TSQUERY_SQL(query)}
+      LIMIT ${BM25_LIMIT}
+    ),
+    fused AS (
+      SELECT id, SUM(weight) AS score FROM (
+        SELECT id, 1.0 / (${RRF_K} + rnk) AS weight FROM semantic
+        UNION ALL
+        SELECT id, 1.0 / (${RRF_K} + rnk) AS weight FROM keyword
+      ) s
+      WHERE id IS NOT NULL
+      GROUP BY id
+    )
+    SELECT hr.id, hr.title, hr.body_md, f.score
+    FROM fused f
+    JOIN homebrew_rules hr ON hr.id = f.id
+    ORDER BY f.score DESC
+    LIMIT ${limit}
+  `);
+
+  return result.rows.map((r) => ({
+    ruleId: r.id,
+    title: r.title,
     bodyMd: r.body_md,
     score: Number(r.score),
   }));

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock } from "lucide-react";
+import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { postChat, useGetMyMembership } from "@workspace/api-client-react";
@@ -28,7 +28,7 @@ function escapeHtml(s: string): string {
 function renderAnswer(md: string): string {
   const escaped = escapeHtml(md);
   return escaped
-    .replace(/\[([CR]\d+)\]/g, '<span class="inline-flex items-center rounded bg-primary/20 text-primary px-1 py-0 text-[10px] font-mono align-middle">$1</span>')
+    .replace(/\[([CRH]\d+)\]/g, '<span class="inline-flex items-center rounded bg-primary/20 text-primary px-1 py-0 text-[10px] font-mono align-middle">$1</span>')
     .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
@@ -40,15 +40,18 @@ function renderAnswer(md: string): string {
 
 function CitationBadge({ citation, index, isDm }: { citation: ChatCitation; index: number; isDm: boolean }) {
   const isCampaign = citation.source === "campaign";
-  const tag = isCampaign ? `C${index + 1}` : `R${index + 1}`;
-  const label =
-    citation.source === "srd-2014"
-      ? "SRD 2014"
-      : citation.source === "srd-2024"
-      ? "SRD 2024"
-      : isDm
-      ? `Campaign · ${citation.entityKind.replace(/_/g, " ")}`
-      : "Campaign";
+  const isHomebrew = citation.source === "homebrew";
+  const prefix = isHomebrew ? "H" : isCampaign ? "C" : "R";
+  const tag = `${prefix}${index + 1}`;
+  const label = isHomebrew
+    ? "House Rule"
+    : citation.source === "srd-2014"
+    ? "SRD 2014"
+    : citation.source === "srd-2024"
+    ? "SRD 2024"
+    : isDm
+    ? `Campaign · ${citation.entityKind.replace(/_/g, " ")}`
+    : "Campaign";
 
   return (
     <a
@@ -56,14 +59,22 @@ function CitationBadge({ citation, index, isDm }: { citation: ChatCitation; inde
       target={citation.sourceUrl ? "_blank" : undefined}
       rel="noreferrer"
       className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${
-        isCampaign
+        isHomebrew
+          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+          : isCampaign
           ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
           : "border-primary/30 bg-primary/10 text-primary"
       } ${citation.sourceUrl ? "hover:bg-primary/20" : ""}`}
       data-testid={`chat-citation-${tag}`}
     >
       <span className="font-mono text-[10px] opacity-80">[{tag}]</span>
-      {isCampaign ? <Sparkles className="h-3 w-3" /> : <BookOpen className="h-3 w-3" />}
+      {isHomebrew ? (
+        <Scroll className="h-3 w-3" />
+      ) : isCampaign ? (
+        <Sparkles className="h-3 w-3" />
+      ) : (
+        <BookOpen className="h-3 w-3" />
+      )}
       <span className="font-medium truncate max-w-[200px]">{citation.entityName}</span>
       <span className="text-[10px] opacity-70">{label}</span>
       {isDm && isCampaign && citation.sourceField && citation.sourceField !== "public_md" && (

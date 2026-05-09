@@ -57,6 +57,21 @@ const SQL = `
   ALTER TABLE campaign_entity_chunks
     ADD CONSTRAINT campaign_entity_chunks_source_field_check
       CHECK (source_field IN ('public_md', 'secret_md', 'dm_notes'));
+
+  -- homebrew_rules: generated tsvector + GIN + HNSW
+  ALTER TABLE homebrew_rules DROP COLUMN IF EXISTS tsv;
+  ALTER TABLE homebrew_rules
+    ADD COLUMN tsv tsvector
+      GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+        setweight(to_tsvector('english', coalesce(body_md, '')), 'B')
+      ) STORED;
+
+  CREATE INDEX IF NOT EXISTS homebrew_rules_tsv_gin_idx
+    ON homebrew_rules USING gin (tsv);
+
+  CREATE INDEX IF NOT EXISTS homebrew_rules_embedding_hnsw_idx
+    ON homebrew_rules USING hnsw (embedding halfvec_cosine_ops);
 `;
 
 async function main() {

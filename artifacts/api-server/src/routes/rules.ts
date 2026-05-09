@@ -84,7 +84,7 @@ router.get("/rules/search", requireAuth, requireCampaignMember, async (req, res)
     })
     .from(referenceChunksTable)
     .where(and(...whereParts))
-    .orderBy(sql`rank DESC`)
+    .orderBy(sql`ts_rank(${referenceChunksTable.tsv}, websearch_to_tsquery('english', ${q})) DESC`)
     .limit(limit);
 
   res.json({

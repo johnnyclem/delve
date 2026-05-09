@@ -13,8 +13,10 @@ import { embedQuery } from "../lib/entityEmbeddings";
 import {
   retrieveReference,
   retrieveCampaign,
+  retrieveHomebrew,
   type ReferenceHit,
   type CampaignHit,
+  type HomebrewHit,
 } from "../lib/retrieval";
 import { logger } from "../lib/logger";
 
@@ -28,7 +30,7 @@ const chatBody = z.object({
 });
 
 interface Citation {
-  source: "srd-2014" | "srd-2024" | "campaign";
+  source: "srd-2014" | "srd-2024" | "campaign" | "homebrew";
   entityKind: string;
   entityName: string;
   chunkId: number;
@@ -38,10 +40,30 @@ interface Citation {
   sourceUrl?: string | null;
 }
 
-function buildContextBlock(refHits: ReferenceHit[], campHits: CampaignHit[], isDmRequester: boolean): { context: string; citations: Citation[] } {
+function buildContextBlock(
+  refHits: ReferenceHit[],
+  campHits: CampaignHit[],
+  homeHits: HomebrewHit[],
+  isDmRequester: boolean,
+): { context: string; citations: Citation[] } {
   const lines: string[] = [];
   const citations: Citation[] = [];
   let cursor = 1;
+
+  if (homeHits.length > 0) {
+    lines.push("## House rules (override SRD when they conflict)");
+    for (const h of homeHits) {
+      const tag = `[H${cursor}]`;
+      lines.push(`${tag} HOUSE RULE — ${h.title}\n${h.bodyMd}\n`);
+      citations.push({
+        source: "homebrew",
+        entityKind: "house_rule",
+        entityName: h.title,
+        chunkId: h.ruleId,
+      });
+      cursor += 1;
+    }
+  }
 
   if (campHits.length > 0) {
     lines.push("## Campaign-specific context (prefer this when relevant)");
@@ -88,7 +110,9 @@ const SYSTEM_PROMPT = `You are Delve, a knowledgeable D&D assistant for a specif
 Rules for answering:
 - Only use information from the provided context blocks. Never fabricate rules, NPCs, locations, or campaign details that aren't in the context.
 - If the context doesn't contain enough information to answer, say so honestly.
-- When campaign-specific context and SRD context both apply, prefer the campaign-specific information (the DM has authored it for this world).
+- House rules ([H#]) override the SRD whenever they conflict. Mention the house rule explicitly and note the standard 5e default afterward when relevant.
+- When campaign-specific context ([C#]) and SRD context ([R#]) both apply, prefer the campaign-specific information (the DM has authored it for this world).
+- If no house rule applies, follow the SRD reference normally.
 - Cite your sources inline using the bracket tags shown in the context (e.g., [C1], [R2]). Use multiple citations when synthesizing across sources.
 - Be concise. Use markdown for structure when helpful.`;
 
@@ -113,7 +137,7 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
 
   const queryEmbedding = await embedQuery(message);
 
-  const [refHits, campHits] = await Promise.all([
+  const [refHits, campHits, homeHits] = await Promise.all([
     retrieveReference(message, queryEmbedding, edition).catch((err) => {
       logger.error({ err }, "[chat] reference retrieval failed");
       return [] as ReferenceHit[];
@@ -122,9 +146,13 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
       logger.error({ err }, "[chat] campaign retrieval failed");
       return [] as CampaignHit[];
     }),
+    retrieveHomebrew(message, queryEmbedding, campaignId).catch((err) => {
+      logger.error({ err }, "[chat] homebrew retrieval failed");
+      return [] as HomebrewHit[];
+    }),
   ]);
 
-  const { context, citations } = buildContextBlock(refHits, campHits, dmRequester);
+  const { context, citations } = buildContextBlock(refHits, campHits, homeHits, dmRequester);
 
   const userPrompt = context
     ? `Context:\n\n${context}\n\nQuestion: ${message}`

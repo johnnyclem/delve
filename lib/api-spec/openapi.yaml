@@ -1299,6 +1299,109 @@ paths:
                 items:
                   $ref: "#/components/schemas/EntityAuditEntry"
 
+  /homebrew:
+    get:
+      operationId: listHomebrewRules
+      tags: [homebrew]
+      summary: List house rules for the campaign. Players see only active rules.
+      responses:
+        "200":
+          description: House rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HomebrewRule"
+    post:
+      operationId: createHomebrewRule
+      tags: [homebrew]
+      summary: Create a house rule (DM only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHomebrewRuleBody"
+      responses:
+        "201":
+          description: Created house rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomebrewRule"
+        "403":
+          description: Only the DM can create house rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /homebrew/{id}:
+    get:
+      operationId: getHomebrewRule
+      tags: [homebrew]
+      summary: Get a single house rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: House rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomebrewRule"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateHomebrewRule
+      tags: [homebrew]
+      summary: Update a house rule (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateHomebrewRuleBody"
+      responses:
+        "200":
+          description: Updated house rule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomebrewRule"
+    delete:
+      operationId: deleteHomebrewRule
+      tags: [homebrew]
+      summary: Soft-delete a house rule by setting active=false (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
   /chat:
     post:
       operationId: postChat
@@ -2848,12 +2951,72 @@ components:
           minLength: 1
           maxLength: 2000
 
+    HomebrewRule:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        title:
+          type: string
+        bodyMd:
+          type: string
+        active:
+          type: boolean
+        createdByUserId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - title
+        - bodyMd
+        - active
+        - createdByUserId
+        - createdAt
+        - updatedAt
+
+    CreateHomebrewRuleBody:
+      type: object
+      required: [title, bodyMd]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        bodyMd:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        active:
+          type: boolean
+
+    UpdateHomebrewRuleBody:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 160
+        bodyMd:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        active:
+          type: boolean
+
     ChatCitation:
       type: object
       properties:
         source:
           type: string
-          enum: [srd-2014, srd-2024, campaign]
+          enum: [srd-2014, srd-2024, campaign, homebrew]
         entityKind:
           type: string
         entityName:

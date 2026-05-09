@@ -975,6 +975,45 @@ export interface ChatRequest {
   message: string;
 }
 
+export interface HomebrewRule {
+  id: number;
+  campaignId: number;
+  title: string;
+  bodyMd: string;
+  active: boolean;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateHomebrewRuleBody {
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  title: string;
+  /**
+   * @minLength 1
+   * @maxLength 20000
+   */
+  bodyMd: string;
+  active?: boolean;
+}
+
+export interface UpdateHomebrewRuleBody {
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  title?: string;
+  /**
+   * @minLength 1
+   * @maxLength 20000
+   */
+  bodyMd?: string;
+  active?: boolean;
+}
+
 export type ChatCitationSource =
   (typeof ChatCitationSource)[keyof typeof ChatCitationSource];
 
@@ -982,6 +1021,7 @@ export const ChatCitationSource = {
   "srd-2014": "srd-2014",
   "srd-2024": "srd-2024",
   campaign: "campaign",
+  homebrew: "homebrew",
 } as const;
 
 /**

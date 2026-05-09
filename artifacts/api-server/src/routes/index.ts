@@ -14,6 +14,7 @@ import mapsRouter from "./maps";
 import npcsRouter from "./npcs";
 import rulesRouter from "./rules";
 import entitiesRouter from "./entities";
+import homebrewRouter from "./homebrew";
 import chatRouter from "./chat";
 
 const router: IRouter = Router();
@@ -33,6 +34,7 @@ router.use(mapsRouter);
 router.use(npcsRouter);
 router.use(rulesRouter);
 router.use(entitiesRouter);
+router.use(homebrewRouter);
 router.use(chatRouter);
 
 export default router;

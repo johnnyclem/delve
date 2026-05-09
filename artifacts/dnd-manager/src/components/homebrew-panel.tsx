@@ -1,0 +1,288 @@
+import { useState } from "react";
+import { Scroll, Plus, Pencil, Trash2, Loader2, EyeOff } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  useListHomebrewRules,
+  useCreateHomebrewRule,
+  useUpdateHomebrewRule,
+  useDeleteHomebrewRule,
+  useGetMyMembership,
+  type HomebrewRule,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+
+const RULES_KEY = ["/api/homebrew"] as const;
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function renderMd(md: string): string {
+  return escapeHtml(md)
+    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
+    .replace(/\n\n/g, "</p><p>")
+    .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
+}
+
+interface RuleEditorProps {
+  initial: { title: string; bodyMd: string };
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (data: { title: string; bodyMd: string }) => void;
+  testIdPrefix: string;
+}
+
+function RuleEditor({ initial, busy, onCancel, onSave, testIdPrefix }: RuleEditorProps) {
+  const [title, setTitle] = useState(initial.title);
+  const [bodyMd, setBodyMd] = useState(initial.bodyMd);
+  const canSave = title.trim().length > 0 && bodyMd.trim().length > 0 && !busy;
+
+  return (
+    <div className="space-y-3" data-testid={`${testIdPrefix}-editor`}>
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Title</label>
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="e.g. Critical hits deal max + roll"
+          maxLength={160}
+          data-testid={`${testIdPrefix}-input-title`}
+        />
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Rule body (markdown)</label>
+        <Textarea
+          value={bodyMd}
+          onChange={(e) => setBodyMd(e.target.value)}
+          rows={6}
+          placeholder="Describe how this house rule overrides or extends the standard 5e rule…"
+          maxLength={20000}
+          data-testid={`${testIdPrefix}-input-body`}
+        />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy} data-testid={`${testIdPrefix}-cancel`}>
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => canSave && onSave({ title: title.trim(), bodyMd })}
+          disabled={!canSave}
+          data-testid={`${testIdPrefix}-save`}
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default function HomebrewPanel() {
+  const { data: membership } = useGetMyMembership();
+  const isDm = membership?.role === "dm";
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data, isLoading, error } = useListHomebrewRules({
+    query: { queryKey: RULES_KEY },
+  });
+  const rules = (data ?? []) as HomebrewRule[];
+
+  const createMut = useCreateHomebrewRule();
+  const updateMut = useUpdateHomebrewRule();
+  const deleteMut = useDeleteHomebrewRule();
+
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: RULES_KEY });
+
+  const handleCreate = (vals: { title: string; bodyMd: string }) => {
+    createMut.mutate(
+      { data: vals },
+      {
+        onSuccess: () => {
+          toast({ title: "House rule created" });
+          setCreating(false);
+          invalidate();
+        },
+        onError: (err) => toast({ title: "Failed to create", description: (err as Error).message, variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleUpdate = (id: number, vals: { title: string; bodyMd: string }) => {
+    updateMut.mutate(
+      { id, data: vals },
+      {
+        onSuccess: () => {
+          toast({ title: "House rule updated" });
+          setEditingId(null);
+          invalidate();
+        },
+        onError: (err) => toast({ title: "Failed to update", description: (err as Error).message, variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleDelete = (id: number, title: string) => {
+    if (!window.confirm(`Deactivate house rule "${title}"? It will no longer apply to AI answers.`)) return;
+    deleteMut.mutate(
+      { id },
+      {
+        onSuccess: () => {
+          toast({ title: "House rule deactivated" });
+          invalidate();
+        },
+        onError: (err) => toast({ title: "Failed to delete", description: (err as Error).message, variant: "destructive" }),
+      },
+    );
+  };
+
+  const handleReactivate = (rule: HomebrewRule) => {
+    updateMut.mutate(
+      { id: rule.id, data: { active: true } },
+      {
+        onSuccess: () => {
+          toast({ title: "House rule reactivated" });
+          invalidate();
+        },
+        onError: (err) => toast({ title: "Failed to reactivate", description: (err as Error).message, variant: "destructive" }),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-6" data-testid="homebrew-panel">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2 tracking-tight">
+            <Scroll className="h-6 w-6 text-primary" />
+            House Rules
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            DM-authored overrides to standard 5e mechanics. The AI assistant cites these as
+            "House Rule" and prefers them over the SRD when they conflict.
+          </p>
+        </div>
+        {isDm && !creating && (
+          <Button onClick={() => setCreating(true)} data-testid="button-new-house-rule">
+            <Plus className="h-4 w-4 mr-1" />
+            New rule
+          </Button>
+        )}
+      </div>
+
+      {creating && isDm && (
+        <div className="rounded-2xl glass-panel p-4">
+          <h3 className="text-sm font-semibold text-foreground mb-3">New house rule</h3>
+          <RuleEditor
+            initial={{ title: "", bodyMd: "" }}
+            busy={createMut.isPending}
+            onCancel={() => setCreating(false)}
+            onSave={handleCreate}
+            testIdPrefix="create"
+          />
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      )}
+      {error && (
+        <p className="text-sm text-destructive" data-testid="text-homebrew-error">
+          {(error as Error).message}
+        </p>
+      )}
+
+      {!isLoading && rules.length === 0 && (
+        <div className="rounded-2xl glass-panel p-8 text-center text-muted-foreground" data-testid="text-homebrew-empty">
+          {isDm
+            ? "No house rules yet. Add one above to override standard 5e mechanics."
+            : "Your DM hasn't published any house rules yet."}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <AnimatePresence initial={false}>
+          {rules.map((rule) => (
+            <motion.div
+              key={rule.id}
+              layout
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={`rounded-2xl glass-panel p-4 ${rule.active ? "" : "opacity-60"}`}
+              data-testid={`house-rule-${rule.id}`}
+            >
+              {editingId === rule.id ? (
+                <RuleEditor
+                  initial={{ title: rule.title, bodyMd: rule.bodyMd }}
+                  busy={updateMut.isPending}
+                  onCancel={() => setEditingId(null)}
+                  onSave={(vals) => handleUpdate(rule.id, vals)}
+                  testIdPrefix={`edit-${rule.id}`}
+                />
+              ) : (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-base font-semibold text-foreground flex items-center gap-2" data-testid="text-rule-title">
+                        {rule.title}
+                        {!rule.active && (
+                          <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                            <EyeOff className="h-3 w-3" /> inactive
+                          </span>
+                        )}
+                      </h3>
+                    </div>
+                    {isDm && (
+                      <div className="flex gap-1 shrink-0">
+                        {!rule.active && (
+                          <Button variant="ghost" size="sm" onClick={() => handleReactivate(rule)} data-testid={`button-reactivate-${rule.id}`}>
+                            Reactivate
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="icon" onClick={() => setEditingId(rule.id)} data-testid={`button-edit-${rule.id}`}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        {rule.active && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(rule.id, rule.title)}
+                            data-testid={`button-delete-${rule.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    className="prose prose-sm prose-invert max-w-none text-foreground/90 mt-2"
+                    data-testid="text-rule-body"
+                    dangerouslySetInnerHTML={{ __html: renderMd(rule.bodyMd) }}
+                  />
+                </>
+              )}
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}

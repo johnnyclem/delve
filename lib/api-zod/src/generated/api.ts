@@ -2339,6 +2339,93 @@ export const GetEntityAuditResponseItem = zod.object({
 export const GetEntityAuditResponse = zod.array(GetEntityAuditResponseItem);
 
 /**
+ * @summary List house rules for the campaign. Players see only active rules.
+ */
+export const ListHomebrewRulesResponseItem = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  title: zod.string(),
+  bodyMd: zod.string(),
+  active: zod.boolean(),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListHomebrewRulesResponse = zod.array(
+  ListHomebrewRulesResponseItem,
+);
+
+/**
+ * @summary Create a house rule (DM only)
+ */
+export const createHomebrewRuleBodyTitleMax = 160;
+
+export const createHomebrewRuleBodyBodyMdMax = 20000;
+
+export const CreateHomebrewRuleBody = zod.object({
+  title: zod.string().min(1).max(createHomebrewRuleBodyTitleMax),
+  bodyMd: zod.string().min(1).max(createHomebrewRuleBodyBodyMdMax),
+  active: zod.boolean().optional(),
+});
+
+/**
+ * @summary Get a single house rule
+ */
+export const GetHomebrewRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetHomebrewRuleResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  title: zod.string(),
+  bodyMd: zod.string(),
+  active: zod.boolean(),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Update a house rule (DM only)
+ */
+export const UpdateHomebrewRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateHomebrewRuleBodyTitleMax = 160;
+
+export const updateHomebrewRuleBodyBodyMdMax = 20000;
+
+export const UpdateHomebrewRuleBody = zod.object({
+  title: zod.string().min(1).max(updateHomebrewRuleBodyTitleMax).optional(),
+  bodyMd: zod.string().min(1).max(updateHomebrewRuleBodyBodyMdMax).optional(),
+  active: zod.boolean().optional(),
+});
+
+export const UpdateHomebrewRuleResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  title: zod.string(),
+  bodyMd: zod.string(),
+  active: zod.boolean(),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
+ * @summary Soft-delete a house rule by setting active=false (DM only)
+ */
+export const DeleteHomebrewRuleParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteHomebrewRuleResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore
  */
 export const postChatBodyMessageMax = 2000;
@@ -2351,7 +2438,7 @@ export const PostChatResponse = zod.object({
   answer: zod.string(),
   citations: zod.array(
     zod.object({
-      source: zod.enum(["srd-2014", "srd-2024", "campaign"]),
+      source: zod.enum(["srd-2014", "srd-2024", "campaign", "homebrew"]),
       entityKind: zod.string(),
       entityName: zod.string(),
       chunkId: zod.number(),

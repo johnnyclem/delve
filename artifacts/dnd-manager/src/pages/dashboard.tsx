@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -21,13 +21,15 @@ import CalendarPanel from "@/components/calendar-panel";
 import RulesLookupPanel from "@/components/rules-lookup";
 import WorldPanel from "@/components/world-panel";
 import ChatPanel from "@/components/chat-panel";
+import HomebrewPanel from "@/components/homebrew-panel";
+import CompareEditionsPanel from "@/components/compare-editions";
 import { useClerk } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules" | "chat";
+type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules" | "chat" | "homebrew" | "compare";
 
 interface NavItem {
   id: NavId;
@@ -36,7 +38,7 @@ interface NavItem {
   hidden?: boolean;
 }
 
-function buildNavItems(opts: { showMyCharacter: boolean }): NavItem[] {
+function buildNavItems(opts: { showMyCharacter: boolean; isDm: boolean }): NavItem[] {
   const items: NavItem[] = [];
   if (opts.showMyCharacter) {
     items.push({ id: "my-character", label: "My Character", icon: User });
@@ -50,8 +52,12 @@ function buildNavItems(opts: { showMyCharacter: boolean }): NavItem[] {
     { id: "world", label: "World", icon: Compass },
     { id: "dice", label: "Dice", icon: Dice5 },
     { id: "rules", label: "Rules Lookup", icon: Library },
+    { id: "homebrew", label: "House Rules", icon: Scroll },
     { id: "chat", label: "Ask", icon: MessageSquare },
   );
+  if (opts.isDm) {
+    items.push({ id: "compare", label: "Compare Editions", icon: GitCompare });
+  }
   return items;
 }
 
@@ -90,7 +96,7 @@ export default function DashboardPage() {
   const isDm = membership?.role === "dm";
   const hasOwnCharacter = !!user && !!characters && (characters as Character[]).some((c) => c.ownerUserId === user.id);
   const showMyCharacterTab = !!membership && !isDm;
-  const navItems = useMemo(() => buildNavItems({ showMyCharacter: showMyCharacterTab }), [showMyCharacterTab]);
+  const navItems = useMemo(() => buildNavItems({ showMyCharacter: showMyCharacterTab, isDm }), [showMyCharacterTab, isDm]);
 
   // On first successful load, land non-DM players on "My Character" — whether they
   // already own a character (where it shows their sheet) or not (where MyCharacterPanel
@@ -356,6 +362,8 @@ export default function DashboardPage() {
           {activeTab === "rules" && <RulesLookupPanel />}
           {activeTab === "world" && <WorldPanel />}
           {activeTab === "chat" && <ChatPanel />}
+          {activeTab === "homebrew" && <HomebrewPanel />}
+          {activeTab === "compare" && isDm && <CompareEditionsPanel />}
         </main>
       </div>
     </div>
