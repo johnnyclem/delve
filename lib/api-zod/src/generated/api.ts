@@ -444,6 +444,32 @@ export const ListCharactersResponseItem = zod.object({
       .optional(),
     inventory: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
+    asiHistory: zod
+      .array(
+        zod
+          .object({
+            level: zod
+              .number()
+              .describe("The character level at which the boost was applied."),
+            ability: zod.enum([
+              "strength",
+              "dexterity",
+              "constitution",
+              "intelligence",
+              "wisdom",
+              "charisma",
+            ]),
+            delta: zod
+              .number()
+              .describe(
+                "The amount the ability score was boosted by (e.g. 1 or 2).",
+              ),
+          })
+          .describe(
+            "A record of an ability score boost taken at a specific level.",
+          ),
+      )
+      .optional(),
   }),
   portraitUrl: zod.string().nullish(),
   isActive: zod.boolean(),
@@ -507,6 +533,34 @@ export const CreateCharacterBody = zod.object({
         .optional(),
       inventory: zod.array(zod.string()).optional(),
       notes: zod.string().optional(),
+      asiHistory: zod
+        .array(
+          zod
+            .object({
+              level: zod
+                .number()
+                .describe(
+                  "The character level at which the boost was applied.",
+                ),
+              ability: zod.enum([
+                "strength",
+                "dexterity",
+                "constitution",
+                "intelligence",
+                "wisdom",
+                "charisma",
+              ]),
+              delta: zod
+                .number()
+                .describe(
+                  "The amount the ability score was boosted by (e.g. 1 or 2).",
+                ),
+            })
+            .describe(
+              "A record of an ability score boost taken at a specific level.",
+            ),
+        )
+        .optional(),
     })
     .optional(),
   portraitUrl: zod.string().nullish(),
@@ -572,6 +626,32 @@ export const GetCharacterResponse = zod.object({
       .optional(),
     inventory: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
+    asiHistory: zod
+      .array(
+        zod
+          .object({
+            level: zod
+              .number()
+              .describe("The character level at which the boost was applied."),
+            ability: zod.enum([
+              "strength",
+              "dexterity",
+              "constitution",
+              "intelligence",
+              "wisdom",
+              "charisma",
+            ]),
+            delta: zod
+              .number()
+              .describe(
+                "The amount the ability score was boosted by (e.g. 1 or 2).",
+              ),
+          })
+          .describe(
+            "A record of an ability score boost taken at a specific level.",
+          ),
+      )
+      .optional(),
   }),
   portraitUrl: zod.string().nullish(),
   isActive: zod.boolean(),
@@ -636,6 +716,34 @@ export const UpdateCharacterBody = zod.object({
         .optional(),
       inventory: zod.array(zod.string()).optional(),
       notes: zod.string().optional(),
+      asiHistory: zod
+        .array(
+          zod
+            .object({
+              level: zod
+                .number()
+                .describe(
+                  "The character level at which the boost was applied.",
+                ),
+              ability: zod.enum([
+                "strength",
+                "dexterity",
+                "constitution",
+                "intelligence",
+                "wisdom",
+                "charisma",
+              ]),
+              delta: zod
+                .number()
+                .describe(
+                  "The amount the ability score was boosted by (e.g. 1 or 2).",
+                ),
+            })
+            .describe(
+              "A record of an ability score boost taken at a specific level.",
+            ),
+        )
+        .optional(),
     })
     .optional(),
   portraitUrl: zod.string().nullish(),
@@ -694,6 +802,32 @@ export const UpdateCharacterResponse = zod.object({
       .optional(),
     inventory: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
+    asiHistory: zod
+      .array(
+        zod
+          .object({
+            level: zod
+              .number()
+              .describe("The character level at which the boost was applied."),
+            ability: zod.enum([
+              "strength",
+              "dexterity",
+              "constitution",
+              "intelligence",
+              "wisdom",
+              "charisma",
+            ]),
+            delta: zod
+              .number()
+              .describe(
+                "The amount the ability score was boosted by (e.g. 1 or 2).",
+              ),
+          })
+          .describe(
+            "A record of an ability score boost taken at a specific level.",
+          ),
+      )
+      .optional(),
   }),
   portraitUrl: zod.string().nullish(),
   isActive: zod.boolean(),

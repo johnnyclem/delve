@@ -6,6 +6,7 @@ import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetC
 import type { Character, CharacterSheet } from "@workspace/api-client-react";
 import { useUser } from "@clerk/react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -631,29 +632,58 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
 
           <div className="rounded-2xl glass-panel p-5 md:col-span-2 lg:col-span-3">
             <h3 className="font-semibold text-sm text-foreground mb-3">Ability Scores</h3>
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-              {(["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"] as const).map((stat) => {
-                const val = sheet[stat] ?? 10;
-                const mod = Math.floor((val - 10) / 2);
-                return (
-                  <div key={stat} className="text-center p-2 rounded-lg bg-[rgba(255,255,255,0.03)]">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{stat.slice(0, 3)}</p>
-                    {editing && editSheet ? (
-                      <Input
-                        type="number"
-                        value={editSheet[stat] ?? 10}
-                        onChange={(e) => setEditSheet({ ...editSheet, [stat]: parseInt(e.target.value) || 10 })}
-                        className="w-14 mx-auto text-center font-mono text-sm tabular-nums"
-                        data-testid={`input-${stat}`}
-                      />
-                    ) : (
-                      <p className="font-mono text-lg font-bold text-foreground tabular-nums" data-testid={`text-${stat}`}>{val}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground font-mono tabular-nums">{mod >= 0 ? `+${mod}` : mod}</p>
-                  </div>
-                );
-              })}
-            </div>
+            <TooltipProvider delayDuration={150}>
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                {(["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"] as const).map((stat) => {
+                  const val = sheet[stat] ?? 10;
+                  const mod = Math.floor((val - 10) / 2);
+                  const entries = (sheet.asiHistory ?? []).filter((e) => e.ability === stat);
+                  const totalDelta = entries.reduce((sum, e) => sum + e.delta, 0);
+                  return (
+                    <div key={stat} className="relative text-center p-2 rounded-lg bg-[rgba(255,255,255,0.03)]">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{stat.slice(0, 3)}</p>
+                      {editing && editSheet ? (
+                        <Input
+                          type="number"
+                          value={editSheet[stat] ?? 10}
+                          onChange={(e) => setEditSheet({ ...editSheet, [stat]: parseInt(e.target.value) || 10 })}
+                          className="w-14 mx-auto text-center font-mono text-sm tabular-nums"
+                          data-testid={`input-${stat}`}
+                        />
+                      ) : (
+                        <p className="font-mono text-lg font-bold text-foreground tabular-nums" data-testid={`text-${stat}`}>{val}</p>
+                      )}
+                      <p className="text-xs text-muted-foreground font-mono tabular-nums">{mod >= 0 ? `+${mod}` : mod}</p>
+                      {!editing && entries.length > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-primary/20 border border-primary/40 text-primary text-[10px] font-mono font-semibold tabular-nums leading-none hover:bg-primary/30 cursor-help"
+                              data-testid={`asi-badge-${stat}`}
+                              aria-label={`Ability score increased by ${totalDelta} from level-up boosts`}
+                            >
+                              +{totalDelta}{" "}
+                              {entries.length === 1 ? `(L${entries[0].level})` : `(×${entries.length})`}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="space-y-0.5" data-testid={`asi-tooltip-${stat}`}>
+                              <p className="font-semibold">From level-up boosts:</p>
+                              {entries.map((e, i) => (
+                                <p key={i} className="font-mono">
+                                  Level {e.level}: +{e.delta}
+                                </p>
+                              ))}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </TooltipProvider>
           </div>
 
           {sheet.inventory && sheet.inventory.length > 0 && (

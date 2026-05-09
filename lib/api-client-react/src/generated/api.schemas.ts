@@ -111,6 +111,29 @@ export interface Spell {
   prepared?: boolean;
 }
 
+export type AsiHistoryEntryAbility =
+  (typeof AsiHistoryEntryAbility)[keyof typeof AsiHistoryEntryAbility];
+
+export const AsiHistoryEntryAbility = {
+  strength: "strength",
+  dexterity: "dexterity",
+  constitution: "constitution",
+  intelligence: "intelligence",
+  wisdom: "wisdom",
+  charisma: "charisma",
+} as const;
+
+/**
+ * A record of an ability score boost taken at a specific level.
+ */
+export interface AsiHistoryEntry {
+  /** The character level at which the boost was applied. */
+  level: number;
+  ability: AsiHistoryEntryAbility;
+  /** The amount the ability score was boosted by (e.g. 1 or 2). */
+  delta: number;
+}
+
 export interface CharacterSheet {
   strength: number;
   dexterity: number;
@@ -131,6 +154,7 @@ export interface CharacterSheet {
   spellSlots?: CharacterSheetSpellSlots;
   inventory?: string[];
   notes?: string;
+  asiHistory?: AsiHistoryEntry[];
 }
 
 export interface Character {

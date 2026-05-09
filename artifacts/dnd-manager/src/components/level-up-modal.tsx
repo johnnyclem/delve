@@ -207,7 +207,18 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
       if (pass.asi.kind === "plus2" || pass.asi.kind === "plus1x2") {
         const before = readAbilityScores(working.sheet);
         const after = applyAsiChoice(before, pass.asi);
-        nextSheet = { ...nextSheet, ...after } as CharacterSheet;
+        const newEntries =
+          pass.asi.kind === "plus2"
+            ? [{ level: pass.toLevel, ability: pass.asi.ability, delta: 2 }]
+            : [
+                { level: pass.toLevel, ability: pass.asi.abilityA, delta: 1 },
+                { level: pass.toLevel, ability: pass.asi.abilityB, delta: 1 },
+              ];
+        nextSheet = {
+          ...nextSheet,
+          ...after,
+          asiHistory: [...(working.sheet.asiHistory ?? []), ...newEntries],
+        } as CharacterSheet;
       } else if (pass.asi.kind === "feat") {
         nextSheet = { ...nextSheet, notes: appendFeatNote(working.sheet.notes, pass.toLevel, pass.asi.description) };
       }

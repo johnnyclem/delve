@@ -1178,6 +1178,10 @@ components:
             type: string
         notes:
           type: string
+        asiHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/AsiHistoryEntry"
       required:
         - strength
         - dexterity
@@ -1204,6 +1208,30 @@ components:
         - name
         - bonus
         - damage
+
+    AsiHistoryEntry:
+      type: object
+      description: A record of an ability score boost taken at a specific level.
+      properties:
+        level:
+          type: integer
+          description: The character level at which the boost was applied.
+        ability:
+          type: string
+          enum:
+            - strength
+            - dexterity
+            - constitution
+            - intelligence
+            - wisdom
+            - charisma
+        delta:
+          type: integer
+          description: The amount the ability score was boosted by (e.g. 1 or 2).
+      required:
+        - level
+        - ability
+        - delta
 
     Spell:
       type: object
