@@ -16,8 +16,6 @@ import {
   useCreateCharacter,
   getListCharactersQueryKey,
   useGetCampaign,
-  useRollDice,
-  getGetRecentRollsQueryKey,
 } from "@workspace/api-client-react";
 import type { CreateCharacterBody, CharacterSheet } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -37,6 +35,12 @@ import {
   abilityRollLabel,
   type AbilityRoll,
 } from "@/lib/dice";
+import {
+  isStep0Valid,
+  isStep1Valid,
+  isCombatValid,
+  isFormValidForSubmit,
+} from "@/lib/character-form-validation";
 
 const DND_SKILLS = [
   "Acrobatics", "Animal Handling", "Arcana", "Athletics",
@@ -200,7 +204,6 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null);
   const [rollAnimationKey, setRollAnimationKey] = useState(0);
   const createMutation = useCreateCharacter();
-  const rollDiceMutation = useRollDice();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: campaign } = useGetCampaign();
@@ -247,26 +250,23 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   const unassignedChips = form.scorePool.filter((c) => !assignedChipIds.has(c.id));
   const allAbilitiesAssigned = ABILITY_NAMES.every((a) => abilityScores[a] !== null);
 
-  // ---- Step validity ----
-  const canProceedStep0 =
-    form.name.trim() !== "" && resolvedRace.trim() !== "" && resolvedClass.trim() !== "";
-
-  const assignedIdsList = Object.values(form.abilityAssignments).filter(
-    (v): v is string => v !== null,
-  );
-  const step1Valid =
-    form.scorePool.length === 6 &&
-    allAbilitiesAssigned &&
-    new Set(assignedIdsList).size === 6; // every chip used at most once
-
-  const combatNumericsValid =
-    Number.isFinite(form.maxHp) && form.maxHp >= 1 &&
-    Number.isFinite(form.currentHp) && form.currentHp >= 0 && form.currentHp <= form.maxHp &&
-    Number.isFinite(form.armorClass) && form.armorClass >= 0 &&
-    Number.isFinite(form.speed) && form.speed >= 0 &&
-    Number.isFinite(form.proficiencyBonus) && form.proficiencyBonus >= 1 && form.proficiencyBonus <= 6;
-
-  const formIsValidForSubmit = canProceedStep0 && step1Valid && combatNumericsValid;
+  // ---- Step validity (delegated to pure helpers in character-form-validation.ts) ----
+  const validatable = {
+    name: form.name,
+    resolvedRace,
+    resolvedClass,
+    scorePool: form.scorePool.map((c) => ({ id: c.id, total: c.total })),
+    abilityAssignments: form.abilityAssignments,
+    maxHp: form.maxHp,
+    currentHp: form.currentHp,
+    armorClass: form.armorClass,
+    speed: form.speed,
+    proficiencyBonus: form.proficiencyBonus,
+  };
+  const canProceedStep0 = isStep0Valid(validatable);
+  const step1Valid = isStep1Valid(validatable);
+  const combatNumericsValid = isCombatValid(validatable);
+  const formIsValid = isFormValidForSubmit(validatable);
 
   const failingStepLabel = !canProceedStep0
     ? "Basics"
@@ -290,22 +290,11 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     setSelectedChipId(null);
     setRollAnimationKey((k) => k + 1);
 
-    // Fire-and-forget: log each roll to the campaign dice history with a
-    // descriptive label. We don't block the UI on these — failures are
-    // silent so creation isn't held up by a noisy log.
-    rolls.forEach((roll, i) => {
-      const ability = ABILITY_LABELS[ABILITY_NAMES[i]];
-      const kept = roll.dice.filter((_, idx) => idx !== roll.droppedIndex);
-      const label = `Char creation – ${ability} (4d6 keep ${kept.join("+")} = ${roll.total}, dropped ${roll.dice[roll.droppedIndex]})`;
-      rollDiceMutation.mutate(
-        { data: { expression: "4d6", label, characterId: null } },
-        {
-          onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: getGetRecentRollsQueryKey() });
-          },
-        },
-      );
-    });
+    // Note: we deliberately do NOT post these rolls to /dice/roll. The current
+    // dice endpoint re-rolls server-side from the expression, so the persisted
+    // result wouldn't match the dice shown in the UI. Logging character-creation
+    // rolls into dice history requires the API to accept pre-rolled dice (or a
+    // `purpose: "character_creation"` tag), which is filed as a follow-up task.
   };
 
   const handleRerollUnassigned = () => {
@@ -377,7 +366,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
 
   // ---- Submit ----
   const handleSubmit = () => {
-    if (!formIsValidForSubmit) return;
+    if (!formIsValid) return;
     const sheet: CharacterSheet = {
       strength: abilityScores.strength!,
       dexterity: abilityScores.dexterity!,
@@ -655,6 +644,28 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                           layout
                           type="button"
                           onClick={() => handleChipClick(chip.id)}
+                          drag
+                          dragSnapToOrigin
+                          dragMomentum={false}
+                          whileDrag={{ scale: 1.1, zIndex: 50 }}
+                          onDragStart={() => setSelectedChipId(chip.id)}
+                          onDragEnd={(_, info) => {
+                            const els = document.elementsFromPoint(info.point.x, info.point.y);
+                            const slot = els.find((el) =>
+                              (el as HTMLElement).dataset?.abilitySlot,
+                            ) as HTMLElement | undefined;
+                            const ability = slot?.dataset.abilitySlot as AbilityName | undefined;
+                            if (ability && !form.abilityAssignments[ability]) {
+                              setForm((prev) => ({
+                                ...prev,
+                                abilityAssignments: {
+                                  ...prev.abilityAssignments,
+                                  [ability]: chip.id,
+                                },
+                              }));
+                              setSelectedChipId(null);
+                            }
+                          }}
                           initial={{ opacity: 0, scale: 0.5, y: -10 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.5 }}
@@ -662,7 +673,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                             type: "spring", stiffness: 320, damping: 22,
                             delay: i * 0.06,
                           }}
-                          className={`group relative flex flex-col items-center justify-center rounded-lg border-2 px-3 py-2 min-w-[64px] transition-colors ${
+                          className={`group relative flex flex-col items-center justify-center rounded-lg border-2 px-3 py-2 min-w-[64px] transition-colors cursor-grab active:cursor-grabbing touch-none ${
                             isSelected
                               ? "border-primary bg-primary/15 ring-2 ring-primary/40"
                               : "border-border/60 bg-card hover:border-primary/60 hover:bg-primary/5"
@@ -725,6 +736,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                           : "border-border/40 border-dashed bg-muted/20"
                     } ${!form.hasRolled ? "opacity-60" : ""}`}
                     data-testid={`slot-${stat}`}
+                    data-ability-slot={stat}
                   >
                     <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                       {ABILITY_LABELS[stat]}
@@ -926,7 +938,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
         ) : (
           <Button
             onClick={handleSubmit}
-            disabled={createMutation.isPending || !formIsValidForSubmit}
+            disabled={createMutation.isPending || !formIsValid}
             data-testid="button-create-character"
           >
             {createMutation.isPending ? "Creating..." : "Create Character"}
