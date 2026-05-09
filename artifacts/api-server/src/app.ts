@@ -1,10 +1,12 @@
-import express, { type Express, type Request, type Response, type NextFunction } from "express";
+import express, { type Express, type Request, type Response, type NextFunction, type RequestHandler } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
+import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
+  getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -54,7 +56,25 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use(clerkMiddleware());
+// Resolve the publishable key from the incoming request host so the backend
+// validates session JWTs against the same Clerk tenant the frontend talked to
+// via the proxy. Without this, every authenticated route returns 401 in
+// production because the issuer/audience on the JWT (proxy URL) doesn't match
+// what clerkMiddleware() defaults to (Clerk's own frontend-api domain).
+const clerkMiddlewareByHost = new Map<string, RequestHandler>();
+app.use((req, res, next) => {
+  const host = getClerkProxyHost(req) ?? "";
+  let handler = clerkMiddlewareByHost.get(host);
+  if (!handler) {
+    const publishableKey = publishableKeyFromHost(
+      host,
+      process.env.CLERK_PUBLISHABLE_KEY,
+    );
+    handler = clerkMiddleware({ publishableKey });
+    clerkMiddlewareByHost.set(host, handler);
+  }
+  return handler(req, res, next);
+});
 
 app.use("/api", router);
 
