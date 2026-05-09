@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "srd:bootstrap": "tsx ./src/srd/bootstrap.ts",
     "srd:setup": "tsx ./src/srd/setup.ts",
     "srd:extract": "tsx ./src/srd/extract.ts",
     "srd:ingest": "tsx ./src/srd/ingest.ts",
