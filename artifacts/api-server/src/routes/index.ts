@@ -11,6 +11,7 @@ import rsvpRouter from "./rsvp";
 import adminRouter from "./admin";
 import storageRouter from "./storage";
 import mapsRouter from "./maps";
+import npcsRouter from "./npcs";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(rsvpRouter);
 router.use(adminRouter);
 router.use(storageRouter);
 router.use(mapsRouter);
+router.use(npcsRouter);
 
 export default router;

@@ -264,6 +264,20 @@ export const GetDashboardResponse = zod.object({
       recapMd: zod.string().nullish(),
       generatedAt: zod.coerce.date().nullish(),
       notifiedAt: zod.coerce.date().nullish(),
+      attendees: zod
+        .union([
+          zod.object({
+            characterIds: zod.array(zod.number()),
+            npcs: zod.array(
+              zod.object({
+                name: zod.string(),
+                npcId: zod.number().optional(),
+              }),
+            ),
+          }),
+          zod.null(),
+        ])
+        .optional(),
       hasNewRecap: zod.boolean().optional(),
       recapWordCount: zod
         .number()
@@ -1110,6 +1124,41 @@ export const UpdateCharacterResponse = zod.object({
 });
 
 /**
+ * @summary List all NPCs in the campaign roster
+ */
+export const ListNpcsResponseItem = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  name: zod.string(),
+  shortNote: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+export const ListNpcsResponse = zod.array(ListNpcsResponseItem);
+
+/**
+ * @summary Create a new NPC in the campaign roster (DM only)
+ */
+export const CreateNpcBody = zod.object({
+  name: zod.string(),
+  shortNote: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+});
+
+/**
+ * @summary Delete an NPC from the campaign roster (DM only)
+ */
+export const DeleteNpcParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteNpcResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
  * @summary List all session logs
  */
 export const ListSessionsResponseItem = zod.object({
@@ -1122,6 +1171,20 @@ export const ListSessionsResponseItem = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
+  attendees: zod
+    .union([
+      zod.object({
+        characterIds: zod.array(zod.number()),
+        npcs: zod.array(
+          zod.object({
+            name: zod.string(),
+            npcId: zod.number().optional(),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()
@@ -1141,6 +1204,20 @@ export const CreateSessionBody = zod.object({
   title: zod.string(),
   playedAt: zod.coerce.date().nullish(),
   rawNotesMd: zod.string().nullish(),
+  attendees: zod
+    .union([
+      zod.object({
+        characterIds: zod.array(zod.number()),
+        npcs: zod.array(
+          zod.object({
+            name: zod.string(),
+            npcId: zod.number().optional(),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional(),
 });
 
 /**
@@ -1160,6 +1237,20 @@ export const GetSessionResponse = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
+  attendees: zod
+    .union([
+      zod.object({
+        characterIds: zod.array(zod.number()),
+        npcs: zod.array(
+          zod.object({
+            name: zod.string(),
+            npcId: zod.number().optional(),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()
@@ -1183,6 +1274,20 @@ export const UpdateSessionBody = zod.object({
   playedAt: zod.coerce.date().nullish(),
   rawNotesMd: zod.string().nullish(),
   recapMd: zod.string().nullish(),
+  attendees: zod
+    .union([
+      zod.object({
+        characterIds: zod.array(zod.number()),
+        npcs: zod.array(
+          zod.object({
+            name: zod.string(),
+            npcId: zod.number().optional(),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   expectedVersion: zod
     .number()
     .optional()
@@ -1201,6 +1306,20 @@ export const UpdateSessionResponse = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
+  attendees: zod
+    .union([
+      zod.object({
+        characterIds: zod.array(zod.number()),
+        npcs: zod.array(
+          zod.object({
+            name: zod.string(),
+            npcId: zod.number().optional(),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()
@@ -1343,6 +1462,20 @@ export const GetLatestRecapResponse = zod.object({
   recapMd: zod.string().nullish(),
   generatedAt: zod.coerce.date().nullish(),
   notifiedAt: zod.coerce.date().nullish(),
+  attendees: zod
+    .union([
+      zod.object({
+        characterIds: zod.array(zod.number()),
+        npcs: zod.array(
+          zod.object({
+            name: zod.string(),
+            npcId: zod.number().optional(),
+          }),
+        ),
+      }),
+      zod.null(),
+    ])
+    .optional(),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()

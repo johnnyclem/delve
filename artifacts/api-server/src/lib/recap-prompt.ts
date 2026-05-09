@@ -27,6 +27,24 @@ OUTPUT FORMAT (markdown):
 
 If the DM notes are too sparse to support a meaningful narrative (e.g., a single line or a few fragments), skip the Narrative section and instead return only a "## Notes summary" section that faithfully restates what the notes say without embellishment.`;
 
-export function buildRecapUserPrompt(sessionNumber: number, title: string, rawNotesMd: string): string {
-  return `Session ${sessionNumber}: "${title}"\n\nDM Notes (the only source of truth — do not invent anything beyond these):\n${rawNotesMd}`;
+export type RecapAttendee = { kind: "pc" | "npc"; name: string };
+
+export function buildRecapUserPrompt(
+  sessionNumber: number,
+  title: string,
+  rawNotesMd: string,
+  attendees?: RecapAttendee[],
+): string {
+  let attendeesBlock = "";
+  if (attendees && attendees.length > 0) {
+    const pcs = attendees.filter((a) => a.kind === "pc").map((a) => a.name);
+    const npcs = attendees.filter((a) => a.kind === "npc").map((a) => a.name);
+    const lines: string[] = [];
+    if (pcs.length > 0) lines.push(`Players present: ${pcs.join(", ")}`);
+    if (npcs.length > 0) lines.push(`NPCs encountered: ${npcs.join(", ")}`);
+    if (lines.length > 0) {
+      attendeesBlock = `\n\nAttendees (these names ARE part of the source of truth — you may name them in the recap, but do not invent additional NPCs or PCs):\n${lines.join("\n")}`;
+    }
+  }
+  return `Session ${sessionNumber}: "${title}"${attendeesBlock}\n\nDM Notes (the only source of truth — do not invent anything beyond these and the attendees above):\n${rawNotesMd}`;
 }

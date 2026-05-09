@@ -26,6 +26,7 @@ import type {
   CreateCharacterBody,
   CreateEventBody,
   CreateMapBody,
+  CreateNpcBody,
   CreateSessionBody,
   DashboardSummary,
   DeleteEvent200,
@@ -39,6 +40,7 @@ import type {
   MapSummary,
   NotificationLog,
   NotifyRecapResult,
+  Npc,
   ReanchorSeriesResult,
   ResendEventInviteResult,
   ResendEventInvitesResult,
@@ -1210,6 +1212,241 @@ export const useUpdateCharacter = <
   TContext
 > => {
   return useMutation(getUpdateCharacterMutationOptions(options));
+};
+
+/**
+ * @summary List all NPCs in the campaign roster
+ */
+export const getListNpcsUrl = () => {
+  return `/api/npcs`;
+};
+
+export const listNpcs = async (options?: RequestInit): Promise<Npc[]> => {
+  return customFetch<Npc[]>(getListNpcsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListNpcsQueryKey = () => {
+  return [`/api/npcs`] as const;
+};
+
+export const getListNpcsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listNpcs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listNpcs>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListNpcsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listNpcs>>> = ({
+    signal,
+  }) => listNpcs({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listNpcs>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListNpcsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listNpcs>>
+>;
+export type ListNpcsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List all NPCs in the campaign roster
+ */
+
+export function useListNpcs<
+  TData = Awaited<ReturnType<typeof listNpcs>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listNpcs>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListNpcsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new NPC in the campaign roster (DM only)
+ */
+export const getCreateNpcUrl = () => {
+  return `/api/npcs`;
+};
+
+export const createNpc = async (
+  createNpcBody: CreateNpcBody,
+  options?: RequestInit,
+): Promise<Npc> => {
+  return customFetch<Npc>(getCreateNpcUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createNpcBody),
+  });
+};
+
+export const getCreateNpcMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNpc>>,
+    TError,
+    { data: BodyType<CreateNpcBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createNpc>>,
+  TError,
+  { data: BodyType<CreateNpcBody> },
+  TContext
+> => {
+  const mutationKey = ["createNpc"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createNpc>>,
+    { data: BodyType<CreateNpcBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createNpc(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateNpcMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createNpc>>
+>;
+export type CreateNpcMutationBody = BodyType<CreateNpcBody>;
+export type CreateNpcMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Create a new NPC in the campaign roster (DM only)
+ */
+export const useCreateNpc = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNpc>>,
+    TError,
+    { data: BodyType<CreateNpcBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createNpc>>,
+  TError,
+  { data: BodyType<CreateNpcBody> },
+  TContext
+> => {
+  return useMutation(getCreateNpcMutationOptions(options));
+};
+
+/**
+ * @summary Delete an NPC from the campaign roster (DM only)
+ */
+export const getDeleteNpcUrl = (id: number) => {
+  return `/api/npcs/${id}`;
+};
+
+export const deleteNpc = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getDeleteNpcUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteNpcMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNpc>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteNpc>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteNpc"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteNpc>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteNpc(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteNpcMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteNpc>>
+>;
+
+export type DeleteNpcMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an NPC from the campaign roster (DM only)
+ */
+export const useDeleteNpc = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNpc>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteNpc>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteNpcMutationOptions(options));
 };
 
 /**

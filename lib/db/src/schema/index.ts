@@ -8,3 +8,4 @@ export * from "./dice_rolls";
 export * from "./recap_views";
 export * from "./notification_logs";
 export * from "./maps";
+export * from "./npcs";

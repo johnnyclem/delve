@@ -247,6 +247,37 @@ export interface SuccessResponse {
   success: boolean;
 }
 
+export interface Npc {
+  id: number;
+  campaignId: number;
+  name: string;
+  /** @nullable */
+  shortNote?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateNpcBody {
+  name: string;
+  /** @nullable */
+  shortNote?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+}
+
+export type SessionAttendeesNpcsItem = {
+  name: string;
+  npcId?: number;
+};
+
+export interface SessionAttendees {
+  characterIds: number[];
+  npcs: SessionAttendeesNpcsItem[];
+}
+
 export interface SessionLog {
   id: number;
   campaignId: number;
@@ -262,6 +293,7 @@ export interface SessionLog {
   generatedAt?: string | null;
   /** @nullable */
   notifiedAt?: string | null;
+  attendees?: SessionAttendees | null;
   hasNewRecap?: boolean;
   /** Word count of the recap text, or 0 if no recap exists. */
   recapWordCount?: number;
@@ -277,6 +309,7 @@ export interface CreateSessionBody {
   playedAt?: string | null;
   /** @nullable */
   rawNotesMd?: string | null;
+  attendees?: SessionAttendees | null;
 }
 
 export interface UpdateSessionBody {
@@ -288,6 +321,7 @@ export interface UpdateSessionBody {
   rawNotesMd?: string | null;
   /** @nullable */
   recapMd?: string | null;
+  attendees?: SessionAttendees | null;
   /** Optimistic concurrency check. If provided, the server rejects the update with 409 when the current version does not match. */
   expectedVersion?: number;
 }

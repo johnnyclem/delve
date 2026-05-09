@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response, type NextFunction, type ErrorRequestHandler } from "express";
 import multer from "multer";
 import { toFile } from "openai";
-import { db, sessionLogsTable, recapViewsTable, notificationLogsTable } from "@workspace/db";
+import { db, sessionLogsTable, recapViewsTable, notificationLogsTable, charactersTable, npcsTable, type SessionAttendees } from "@workspace/db";
 import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
@@ -115,6 +115,83 @@ function stripDmFields(session: typeof sessionLogsTable.$inferSelect): Record<st
   return safe;
 }
 
+/**
+ * Validate every characterId and npcId in `attendees` belongs to the given
+ * campaign. Returns null on success or an error message string on failure.
+ * Quick-tag NPCs (no npcId) are accepted unconditionally — they're loose
+ * names the DM typed at the table.
+ */
+async function validateAttendees(
+  attendees: SessionAttendees,
+  campaignId: number,
+): Promise<string | null> {
+  if (attendees.characterIds.length > 0) {
+    const found = await db
+      .select({ id: charactersTable.id })
+      .from(charactersTable)
+      .where(
+        and(
+          eq(charactersTable.campaignId, campaignId),
+          inArray(charactersTable.id, attendees.characterIds),
+        ),
+      );
+    const foundIds = new Set(found.map((c) => c.id));
+    const missing = attendees.characterIds.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      return `Unknown character id(s): ${missing.join(", ")}`;
+    }
+  }
+  const npcIds = attendees.npcs
+    .map((n) => n.npcId)
+    .filter((id): id is number => typeof id === "number");
+  if (npcIds.length > 0) {
+    const found = await db
+      .select({ id: npcsTable.id })
+      .from(npcsTable)
+      .where(and(eq(npcsTable.campaignId, campaignId), inArray(npcsTable.id, npcIds)));
+    const foundIds = new Set(found.map((n) => n.id));
+    const missing = npcIds.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      return `Unknown NPC id(s): ${missing.join(", ")}`;
+    }
+  }
+  for (const npc of attendees.npcs) {
+    if (typeof npc.name !== "string" || npc.name.trim() === "") {
+      return "Every attending NPC must have a non-empty name";
+    }
+  }
+  return null;
+}
+
+/**
+ * Build the recap-prompt attendees list from a session row by looking up the
+ * referenced PC and NPC names. Quick-tag NPC names come straight from the
+ * stored attendees blob.
+ */
+async function buildAttendeesForRecap(
+  attendees: SessionAttendees | null | undefined,
+  campaignId: number,
+): Promise<{ kind: "pc" | "npc"; name: string }[]> {
+  if (!attendees) return [];
+  const out: { kind: "pc" | "npc"; name: string }[] = [];
+  if (attendees.characterIds.length > 0) {
+    const chars = await db
+      .select({ id: charactersTable.id, name: charactersTable.name })
+      .from(charactersTable)
+      .where(
+        and(
+          eq(charactersTable.campaignId, campaignId),
+          inArray(charactersTable.id, attendees.characterIds),
+        ),
+      );
+    for (const c of chars) out.push({ kind: "pc", name: c.name });
+  }
+  for (const npc of attendees.npcs) {
+    out.push({ kind: "npc", name: npc.name });
+  }
+  return out;
+}
+
 router.get("/sessions", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const campaignId = await getOrCreateCampaign();
   const member = getCampaignMember(req);
@@ -168,6 +245,15 @@ router.post("/sessions", requireAuth, requireCampaignMember, async (req, res): P
     return;
   }
 
+  const attendees = (parsed.data.attendees ?? null) as SessionAttendees | null;
+  if (attendees) {
+    const err = await validateAttendees(attendees, campaignId);
+    if (err) {
+      res.status(400).json({ error: err });
+      return;
+    }
+  }
+
   const [session] = await db
     .insert(sessionLogsTable)
     .values({
@@ -176,6 +262,7 @@ router.post("/sessions", requireAuth, requireCampaignMember, async (req, res): P
       title: parsed.data.title,
       playedAt: parsed.data.playedAt ? new Date(parsed.data.playedAt) : null,
       rawNotesMd: parsed.data.rawNotesMd ?? null,
+      attendees,
     })
     .returning();
 
@@ -254,6 +341,17 @@ router.patch("/sessions/:id", requireAuth, requireCampaignMember, async (req, re
   if (parsed.data.playedAt !== undefined) updateData.playedAt = parsed.data.playedAt ? new Date(parsed.data.playedAt) : null;
   if (parsed.data.rawNotesMd !== undefined) updateData.rawNotesMd = parsed.data.rawNotesMd;
   if (parsed.data.recapMd !== undefined) updateData.recapMd = parsed.data.recapMd;
+  if (parsed.data.attendees !== undefined) {
+    const attendees = parsed.data.attendees as SessionAttendees | null;
+    if (attendees !== null) {
+      const err = await validateAttendees(attendees, campaignId);
+      if (err) {
+        res.status(400).json({ error: err });
+        return;
+      }
+    }
+    updateData.attendees = attendees;
+  }
 
   const whereConditions = [eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)];
 
@@ -328,13 +426,14 @@ router.post("/sessions/:id/generate-recap", requireAuth, requireCampaignMember, 
     return;
   }
 
+  const recapAttendees = await buildAttendeesForRecap(session.attendees, campaignId);
   const completion = await openai.chat.completions.create({
     model: RECAP_MODEL,
     max_completion_tokens: RECAP_MAX_TOKENS,
     temperature: RECAP_TEMPERATURE,
     messages: [
       { role: "system", content: RECAP_SYSTEM_PROMPT },
-      { role: "user", content: buildRecapUserPrompt(session.sessionNumber, session.title, session.rawNotesMd) },
+      { role: "user", content: buildRecapUserPrompt(session.sessionNumber, session.title, session.rawNotesMd, recapAttendees) },
     ],
   });
 

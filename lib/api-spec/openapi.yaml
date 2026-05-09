@@ -312,6 +312,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/Character"
 
+  /npcs:
+    get:
+      operationId: listNpcs
+      tags: [npcs]
+      summary: List all NPCs in the campaign roster
+      responses:
+        "200":
+          description: List of NPCs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Npc"
+    post:
+      operationId: createNpc
+      tags: [npcs]
+      summary: Create a new NPC in the campaign roster (DM only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNpcBody"
+      responses:
+        "201":
+          description: Created NPC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Npc"
+
+  /npcs/{id}:
+    delete:
+      operationId: deleteNpc
+      tags: [npcs]
+      summary: Delete an NPC from the campaign roster (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
   /sessions:
     get:
       operationId: listSessions
@@ -1408,6 +1459,69 @@ components:
       required:
         - success
 
+    Npc:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        name:
+          type: string
+        shortNote:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        createdByUserId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - campaignId
+        - name
+        - createdByUserId
+        - createdAt
+        - updatedAt
+
+    CreateNpcBody:
+      type: object
+      properties:
+        name:
+          type: string
+        shortNote:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+      required:
+        - name
+
+    SessionAttendees:
+      type: object
+      properties:
+        characterIds:
+          type: array
+          items:
+            type: integer
+        npcs:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              npcId:
+                type: integer
+            required:
+              - name
+      required:
+        - characterIds
+        - npcs
+
     SessionLog:
       type: object
       properties:
@@ -1432,6 +1546,10 @@ components:
         notifiedAt:
           type: ["string", "null"]
           format: date-time
+        attendees:
+          oneOf:
+            - $ref: "#/components/schemas/SessionAttendees"
+            - type: "null"
         hasNewRecap:
           type: boolean
         recapWordCount:
@@ -1466,6 +1584,10 @@ components:
           format: date-time
         rawNotesMd:
           type: ["string", "null"]
+        attendees:
+          oneOf:
+            - $ref: "#/components/schemas/SessionAttendees"
+            - type: "null"
       required:
         - sessionNumber
         - title
@@ -1484,6 +1606,10 @@ components:
           type: ["string", "null"]
         recapMd:
           type: ["string", "null"]
+        attendees:
+          oneOf:
+            - $ref: "#/components/schemas/SessionAttendees"
+            - type: "null"
         expectedVersion:
           type: integer
           description: Optimistic concurrency check. If provided, the server rejects the update with 409 when the current version does not match.

@@ -1,0 +1,92 @@
+import { Router, type IRouter } from "express";
+import { db, npcsTable } from "@workspace/db";
+import { eq, and, asc } from "drizzle-orm";
+import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
+import { getOrCreateCampaign, isDm } from "../lib/campaign";
+import { CreateNpcBody } from "@workspace/api-zod";
+
+const router: IRouter = Router();
+
+// DM-only: the NPC roster can hold spoiler-y names (recurring villains, twist
+// reveals, etc.). Players see NPCs only after the DM tags them into a session,
+// via the embedded names in the session_logs.attendees blob.
+router.get("/npcs", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can view the NPC roster" });
+    return;
+  }
+  const npcs = await db
+    .select()
+    .from(npcsTable)
+    .where(eq(npcsTable.campaignId, campaignId))
+    .orderBy(asc(npcsTable.name));
+  res.json(npcs);
+});
+
+router.post("/npcs", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can create NPCs" });
+    return;
+  }
+
+  const parsed = CreateNpcBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const name = parsed.data.name.trim();
+  if (!name) {
+    res.status(400).json({ error: "Name is required" });
+    return;
+  }
+
+  const [created] = await db
+    .insert(npcsTable)
+    .values({
+      campaignId,
+      name,
+      shortNote: parsed.data.shortNote ?? null,
+      avatarUrl: parsed.data.avatarUrl ?? null,
+      createdByUserId: userId,
+    })
+    .returning();
+
+  res.status(201).json(created);
+});
+
+router.delete("/npcs/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can delete NPCs" });
+    return;
+  }
+
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid NPC ID" });
+    return;
+  }
+
+  const [deleted] = await db
+    .delete(npcsTable)
+    .where(and(eq(npcsTable.id, id), eq(npcsTable.campaignId, campaignId)))
+    .returning({ id: npcsTable.id });
+
+  if (!deleted) {
+    res.status(404).json({ error: "NPC not found" });
+    return;
+  }
+
+  res.json({ success: true });
+});
+
+export default router;

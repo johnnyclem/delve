@@ -16,6 +16,8 @@ import {
 import { useAutosave } from "@/hooks/use-autosave";
 import { NotesDiffView } from "@/components/notes-diff-view";
 import { VoiceRecordButton } from "@/components/voice-record-button";
+import { SessionAttendeesPicker, SessionAttendeesStrip, emptyAttendees } from "@/components/session-attendees-picker";
+import type { SessionAttendees } from "@workspace/api-client-react";
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { SessionLog, CampaignMember, NotificationLog } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -153,14 +155,16 @@ function CreateSession({ onBack, onCreated }: { onBack: () => void; onCreated: (
   const [title, setTitle] = useState("");
   const [sessionNumber, setSessionNumber] = useState(1);
   const [notes, setNotes] = useState("");
+  const [attendees, setAttendees] = useState<SessionAttendees>(emptyAttendees());
   const createMutation = useCreateSession();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const handleCreate = () => {
     if (!title.trim()) return;
+    const totalAttendees = attendees.characterIds.length + attendees.npcs.length;
     createMutation.mutate(
-      { data: { sessionNumber, title, rawNotesMd: notes || null } },
+      { data: { sessionNumber, title, rawNotesMd: notes || null, attendees: totalAttendees > 0 ? attendees : null } },
       {
         onSuccess: (data) => {
           queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
@@ -201,6 +205,10 @@ function CreateSession({ onBack, onCreated }: { onBack: () => void; onCreated: (
           </div>
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={8} placeholder="What happened this session..." data-testid="input-session-notes" />
         </div>
+        <div>
+          <label className="text-sm font-medium text-foreground mb-1 block">Who was there</label>
+          <SessionAttendeesPicker value={attendees} onChange={setAttendees} disabled={createMutation.isPending} />
+        </div>
         <Button onClick={handleCreate} disabled={createMutation.isPending || !title.trim()} data-testid="button-save-session">
           Create Session
         </Button>
@@ -237,6 +245,27 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const [editingSessionNumber, setEditingSessionNumber] = useState(false);
   const [draftSessionNumber, setDraftSessionNumber] = useState(0);
   const sessionNumberInputRef = useRef<HTMLInputElement>(null);
+
+  const [editingAttendees, setEditingAttendees] = useState(false);
+  const [draftAttendees, setDraftAttendees] = useState<SessionAttendees>(emptyAttendees());
+
+  const handleSaveAttendees = () => {
+    const totalAttendees = draftAttendees.characterIds.length + draftAttendees.npcs.length;
+    updateSession.mutate(
+      { id, data: { attendees: totalAttendees > 0 ? draftAttendees : null } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
+          setEditingAttendees(false);
+          toast({ title: "Attendees saved" });
+        },
+        onError: () => {
+          toast({ title: "Failed to save attendees", variant: "destructive" });
+        },
+      },
+    );
+  };
 
   type UndoField = "title" | "playedAt" | "sessionNumber";
   const FIELD_LABELS: Record<UndoField, string> = { title: "Title", playedAt: "Date", sessionNumber: "Session number" };
@@ -804,6 +833,41 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
           </p>
         )}
       </div>
+
+      {editingAttendees && isDm ? (
+        <div className="space-y-2" data-testid="edit-attendees">
+          <SessionAttendeesPicker value={draftAttendees} onChange={setDraftAttendees} disabled={updateSession.isPending} />
+          <div className="flex items-center gap-2">
+            <Button size="sm" onClick={handleSaveAttendees} disabled={updateSession.isPending} data-testid="button-save-attendees">
+              <Save className="h-4 w-4 mr-1" />
+              Save attendees
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditingAttendees(false)} disabled={updateSession.isPending} data-testid="button-cancel-attendees">
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <SessionAttendeesStrip attendees={s.attendees} />
+          {isDm && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDraftAttendees(s.attendees ?? emptyAttendees());
+                setEditingAttendees(true);
+              }}
+              data-testid="button-edit-attendees"
+            >
+              <Pencil className="h-4 w-4 mr-1" />
+              {s.attendees && (s.attendees.characterIds.length + s.attendees.npcs.length) > 0
+                ? "Edit attendees"
+                : "Add attendees"}
+            </Button>
+          )}
+        </div>
+      )}
 
       {isDm && s.recapMd && <NotificationStatus sessionId={id} />}
 
