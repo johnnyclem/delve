@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -21,6 +21,9 @@ export const campaignsTable = pgTable("campaigns", {
   worldName: text("world_name"),
   dmUserId: text("dm_user_id").notNull(),
   inviteCode: text("invite_code").notNull().default("CHANGEME"),
+  // Public, opaque token used to share the campaign's active house rules
+  // via an unauthenticated read-only URL. Null until the DM generates one.
+  houseRulesShareToken: text("house_rules_share_token"),
   // IANA time-zone identifier (e.g. "America/New_York"). Used to keep
   // recurring-session wall-clock times stable across DST transitions and
   // to format invite emails in the campaign's local time.
@@ -32,7 +35,9 @@ export const campaignsTable = pgTable("campaigns", {
   // '2014' (Player's Handbook 5.1 / 2014) or '2024' (5.2 / 2024).
   defaultEdition: text("default_edition").notNull().default("2024").$type<"2014" | "2024">(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("uq_campaigns_house_rules_share_token").on(table.houseRulesShareToken),
+]);
 
 export const insertCampaignSchema = createInsertSchema(campaignsTable).omit({ id: true, createdAt: true });
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;

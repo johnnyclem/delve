@@ -1,5 +1,6 @@
+import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
-import { db, homebrewRulesTable, type HomebrewRule } from "@workspace/db";
+import { db, homebrewRulesTable, campaignsTable, type HomebrewRule } from "@workspace/db";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -7,8 +8,13 @@ import {
   requireCampaignMember,
   getUserId,
 } from "../middlewares/requireAuth";
+import { publicIpJsonRateLimit } from "../middlewares/publicRateLimit";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { syncHomebrewEmbedding } from "../lib/homebrewEmbeddings";
+
+function generateShareToken(): string {
+  return crypto.randomBytes(24).toString("base64url");
+}
 
 const router: IRouter = Router();
 
@@ -215,6 +221,79 @@ router.delete("/homebrew/:id", requireAuth, requireCampaignMember, async (req, r
   }
 
   res.json({ success: true });
+});
+
+router.get("/homebrew/share-token", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can manage the share token" });
+    return;
+  }
+  const [campaign] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
+  res.json({ token: campaign?.houseRulesShareToken ?? null });
+});
+
+const shareTokenBody = z.object({ rotate: z.boolean().optional() });
+
+router.post("/homebrew/share-token", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can manage the share token" });
+    return;
+  }
+  const parsed = shareTokenBody.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [existing] = await db.select().from(campaignsTable).where(eq(campaignsTable.id, campaignId));
+  let token = existing?.houseRulesShareToken ?? null;
+  if (!token || parsed.data.rotate) {
+    token = generateShareToken();
+    await db.update(campaignsTable).set({ houseRulesShareToken: token }).where(eq(campaignsTable.id, campaignId));
+  }
+  res.json({ token });
+});
+
+router.get("/public/house-rules/:token", publicIpJsonRateLimit, async (req, res): Promise<void> => {
+  const tokenRaw = req.params.token;
+  const token = Array.isArray(tokenRaw) ? tokenRaw[0] : tokenRaw;
+  if (!token || typeof token !== "string" || token.length < 8) {
+    res.status(404).json({ error: "House rules not found" });
+    return;
+  }
+  const [campaign] = await db
+    .select()
+    .from(campaignsTable)
+    .where(eq(campaignsTable.houseRulesShareToken, token));
+  if (!campaign) {
+    res.status(404).json({ error: "House rules not found" });
+    return;
+  }
+  const rules = await db
+    .select({
+      id: homebrewRulesTable.id,
+      title: homebrewRulesTable.title,
+      bodyMd: homebrewRulesTable.bodyMd,
+      updatedAt: homebrewRulesTable.updatedAt,
+    })
+    .from(homebrewRulesTable)
+    .where(and(eq(homebrewRulesTable.campaignId, campaign.id), eq(homebrewRulesTable.active, true)))
+    .orderBy(asc(homebrewRulesTable.title));
+
+  res.json({
+    campaignName: campaign.name,
+    worldName: campaign.worldName ?? null,
+    generatedAt: new Date().toISOString(),
+    rules: rules.map((r) => ({
+      id: r.id,
+      title: r.title,
+      bodyMd: r.bodyMd,
+      updatedAt: new Date(r.updatedAt).toISOString(),
+    })),
+  });
 });
 
 export default router;

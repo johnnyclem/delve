@@ -2426,6 +2426,60 @@ export const DeleteHomebrewRuleResponse = zod.object({
 });
 
 /**
+ * @summary Get the campaign's existing public share token for house rules (DM only). Returns null token if none has been generated.
+ */
+export const GetHouseRulesShareTokenResponse = zod.object({
+  token: zod
+    .string()
+    .nullable()
+    .describe(
+      "Opaque public token. Null when no share link has been created yet.",
+    ),
+});
+
+/**
+ * @summary Create or rotate the campaign's public share token for house rules (DM only)
+ */
+export const CreateHouseRulesShareTokenBody = zod.object({
+  rotate: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, replace any existing token with a freshly generated one.",
+    ),
+});
+
+export const CreateHouseRulesShareTokenResponse = zod.object({
+  token: zod
+    .string()
+    .nullable()
+    .describe(
+      "Opaque public token. Null when no share link has been created yet.",
+    ),
+});
+
+/**
+ * @summary Public, read-only view of a campaign's active house rules. Requires no authentication.
+ */
+export const GetPublicHouseRulesParams = zod.object({
+  token: zod.coerce.string(),
+});
+
+export const GetPublicHouseRulesResponse = zod.object({
+  campaignName: zod.string(),
+  worldName: zod.string().nullish(),
+  generatedAt: zod.coerce.date(),
+  rules: zod.array(
+    zod.object({
+      id: zod.number(),
+      title: zod.string(),
+      bodyMd: zod.string(),
+      updatedAt: zod.coerce.date(),
+    }),
+  ),
+});
+
+/**
  * @summary Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore
  */
 export const postChatBodyMessageMax = 2000;

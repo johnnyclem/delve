@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Scroll, Plus, Pencil, Trash2, Loader2, EyeOff } from "lucide-react";
+import { Scroll, Plus, Pencil, Trash2, Loader2, EyeOff, Share2, Copy, ExternalLink, RefreshCw, Printer } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,8 @@ import {
   useUpdateHomebrewRule,
   useDeleteHomebrewRule,
   useGetMyMembership,
+  useGetHouseRulesShareToken,
+  useCreateHouseRulesShareToken,
   type HomebrewRule,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -105,6 +107,40 @@ export default function HomebrewPanel() {
 
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [showShare, setShowShare] = useState(false);
+
+  const SHARE_KEY = ["/api/homebrew/share-token"] as const;
+  const { data: shareData, isLoading: shareLoading } = useGetHouseRulesShareToken({
+    query: { enabled: isDm && showShare, queryKey: SHARE_KEY },
+  });
+  const createShareMut = useCreateHouseRulesShareToken();
+  const shareToken = (shareData as { token: string | null } | undefined)?.token ?? null;
+  const shareUrl = shareToken
+    ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/share/house-rules/${shareToken}`
+    : null;
+
+  const ensureToken = (rotate: boolean) => {
+    createShareMut.mutate(
+      { data: { rotate } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: SHARE_KEY });
+          if (rotate) toast({ title: "Share link rotated" });
+        },
+        onError: (err) => toast({ title: "Failed to update share link", description: (err as Error).message, variant: "destructive" }),
+      },
+    );
+  };
+
+  const copyShareUrl = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({ title: "Link copied to clipboard" });
+    } catch {
+      toast({ title: "Couldn't copy link", description: "Copy it manually instead.", variant: "destructive" });
+    }
+  };
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: RULES_KEY });
 
@@ -176,13 +212,92 @@ export default function HomebrewPanel() {
             "House Rule" and prefers them over the SRD when they conflict.
           </p>
         </div>
-        {isDm && !creating && (
-          <Button onClick={() => setCreating(true)} data-testid="button-new-house-rule">
-            <Plus className="h-4 w-4 mr-1" />
-            New rule
-          </Button>
-        )}
+        <div className="flex gap-2 flex-wrap">
+          {isDm && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowShare((s) => !s);
+                if (!showShare && !shareToken) ensureToken(false);
+              }}
+              data-testid="button-share-house-rules"
+            >
+              <Share2 className="h-4 w-4 mr-1" />
+              Share
+            </Button>
+          )}
+          {isDm && !creating && (
+            <Button onClick={() => setCreating(true)} data-testid="button-new-house-rule">
+              <Plus className="h-4 w-4 mr-1" />
+              New rule
+            </Button>
+          )}
+        </div>
       </div>
+
+      {isDm && showShare && (
+        <div className="rounded-2xl glass-panel p-4 space-y-3" data-testid="share-house-rules-panel">
+          <div className="flex items-start gap-2">
+            <Share2 className="h-4 w-4 text-primary mt-1 shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-foreground">Shareable read-only link</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Anyone with this link can view your active house rules in a clean, print-friendly page —
+                no sign-in required. Inactive rules are hidden. Rotate the link if you ever need to revoke access.
+              </p>
+            </div>
+          </div>
+          {(shareLoading || createShareMut.isPending) && !shareUrl ? (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" /> Preparing link…
+            </div>
+          ) : shareUrl ? (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={shareUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className="font-mono text-xs"
+                  data-testid="input-share-url"
+                />
+                <Button variant="secondary" size="sm" onClick={copyShareUrl} data-testid="button-copy-share-url">
+                  <Copy className="h-4 w-4 mr-1" /> Copy
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" size="sm" asChild data-testid="button-open-share-url">
+                  <a href={shareUrl} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4 mr-1" /> Open
+                  </a>
+                </Button>
+                <Button variant="ghost" size="sm" asChild data-testid="button-print-share-url">
+                  <a href={shareUrl} target="_blank" rel="noopener noreferrer">
+                    <Printer className="h-4 w-4 mr-1" /> Printable view
+                  </a>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm("Rotate the share link? The current link will stop working.")) {
+                      ensureToken(true);
+                    }
+                  }}
+                  disabled={createShareMut.isPending}
+                  data-testid="button-rotate-share-url"
+                >
+                  <RefreshCw className="h-4 w-4 mr-1" /> Rotate
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" onClick={() => ensureToken(false)} disabled={createShareMut.isPending}>
+              Generate link
+            </Button>
+          )}
+        </div>
+      )}
 
       {creating && isDm && (
         <div className="rounded-2xl glass-panel p-4">

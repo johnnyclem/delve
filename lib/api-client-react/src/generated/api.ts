@@ -32,6 +32,7 @@ import type {
   CreateEntityBody,
   CreateEventBody,
   CreateHomebrewRuleBody,
+  CreateHouseRulesShareTokenBody,
   CreateMapBody,
   CreateNpcBody,
   CreateSessionBody,
@@ -46,12 +47,14 @@ import type {
   GetRuleParams,
   HealthStatus,
   HomebrewRule,
+  HouseRulesShareToken,
   ListEntitiesParams,
   Map,
   MapSummary,
   NotificationLog,
   NotifyRecapResult,
   Npc,
+  PublicHouseRulesView,
   ReanchorSeriesResult,
   ResendEventInviteResult,
   ResendEventInvitesResult,
@@ -5115,6 +5118,257 @@ export const useDeleteHomebrewRule = <
 > => {
   return useMutation(getDeleteHomebrewRuleMutationOptions(options));
 };
+
+/**
+ * @summary Get the campaign's existing public share token for house rules (DM only). Returns null token if none has been generated.
+ */
+export const getGetHouseRulesShareTokenUrl = () => {
+  return `/api/homebrew/share-token`;
+};
+
+export const getHouseRulesShareToken = async (
+  options?: RequestInit,
+): Promise<HouseRulesShareToken> => {
+  return customFetch<HouseRulesShareToken>(getGetHouseRulesShareTokenUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHouseRulesShareTokenQueryKey = () => {
+  return [`/api/homebrew/share-token`] as const;
+};
+
+export const getGetHouseRulesShareTokenQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHouseRulesShareToken>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHouseRulesShareToken>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetHouseRulesShareTokenQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHouseRulesShareToken>>
+  > = ({ signal }) => getHouseRulesShareToken({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHouseRulesShareToken>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHouseRulesShareTokenQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHouseRulesShareToken>>
+>;
+export type GetHouseRulesShareTokenQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get the campaign's existing public share token for house rules (DM only). Returns null token if none has been generated.
+ */
+
+export function useGetHouseRulesShareToken<
+  TData = Awaited<ReturnType<typeof getHouseRulesShareToken>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHouseRulesShareToken>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHouseRulesShareTokenQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create or rotate the campaign's public share token for house rules (DM only)
+ */
+export const getCreateHouseRulesShareTokenUrl = () => {
+  return `/api/homebrew/share-token`;
+};
+
+export const createHouseRulesShareToken = async (
+  createHouseRulesShareTokenBody?: CreateHouseRulesShareTokenBody,
+  options?: RequestInit,
+): Promise<HouseRulesShareToken> => {
+  return customFetch<HouseRulesShareToken>(getCreateHouseRulesShareTokenUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createHouseRulesShareTokenBody),
+  });
+};
+
+export const getCreateHouseRulesShareTokenMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHouseRulesShareToken>>,
+    TError,
+    { data: BodyType<CreateHouseRulesShareTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createHouseRulesShareToken>>,
+  TError,
+  { data: BodyType<CreateHouseRulesShareTokenBody> },
+  TContext
+> => {
+  const mutationKey = ["createHouseRulesShareToken"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createHouseRulesShareToken>>,
+    { data: BodyType<CreateHouseRulesShareTokenBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createHouseRulesShareToken(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateHouseRulesShareTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createHouseRulesShareToken>>
+>;
+export type CreateHouseRulesShareTokenMutationBody =
+  BodyType<CreateHouseRulesShareTokenBody>;
+export type CreateHouseRulesShareTokenMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create or rotate the campaign's public share token for house rules (DM only)
+ */
+export const useCreateHouseRulesShareToken = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createHouseRulesShareToken>>,
+    TError,
+    { data: BodyType<CreateHouseRulesShareTokenBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createHouseRulesShareToken>>,
+  TError,
+  { data: BodyType<CreateHouseRulesShareTokenBody> },
+  TContext
+> => {
+  return useMutation(getCreateHouseRulesShareTokenMutationOptions(options));
+};
+
+/**
+ * @summary Public, read-only view of a campaign's active house rules. Requires no authentication.
+ */
+export const getGetPublicHouseRulesUrl = (token: string) => {
+  return `/api/public/house-rules/${token}`;
+};
+
+export const getPublicHouseRules = async (
+  token: string,
+  options?: RequestInit,
+): Promise<PublicHouseRulesView> => {
+  return customFetch<PublicHouseRulesView>(getGetPublicHouseRulesUrl(token), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPublicHouseRulesQueryKey = (token: string) => {
+  return [`/api/public/house-rules/${token}`] as const;
+};
+
+export const getGetPublicHouseRulesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPublicHouseRules>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPublicHouseRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetPublicHouseRulesQueryKey(token);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getPublicHouseRules>>
+  > = ({ signal }) => getPublicHouseRules(token, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!token,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getPublicHouseRules>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetPublicHouseRulesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPublicHouseRules>>
+>;
+export type GetPublicHouseRulesQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Public, read-only view of a campaign's active house rules. Requires no authentication.
+ */
+
+export function useGetPublicHouseRules<
+  TData = Awaited<ReturnType<typeof getPublicHouseRules>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  token: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPublicHouseRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPublicHouseRulesQueryOptions(token, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Ask the AI assistant a question with hybrid retrieval over SRD + campaign lore

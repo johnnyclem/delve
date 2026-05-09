@@ -11,6 +11,7 @@ import NotFound from "@/pages/not-found";
 import DashboardPage from "@/pages/dashboard";
 import MapsPage from "@/pages/maps";
 import MapEditorPage from "@/pages/map-editor";
+import HouseRulesSharePage from "@/pages/house-rules-share";
 
 const clerkPubKey = publishableKeyFromHost(
   window.location.hostname,
@@ -179,6 +180,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/" component={HomeRedirect} />
             <Route path="/sign-in/*?" component={SignInPage} />
             <Route path="/sign-up/*?" component={SignUpPage} />
+            <Route path="/share/house-rules/:token" component={HouseRulesSharePage} />
             <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPage} />}</Route>
             <Route path="/maps">{() => <ProtectedRoute component={MapsPage} />}</Route>
             <Route path="/maps/:id">{() => <ProtectedRoute component={MapEditorPage} />}</Route>

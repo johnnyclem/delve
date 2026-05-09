@@ -1019,6 +1019,29 @@ export interface UpdateHomebrewRuleBody {
   active?: boolean;
 }
 
+export interface HouseRulesShareToken {
+  /**
+   * Opaque public token. Null when no share link has been created yet.
+   * @nullable
+   */
+  token: string | null;
+}
+
+export interface PublicHouseRule {
+  id: number;
+  title: string;
+  bodyMd: string;
+  updatedAt: string;
+}
+
+export interface PublicHouseRulesView {
+  campaignName: string;
+  /** @nullable */
+  worldName?: string | null;
+  generatedAt: string;
+  rules: PublicHouseRule[];
+}
+
 export type ChatCitationSource =
   (typeof ChatCitationSource)[keyof typeof ChatCitationSource];
 
@@ -1139,4 +1162,9 @@ export type DeleteEvent200 = {
 
 export type ListEntitiesParams = {
   kind?: EntityKind;
+};
+
+export type CreateHouseRulesShareTokenBody = {
+  /** When true, replace any existing token with a freshly generated one. */
+  rotate?: boolean;
 };
