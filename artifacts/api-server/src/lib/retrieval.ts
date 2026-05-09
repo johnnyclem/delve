@@ -14,6 +14,45 @@ const FINAL_LIMIT = 8;
 const OR_TSQUERY_SQL = (q: string) =>
   sql`NULLIF(replace(websearch_to_tsquery('english', ${q})::text, '&', '|'), '')::tsquery`;
 
+// Tokens that add noise to ranking when OR-joining. Postgres' english stopword
+// list already drops "this", "do", "in", "to", etc., but conversational filler
+// like "how", "work", "according" survive and end up dominating ts_rank against
+// large corpora. We strip them in JS before handing the cleaned string to
+// websearch_to_tsquery. If the entire query is filler (e.g. "how does it
+// work?") we fall back to the original string so recall is preserved.
+const KEYWORD_FILLER = new Set([
+  "how", "what", "why", "when", "where", "who", "whom", "whose", "which",
+  "work", "works", "working", "worked",
+  "use", "uses", "using", "used",
+  "do", "does", "did", "doing", "done",
+  "is", "are", "was", "were", "be", "been", "being", "am",
+  "have", "has", "had", "having",
+  "can", "could", "should", "would", "will", "shall", "may", "might", "must",
+  "this", "that", "these", "those",
+  "the", "a", "an", "and", "or", "but", "not",
+  "in", "on", "at", "to", "of", "for", "with", "by", "from", "as",
+  "about", "into", "than", "then", "there", "here",
+  "i", "me", "my", "mine", "we", "us", "our", "ours",
+  "you", "your", "yours", "they", "them", "their", "theirs", "it", "its",
+  "according", "any", "some", "all", "such", "any",
+  "really", "very", "just", "only", "also", "even", "still", "ever",
+  "thing", "things", "stuff", "way", "ways",
+  "please", "thanks", "thank",
+  "tell", "tells", "told", "say", "says", "said",
+  "know", "knows", "known", "think", "thinks",
+  "want", "wants", "need", "needs",
+  "if", "so",
+]);
+
+export function buildKeywordQuery(raw: string): string {
+  const tokens = raw.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const filtered = tokens.filter(
+    (t) => t.length >= 3 && !KEYWORD_FILLER.has(t),
+  );
+  if (filtered.length === 0) return raw;
+  return filtered.join(" ");
+}
+
 export interface ReferenceHit {
   chunkId: number;
   edition: SrdEdition;
@@ -51,6 +90,7 @@ export async function retrieveReference(
   limit: number = FINAL_LIMIT,
 ): Promise<ReferenceHit[]> {
   if (!query.trim()) return [];
+  const keywordQuery = buildKeywordQuery(query);
 
   // Belt-and-suspenders recall.
   await db.execute(sql`SET LOCAL hnsw.iterative_scan = 'relaxed_order'`).catch(() => {});
@@ -81,11 +121,11 @@ export async function retrieveReference(
     ),
     keyword AS (
       SELECT id, ROW_NUMBER() OVER (
-        ORDER BY ts_rank(tsv, ${OR_TSQUERY_SQL(query)}) DESC
+        ORDER BY ts_rank(tsv, ${OR_TSQUERY_SQL(keywordQuery)}) DESC
       ) AS rnk
       FROM reference_chunks
       WHERE edition = ${edition}
-        AND tsv @@ ${OR_TSQUERY_SQL(query)}
+        AND tsv @@ ${OR_TSQUERY_SQL(keywordQuery)}
       LIMIT ${BM25_LIMIT}
     ),
     fused AS (
@@ -127,6 +167,7 @@ export async function retrieveCampaign(
   limit: number = FINAL_LIMIT,
 ): Promise<CampaignHit[]> {
   if (!query.trim()) return [];
+  const keywordQuery = buildKeywordQuery(query);
 
   await db.execute(sql`SET LOCAL hnsw.iterative_scan = 'relaxed_order'`).catch(() => {});
 
@@ -164,12 +205,12 @@ export async function retrieveCampaign(
     ),
     keyword AS (
       SELECT cec.id, ROW_NUMBER() OVER (
-        ORDER BY ts_rank(cec.tsv, ${OR_TSQUERY_SQL(query)}) DESC
+        ORDER BY ts_rank(cec.tsv, ${OR_TSQUERY_SQL(keywordQuery)}) DESC
       ) AS rnk
       FROM campaign_entity_chunks cec
       ${gatingJoin}
       WHERE cec.campaign_id = ${campaignId}
-        AND cec.tsv @@ ${OR_TSQUERY_SQL(query)}
+        AND cec.tsv @@ ${OR_TSQUERY_SQL(keywordQuery)}
       LIMIT ${BM25_LIMIT}
     ),
     fused AS (
@@ -209,6 +250,7 @@ export async function retrieveHomebrew(
   limit: number = FINAL_LIMIT,
 ): Promise<HomebrewHit[]> {
   if (!query.trim()) return [];
+  const keywordQuery = buildKeywordQuery(query);
 
   await db.execute(sql`SET LOCAL hnsw.iterative_scan = 'relaxed_order'`).catch(() => {});
 
@@ -237,12 +279,12 @@ export async function retrieveHomebrew(
     ),
     keyword AS (
       SELECT id, ROW_NUMBER() OVER (
-        ORDER BY ts_rank(tsv, ${OR_TSQUERY_SQL(query)}) DESC
+        ORDER BY ts_rank(tsv, ${OR_TSQUERY_SQL(keywordQuery)}) DESC
       ) AS rnk
       FROM homebrew_rules
       WHERE campaign_id = ${campaignId}
         AND active = true
-        AND tsv @@ ${OR_TSQUERY_SQL(query)}
+        AND tsv @@ ${OR_TSQUERY_SQL(keywordQuery)}
       LIMIT ${BM25_LIMIT}
     ),
     fused AS (
