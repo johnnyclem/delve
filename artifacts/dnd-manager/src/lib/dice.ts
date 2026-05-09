@@ -33,6 +33,11 @@ export function rollAbilityScores(rng: RngFn = defaultRng): AbilityRoll[] {
 
 export const STANDARD_ARRAY: readonly number[] = [15, 14, 13, 12, 10, 8];
 
+export function rollHitDie(hitDie: number, rng: RngFn = defaultRng): number {
+  const sides = Math.max(1, Math.floor(hitDie));
+  return Math.floor(rng() * sides) + 1;
+}
+
 export function abilityRollLabel(roll: AbilityRoll): string {
   const kept = roll.dice.filter((_, i) => i !== roll.droppedIndex);
   const dropped = roll.dice[roll.droppedIndex];

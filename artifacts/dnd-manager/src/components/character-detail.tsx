@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon } from "lucide-react";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp } from "lucide-react";
+import LevelUpModal from "@/components/level-up-modal";
 import { Button } from "@/components/ui/button";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership, useGetCampaign } from "@workspace/api-client-react";
 import type { Character, CharacterSheet } from "@workspace/api-client-react";
@@ -57,6 +58,8 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const [urlInputValue, setUrlInputValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [cropSource, setCropSource] = useState<{ src: string; name: string; type: string } | null>(null);
+  const [levelUpOpen, setLevelUpOpen] = useState(false);
+  const [levelUpTarget, setLevelUpTarget] = useState<number | null>(null);
 
   const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
@@ -307,6 +310,19 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
             Edit details
           </Button>
         )}
+        {canEditDetails && !editing && !editingDetails && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={char.level >= 20}
+            onClick={() => { setLevelUpTarget(char.level + 1); setLevelUpOpen(true); }}
+            title={char.level >= 20 ? "Max level" : "Walk through your level up"}
+            data-testid="button-level-up"
+          >
+            <TrendingUp className="h-4 w-4 mr-1" />
+            Level Up
+          </Button>
+        )}
         {editing && (
           <>
             <Button size="sm" onClick={saveChanges} disabled={updateMutation.isPending} data-testid="button-save-character">
@@ -433,6 +449,21 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
               >
                 Proficiency bonus will become +{newProficiencyBonus}
               </p>
+            )}
+            {levelChanged && detailsDraft.level > char.level && detailsDraft.level <= 20 && (
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline mt-1 inline-flex items-center gap-1"
+                onClick={() => {
+                  cancelEditingDetails();
+                  setLevelUpTarget(detailsDraft.level);
+                  setLevelUpOpen(true);
+                }}
+                data-testid="link-level-up-walkthrough"
+              >
+                <TrendingUp className="h-3.5 w-3.5" />
+                Try the Level Up walkthrough →
+              </button>
             )}
           </div>
           <div className="flex gap-2">
@@ -652,6 +683,15 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
             </div>
           )}
         </div>
+      )}
+
+      {levelUpTarget !== null && (
+        <LevelUpModal
+          character={char}
+          targetLevel={levelUpTarget}
+          open={levelUpOpen}
+          onClose={() => { setLevelUpOpen(false); setLevelUpTarget(null); }}
+        />
       )}
 
       <PortraitCropperDialog

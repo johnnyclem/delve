@@ -42,6 +42,10 @@ export interface ClassInfo {
   skillChoices: SkillChoice;
   startingEquipmentOptions: EquipmentSlot[];
   level1Features: ClassFeature[];
+  // Curated SRD features unlocked at each level >= 2. ASIs and small numeric
+  // bumps (e.g. proficiency bonus) are intentionally omitted — the level-up
+  // walkthrough surfaces those separately.
+  featuresByLevel?: Record<number, ClassFeature[]>;
 }
 
 // 9 SRD races. Subraces (e.g. Hill Dwarf) are intentionally collapsed into
@@ -657,4 +661,191 @@ export function modifierFor(score: number): number {
 
 export function level1MaxHp(hitDie: HitDieSize, conScore: number): number {
   return hitDie + modifierFor(conScore);
+}
+
+// Curated SRD class features at each level >= 2. Sparse by design — only
+// notable PHB features. Levels not listed unlock nothing beyond derived
+// numbers (proficiency bonus, ASIs, scaling dice). Subclass-specific
+// features are out of scope (Task #133).
+export const CLASS_FEATURES_BY_LEVEL: Record<string, Record<number, ClassFeature[]>> = {
+  Barbarian: {
+    2: [
+      { name: "Reckless Attack", summary: "Trade defense for STR-attack advantage; attacks vs you also gain advantage." },
+      { name: "Danger Sense", summary: "Advantage on DEX saves vs effects you can see (traps, spells)." },
+    ],
+    3: [{ name: "Primal Path", summary: "Choose a subclass (Berserker, Totem Warrior, etc.)." }],
+    5: [
+      { name: "Extra Attack", summary: "Attack twice when you take the Attack action." },
+      { name: "Fast Movement", summary: "+10 ft speed while not wearing heavy armor." },
+    ],
+    7: [{ name: "Feral Instinct", summary: "Advantage on initiative; can rage and act normally on a surprise round." }],
+    9: [{ name: "Brutal Critical (1 die)", summary: "Roll one extra weapon damage die on a melee crit." }],
+    11: [{ name: "Relentless Rage", summary: "Drop to 1 HP instead of 0 once per rage (CON save, escalating DC)." }],
+    15: [{ name: "Persistent Rage", summary: "Rage no longer ends from inactivity; only when unconscious or you end it." }],
+    18: [{ name: "Indomitable Might", summary: "STR check minimum equals your STR score." }],
+    20: [{ name: "Primal Champion", summary: "+4 to STR and CON; both maximums increase to 24." }],
+  },
+  Bard: {
+    2: [
+      { name: "Jack of All Trades", summary: "Add half your proficiency (round down) to non-proficient ability checks." },
+      { name: "Song of Rest (d6)", summary: "Allies regain extra HP equal to a d6 on short rests." },
+    ],
+    3: [
+      { name: "Bard College", summary: "Choose a subclass (Lore, Valor, etc.)." },
+      { name: "Expertise", summary: "Double proficiency on two skills." },
+    ],
+    5: [
+      { name: "Bardic Inspiration (d8)", summary: "Inspiration die upgrades to d8." },
+      { name: "Font of Inspiration", summary: "Regain all uses of Bardic Inspiration on a short or long rest." },
+    ],
+    6: [{ name: "Countercharm", summary: "Action: friends within 30 ft gain advantage on saves vs frightened/charmed." }],
+    10: [
+      { name: "Magical Secrets (2)", summary: "Learn two spells from any class." },
+      { name: "Bardic Inspiration (d10)", summary: "Inspiration die upgrades to d10." },
+      { name: "Expertise (2)", summary: "Double proficiency on two more skills." },
+    ],
+    14: [{ name: "Magical Secrets (4)", summary: "Learn two more spells from any class." }],
+    15: [{ name: "Bardic Inspiration (d12)", summary: "Inspiration die upgrades to d12." }],
+    18: [{ name: "Magical Secrets (6)", summary: "Learn two more spells from any class." }],
+    20: [{ name: "Superior Inspiration", summary: "Regain one Bardic Inspiration on initiative if you have none left." }],
+  },
+  Cleric: {
+    2: [{ name: "Channel Divinity (1/rest)", summary: "Turn Undead plus a domain-specific channel option." }],
+    5: [{ name: "Destroy Undead (CR 1/2)", summary: "Turned undead of CR 1/2 or lower are destroyed." }],
+    6: [{ name: "Channel Divinity (2/rest)", summary: "Use Channel Divinity twice between rests." }],
+    8: [{ name: "Destroy Undead (CR 1)", summary: "Turned undead of CR 1 or lower are destroyed." }],
+    10: [{ name: "Divine Intervention", summary: "Once per long rest, call on your god (% chance equal to cleric level)." }],
+    11: [{ name: "Destroy Undead (CR 2)", summary: "Turned undead of CR 2 or lower are destroyed." }],
+    14: [{ name: "Destroy Undead (CR 3)", summary: "Turned undead of CR 3 or lower are destroyed." }],
+    17: [
+      { name: "Destroy Undead (CR 4)", summary: "Turned undead of CR 4 or lower are destroyed." },
+      { name: "Divine Intervention Improvement", summary: "Your call for intervention automatically succeeds (1/week)." },
+    ],
+    18: [{ name: "Channel Divinity (3/rest)", summary: "Use Channel Divinity three times between rests." }],
+    20: [{ name: "Domain Capstone", summary: "Gain your divine domain's level-20 capstone feature." }],
+  },
+  Druid: {
+    2: [
+      { name: "Wild Shape", summary: "Action: transform into a beast you've seen (CR 1/4 at level 2). 2/short rest." },
+      { name: "Druid Circle", summary: "Choose a subclass (Land or Moon)." },
+    ],
+    4: [{ name: "Wild Shape Improvement", summary: "Beasts up to CR 1/2 with no flying speed." }],
+    8: [{ name: "Wild Shape Improvement", summary: "Beasts up to CR 1 with no flying speed." }],
+    18: [
+      { name: "Timeless Body", summary: "Age slowly: 10 years pass for every 1 normal year." },
+      { name: "Beast Spells", summary: "Cast druid spells while in Wild Shape (somatic/verbal only)." },
+    ],
+    20: [{ name: "Archdruid", summary: "Unlimited Wild Shapes; ignore material components for druid spells." }],
+  },
+  Fighter: {
+    2: [{ name: "Action Surge (1/rest)", summary: "Take an additional action on your turn once per short rest." }],
+    3: [{ name: "Martial Archetype", summary: "Choose a subclass (Champion, Battle Master, Eldritch Knight)." }],
+    5: [{ name: "Extra Attack", summary: "Attack twice when you take the Attack action." }],
+    9: [{ name: "Indomitable (1/rest)", summary: "Reroll a failed saving throw once per long rest." }],
+    11: [{ name: "Extra Attack (2)", summary: "Attack three times when you take the Attack action." }],
+    13: [{ name: "Indomitable (2/rest)", summary: "Use Indomitable twice between long rests." }],
+    17: [
+      { name: "Action Surge (2/rest)", summary: "Use Action Surge twice between short rests." },
+      { name: "Indomitable (3/rest)", summary: "Use Indomitable three times between long rests." },
+    ],
+    20: [{ name: "Extra Attack (3)", summary: "Attack four times when you take the Attack action." }],
+  },
+  Monk: {
+    2: [
+      { name: "Ki", summary: "Pool of ki points (= monk level) for Flurry of Blows, Patient Defense, Step of the Wind." },
+      { name: "Unarmored Movement (+10 ft)", summary: "Speed bonus while unarmored and not wearing a shield." },
+    ],
+    3: [
+      { name: "Monastic Tradition", summary: "Choose a subclass (Open Hand, Shadow, Four Elements)." },
+      { name: "Deflect Missiles", summary: "Reaction: reduce ranged-weapon damage; if 0, throw it back as a ki attack." },
+    ],
+    4: [{ name: "Slow Fall", summary: "Reaction: reduce falling damage by 5 × monk level." }],
+    5: [
+      { name: "Extra Attack", summary: "Attack twice when you take the Attack action." },
+      { name: "Stunning Strike", summary: "Spend 1 ki on a hit to force a CON save or be stunned until your next turn." },
+    ],
+    6: [{ name: "Ki-Empowered Strikes", summary: "Your unarmed strikes count as magical for overcoming resistance." }],
+    7: [
+      { name: "Evasion", summary: "On a successful DEX save vs half-damage effect, take no damage; half on fail." },
+      { name: "Stillness of Mind", summary: "Action: end one effect causing you to be charmed or frightened." },
+    ],
+    10: [{ name: "Purity of Body", summary: "Immunity to disease and poison." }],
+    13: [{ name: "Tongue of the Sun and Moon", summary: "Understand all spoken languages and be understood by anyone." }],
+    14: [{ name: "Diamond Soul", summary: "Proficiency in all saving throws; spend 1 ki to reroll a failed save." }],
+    15: [{ name: "Timeless Body", summary: "No longer suffer the effects of aging; can't be aged magically." }],
+    18: [{ name: "Empty Body", summary: "4 ki: become invisible and resistant to all damage but force for 1 minute." }],
+    20: [{ name: "Perfect Self", summary: "Regain 4 ki when you roll initiative with none left." }],
+  },
+  Paladin: {
+    2: [
+      { name: "Divine Smite", summary: "Spend a spell slot on a melee hit for +2d8 radiant damage (+1d8 per slot level above 1, max +5d8)." },
+      { name: "Fighting Style", summary: "Choose a style (Defense, Dueling, Great Weapon Fighting, Protection)." },
+    ],
+    3: [
+      { name: "Sacred Oath", summary: "Choose a subclass (Devotion, Ancients, Vengeance)." },
+      { name: "Divine Health", summary: "Immunity to disease." },
+    ],
+    5: [{ name: "Extra Attack", summary: "Attack twice when you take the Attack action." }],
+    6: [{ name: "Aura of Protection", summary: "You and allies within 10 ft add your CHA mod (min +1) to saves." }],
+    10: [{ name: "Aura of Courage", summary: "You and allies within 10 ft can't be frightened." }],
+    11: [{ name: "Improved Divine Smite", summary: "All melee weapon hits deal +1d8 radiant damage." }],
+    14: [{ name: "Cleansing Touch", summary: "Action: end one spell on yourself or a willing creature (CHA mod uses/long rest)." }],
+    18: [{ name: "Aura Range Increase", summary: "Aura of Protection / Aura of Courage range becomes 30 ft." }],
+    20: [{ name: "Oath Capstone", summary: "Gain your sacred oath's level-20 capstone feature." }],
+  },
+  Ranger: {
+    2: [
+      { name: "Fighting Style", summary: "Choose a style (Archery, Defense, Dueling, Two-Weapon Fighting)." },
+      { name: "Spellcasting", summary: "Cast ranger spells using WIS. Know 2 spells at level 2." },
+    ],
+    3: [
+      { name: "Ranger Archetype", summary: "Choose a subclass (Hunter, Beast Master)." },
+      { name: "Primeval Awareness", summary: "Spend a spell slot to sense favored enemies within 1 mile." },
+    ],
+    5: [{ name: "Extra Attack", summary: "Attack twice when you take the Attack action." }],
+    8: [{ name: "Land's Stride", summary: "Move through nonmagical difficult terrain at full speed; advantage on saves vs entangling plants." }],
+    10: [{ name: "Hide in Plain Sight", summary: "1 minute camouflage grants +10 to Stealth checks while motionless." }],
+    14: [{ name: "Vanish", summary: "Hide as a bonus action; can't be tracked nonmagically." }],
+    18: [{ name: "Feral Senses", summary: "Don't suffer disadvantage attacking unseen creatures within 30 ft; aware of invisible creatures." }],
+    20: [{ name: "Foe Slayer", summary: "Once per turn, add WIS mod to attack or damage roll vs a favored enemy." }],
+  },
+  Rogue: {
+    2: [{ name: "Cunning Action", summary: "Bonus action: Dash, Disengage, or Hide." }],
+    3: [{ name: "Roguish Archetype", summary: "Choose a subclass (Thief, Assassin, Arcane Trickster)." }],
+    5: [{ name: "Uncanny Dodge", summary: "Reaction: halve damage from one attacker you can see." }],
+    7: [{ name: "Evasion", summary: "On a successful DEX save vs half-damage effect, take no damage; half on fail." }],
+    11: [{ name: "Reliable Talent", summary: "Treat any d20 of 9 or lower as a 10 on proficient ability checks." }],
+    14: [{ name: "Blindsense", summary: "Aware of any hidden or invisible creature within 10 ft if you can hear." }],
+    15: [{ name: "Slippery Mind", summary: "Proficiency in WIS saving throws." }],
+    18: [{ name: "Elusive", summary: "No attack roll has advantage against you unless you're incapacitated." }],
+    20: [{ name: "Stroke of Luck", summary: "Once per short rest, turn a missed attack into a hit or a failed check into 20." }],
+  },
+  Sorcerer: {
+    2: [{ name: "Font of Magic", summary: "Pool of sorcery points (= sorcerer level); convert between slots and points." }],
+    3: [{ name: "Metamagic", summary: "Choose 2 metamagic options (Twin, Quicken, Subtle, etc.)." }],
+    10: [{ name: "Metamagic (3rd)", summary: "Learn one additional metamagic option." }],
+    17: [{ name: "Metamagic (4th)", summary: "Learn one additional metamagic option." }],
+    20: [{ name: "Sorcerous Restoration", summary: "Regain 4 sorcery points on a short rest (1/rest)." }],
+  },
+  Warlock: {
+    2: [{ name: "Eldritch Invocations (2)", summary: "Choose 2 invocations that customize your warlock features." }],
+    3: [{ name: "Pact Boon", summary: "Choose Pact of the Chain, Blade, or Tome." }],
+    11: [{ name: "Mystic Arcanum (6th)", summary: "Choose one 6th-level spell, cast 1/long rest without expending a slot." }],
+    13: [{ name: "Mystic Arcanum (7th)", summary: "Choose one 7th-level spell, cast 1/long rest." }],
+    15: [{ name: "Mystic Arcanum (8th)", summary: "Choose one 8th-level spell, cast 1/long rest." }],
+    17: [{ name: "Mystic Arcanum (9th)", summary: "Choose one 9th-level spell, cast 1/long rest." }],
+    20: [{ name: "Eldritch Master", summary: "Regain all expended Pact Magic spell slots after 1 minute of entreaty (1/long rest)." }],
+  },
+  Wizard: {
+    2: [{ name: "Arcane Tradition", summary: "Choose a subclass (Evocation, Abjuration, etc.)." }],
+    18: [{ name: "Spell Mastery", summary: "Cast a chosen 1st- and 2nd-level spell at lowest level without expending a slot." }],
+    20: [{ name: "Signature Spells", summary: "Choose two 3rd-level spells you can cast 1/short rest each without a slot." }],
+  },
+};
+
+export function getNewFeaturesAtLevel(className: string, level: number): ClassFeature[] {
+  if (level <= 1) return [];
+  const map = CLASS_FEATURES_BY_LEVEL[className];
+  if (!map) return [];
+  return map[level] ?? [];
 }
