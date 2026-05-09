@@ -1,6 +1,7 @@
 import type { AbilityName } from "./dnd-options";
 import { ABILITY_ORDER } from "./dnd-options";
 import { modifierFor, type HitDieSize } from "./dnd-srd";
+import { getFeat } from "./dnd-feats";
 
 export const ASI_LEVELS: readonly number[] = [4, 8, 12, 16, 19];
 export const ABILITY_SCORE_CAP = 20;
@@ -42,7 +43,10 @@ export type AsiChoice =
   | { kind: "none" }
   | { kind: "plus2"; ability: AbilityName }
   | { kind: "plus1x2"; abilityA: AbilityName; abilityB: AbilityName }
-  | { kind: "feat"; description: string };
+  // featId is the curated SRD feat id; description holds either the curated
+  // feat's "Name — summary" text or the player's freeform "Custom feat" entry.
+  // Both feed the notes log and the on-sheet feats list.
+  | { kind: "feat"; featId?: string; description: string };
 
 export type AbilityScores = Record<AbilityName, number>;
 

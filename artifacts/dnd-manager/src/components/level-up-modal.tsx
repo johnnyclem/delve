@@ -21,6 +21,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Check as CheckIcon, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -34,6 +45,7 @@ import type { Character, CharacterSheet } from "@workspace/api-client-react";
 import { CLASS_DATA, getNewFeaturesAtLevel, modifierFor, type HitDieSize } from "@/lib/dnd-srd";
 import { ABILITY_ORDER, type AbilityName } from "@/lib/dnd-options";
 import { rollHitDie } from "@/lib/dice";
+import { SRD_FEATS, getFeat, bonusHpFromFeats } from "@/lib/dnd-feats";
 import {
   appendFeatNote,
   applyAsiChoice,
@@ -126,15 +138,21 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
   const conScore = (working.sheet.constitution ?? 10) as number;
   const conMod = modifierFor(conScore);
 
+  // If Tough was already on the sheet from an earlier level, every level-up
+  // pass adds +2 HP on top of the rolled/average value. (Picking Tough this
+  // level is handled separately during commit — it credits 2 × toLevel HP.)
+  const existingFeats = working.sheet.feats ?? [];
+  const featHpPerLevel = bonusHpFromFeats(existingFeats, 1);
+
   const hpFromRoll = pass.hpRoll ?? 0;
   const hpDelta = (() => {
     if (pass.hpMethod === "manual") {
       const n = parseInt(pass.manualHp, 10);
-      if (Number.isFinite(n) && n >= 1) return Math.max(1, n);
+      if (Number.isFinite(n) && n >= 1) return Math.max(1, n) + featHpPerLevel;
       return 0;
     }
     if (pass.hpRoll === null) return 0;
-    return levelUpHpGain(hpFromRoll, conScore);
+    return levelUpHpGain(hpFromRoll, conScore) + featHpPerLevel;
   })();
 
   const newFeatures = getNewFeaturesAtLevel(character.class, pass.toLevel);
@@ -199,9 +217,8 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
 
   const commit = () => {
     if (!working) return;
-    const newMaxHp = (working.sheet.maxHp ?? 0) + hpDelta;
-    const newCurrentHp = (working.sheet.currentHp ?? 0) + hpDelta;
-    let nextSheet: CharacterSheet = { ...working.sheet, maxHp: newMaxHp, currentHp: newCurrentHp };
+    let bonusHp = hpDelta;
+    let nextSheet: CharacterSheet = { ...working.sheet };
 
     if (asiNeeded && pass.asi.kind !== "none") {
       if (pass.asi.kind === "plus2" || pass.asi.kind === "plus1x2") {
@@ -221,8 +238,29 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
         } as CharacterSheet;
       } else if (pass.asi.kind === "feat") {
         nextSheet = { ...nextSheet, notes: appendFeatNote(working.sheet.notes, pass.toLevel, pass.asi.description) };
+        // Curated feat picks land on a structured `feats` list so they show
+        // up on the sheet, not just buried in notes.
+        if (pass.asi.featId) {
+          const existing = nextSheet.feats ?? [];
+          if (!existing.includes(pass.asi.featId)) {
+            nextSheet = { ...nextSheet, feats: [...existing, pass.asi.featId] };
+          }
+          // Tough is retroactive: when picked, credit +2 HP for every
+          // character level the character has at the new level. Future
+          // level-ups add +2 each via featHpPerLevel above.
+          const feat = getFeat(pass.asi.featId);
+          if (feat?.hpPerLevel) {
+            bonusHp += feat.hpPerLevel * pass.toLevel;
+          }
+        }
       }
     }
+
+    nextSheet = {
+      ...nextSheet,
+      maxHp: (working.sheet.maxHp ?? 0) + bonusHp,
+      currentHp: (working.sheet.currentHp ?? 0) + bonusHp,
+    };
 
     updateMutation.mutate(
       { id: character.id, data: { level: pass.toLevel, sheetJson: nextSheet } },
@@ -378,12 +416,21 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
           />
         )}
 
-        {step === "confirm" && (
+        {step === "confirm" && (() => {
+          const pickedFeat = pass.asi.kind === "feat" && pass.asi.featId ? getFeat(pass.asi.featId) : null;
+          const toughBonus = pickedFeat?.hpPerLevel ? pickedFeat.hpPerLevel * pass.toLevel : 0;
+          const totalHp = hpDelta + toughBonus;
+          return (
           <div className="space-y-3" data-testid="step-confirm">
             <p className="text-sm text-muted-foreground">Ready to commit:</p>
             <ul className="rounded-lg bg-[rgba(255,255,255,0.04)] p-3 text-sm space-y-1">
               <li>Level {pass.fromLevel} → {pass.toLevel}</li>
-              <li>+{hpDelta} HP (max & current)</li>
+              <li data-testid="text-confirm-hp">
+                +{totalHp} HP (max &amp; current)
+                {toughBonus > 0 && (
+                  <span className="text-xs text-muted-foreground"> — includes +{toughBonus} from {pickedFeat?.name}</span>
+                )}
+              </li>
               {asiNeeded && pass.asi.kind !== "none" && (
                 <li>{describeAsiChoice(readAbilityScores(working.sheet), pass.asi)}</li>
               )}
@@ -392,7 +439,8 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
               )}
             </ul>
           </div>
-        )}
+          );
+        })()}
 
         <DialogFooter className="flex sm:justify-between gap-2">
           <Button
@@ -449,7 +497,12 @@ function AsiStep({
         onValueChange={(v) => {
           if (v === "plus2") onChange({ kind: "plus2", ability: "strength" });
           else if (v === "plus1x2") onChange({ kind: "plus1x2", abilityA: "strength", abilityB: "dexterity" });
-          else if (v === "feat") onChange({ kind: "feat", description: "" });
+          // Default to the first curated feat so the picker shows a real
+          // selection out of the gate; players can switch to "Custom" if needed.
+          else if (v === "feat") {
+            const first = SRD_FEATS[0];
+            onChange({ kind: "feat", featId: first.id, description: first.name });
+          }
         }}
         className="space-y-2"
       >
@@ -497,19 +550,58 @@ function AsiStep({
 
         <label className="flex items-center gap-2 text-sm">
           <RadioGroupItem value="feat" data-testid="radio-asi-feat" />
-          Take a feat (manual)
+          Take a feat
         </label>
         {choice.kind === "feat" && (
-          <div className="ml-6 max-w-[440px]">
-            <Label htmlFor="feat-desc" className="text-xs text-muted-foreground">Describe the feat — added to your notes.</Label>
-            <Textarea
-              id="feat-desc"
-              value={choice.description}
-              onChange={(e) => onChange({ kind: "feat", description: e.target.value })}
-              rows={2}
-              placeholder="e.g. Sharpshooter — ignore cover, no -5/+10 trade-off"
-              data-testid="input-asi-feat-desc"
+          <div className="ml-6 max-w-[440px] space-y-2">
+            <FeatPicker
+              featId={choice.featId}
+              onPick={(featId) => {
+                if (featId === null) {
+                  onChange({ kind: "feat", featId: undefined, description: "" });
+                } else {
+                  const f = getFeat(featId);
+                  if (f) onChange({ kind: "feat", featId: f.id, description: f.name });
+                }
+              }}
             />
+            {choice.featId ? (() => {
+              const feat = getFeat(choice.featId);
+              if (!feat) return null;
+              return (
+                <div
+                  className="rounded-lg bg-[rgba(255,255,255,0.04)] p-3 space-y-1"
+                  data-testid={`feat-preview-${feat.id}`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{feat.name}</p>
+                  {feat.prerequisite && (
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Prerequisite: {feat.prerequisite}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">{feat.summary}</p>
+                  {feat.hpPerLevel && (
+                    <p className="text-xs text-primary">
+                      Adds +{feat.hpPerLevel} HP per character level on pick.
+                    </p>
+                  )}
+                </div>
+              );
+            })() : (
+              <div className="space-y-1">
+                <Label htmlFor="feat-desc" className="text-xs text-muted-foreground">
+                  Describe your custom feat — saved to your notes.
+                </Label>
+                <Textarea
+                  id="feat-desc"
+                  value={choice.description}
+                  onChange={(e) => onChange({ kind: "feat", featId: undefined, description: e.target.value })}
+                  rows={2}
+                  placeholder="e.g. Homebrew Berserker — once per long rest, …"
+                  data-testid="input-asi-feat-desc"
+                />
+              </div>
+            )}
           </div>
         )}
       </RadioGroup>
@@ -520,5 +612,93 @@ function AsiStep({
         </p>
       )}
     </div>
+  );
+}
+
+// Searchable combobox over the curated SRD feat list, with a "Custom feat
+// (manual)" sentinel that the parent translates into a freeform description.
+// We use Popover + Command (cmdk) so players can type to filter — important
+// once the curated list grows beyond a handful of entries.
+function FeatPicker({
+  featId,
+  onPick,
+}: {
+  featId: string | undefined;
+  // null = the "Custom feat (manual)" sentinel; otherwise the picked SRD id.
+  onPick: (featId: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = featId ? getFeat(featId) : null;
+  const label = selected?.name ?? (featId === undefined ? "Custom feat (manual)" : "Pick a feat");
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between"
+          data-testid="combobox-asi-feat"
+        >
+          <span className="truncate">{label}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search feats…" data-testid="input-asi-feat-search" />
+          <CommandList>
+            <CommandEmpty>No feats found.</CommandEmpty>
+            <CommandGroup heading="SRD feats">
+              {SRD_FEATS.map((f) => (
+                <CommandItem
+                  key={f.id}
+                  value={`${f.name} ${f.summary}`}
+                  onSelect={() => {
+                    onPick(f.id);
+                    setOpen(false);
+                  }}
+                  data-testid={`option-feat-${f.id}`}
+                >
+                  <CheckIcon
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      featId === f.id ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-sm">{f.name}</span>
+                    {f.prerequisite && (
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Req: {f.prerequisite}
+                      </span>
+                    )}
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandGroup heading="Other">
+              <CommandItem
+                value="custom feat manual homebrew"
+                onSelect={() => {
+                  onPick(null);
+                  setOpen(false);
+                }}
+                data-testid="option-feat-custom"
+              >
+                <CheckIcon
+                  className={cn(
+                    "mr-2 h-4 w-4",
+                    featId === undefined ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                Custom feat (manual)
+              </CommandItem>
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }

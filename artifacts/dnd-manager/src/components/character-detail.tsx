@@ -30,6 +30,7 @@ import {
   type LevelUpSuggestion,
   type SpellSlotMap,
 } from "@/lib/dnd-options";
+import { getFeat } from "@/lib/dnd-feats";
 import { PortraitCropperDialog } from "@/components/portrait-cropper-dialog";
 
 interface DetailsDraft {
@@ -825,6 +826,49 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
               </div>
             </TooltipProvider>
           </div>
+
+          {sheet.feats && sheet.feats.length > 0 && (
+            <div
+              className="rounded-2xl glass-panel p-5 md:col-span-2 lg:col-span-3"
+              data-testid="card-feats"
+            >
+              <h3 className="font-semibold text-sm text-foreground mb-3">Feats</h3>
+              <ul className="space-y-2">
+                {sheet.feats.map((id: string) => {
+                  const feat = getFeat(id);
+                  // Custom feats picked before this list existed (or homebrew)
+                  // come through as raw ids. Show them as-is so nothing
+                  // disappears off the sheet.
+                  if (!feat) {
+                    return (
+                      <li
+                        key={id}
+                        className="rounded-lg bg-[rgba(255,255,255,0.04)] p-3 text-sm text-foreground"
+                        data-testid={`feat-card-${id}`}
+                      >
+                        {id}
+                      </li>
+                    );
+                  }
+                  return (
+                    <li
+                      key={feat.id}
+                      className="rounded-lg bg-[rgba(255,255,255,0.04)] p-3"
+                      data-testid={`feat-card-${feat.id}`}
+                    >
+                      <p className="text-sm font-semibold text-foreground">{feat.name}</p>
+                      {feat.prerequisite && (
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-0.5">
+                          Prerequisite: {feat.prerequisite}
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">{feat.summary}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
 
           {sheet.inventory && sheet.inventory.length > 0 && (
             <div className="rounded-2xl glass-panel p-5 md:col-span-2 lg:col-span-3">

@@ -443,6 +443,7 @@ export const ListCharactersResponseItem = zod.object({
       )
       .optional(),
     inventory: zod.array(zod.string()).optional(),
+    feats: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
     background: zod
       .string()
@@ -538,6 +539,7 @@ export const CreateCharacterBody = zod.object({
         )
         .optional(),
       inventory: zod.array(zod.string()).optional(),
+      feats: zod.array(zod.string()).optional(),
       notes: zod.string().optional(),
       background: zod
         .string()
@@ -637,6 +639,7 @@ export const GetCharacterResponse = zod.object({
       )
       .optional(),
     inventory: zod.array(zod.string()).optional(),
+    feats: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
     background: zod
       .string()
@@ -733,6 +736,7 @@ export const UpdateCharacterBody = zod.object({
         )
         .optional(),
       inventory: zod.array(zod.string()).optional(),
+      feats: zod.array(zod.string()).optional(),
       notes: zod.string().optional(),
       background: zod
         .string()
@@ -825,6 +829,7 @@ export const UpdateCharacterResponse = zod.object({
       )
       .optional(),
     inventory: zod.array(zod.string()).optional(),
+    feats: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
     background: zod
       .string()
