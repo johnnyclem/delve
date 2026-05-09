@@ -369,6 +369,8 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   const [form, setForm] = useState<FormState>(defaultForm);
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null);
   const [rollAnimationKey, setRollAnimationKey] = useState(0);
+  const [hasTappedChip, setHasTappedChip] = useState(false);
+  const [hasAssignedOnce, setHasAssignedOnce] = useState(false);
   const [optionalOpen, setOptionalOpen] = useState(false);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const createMutation = useCreateCharacter();
@@ -564,6 +566,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     order.forEach((ability, i) => { next[ability] = sortedChipIds[i] ?? null; });
     update("abilityAssignments", next);
     setSelectedChipId(null);
+    setHasAssignedOnce(true);
   };
 
   const handleClearAssignments = () => {
@@ -573,6 +576,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
 
   const handleChipClick = (chipId: string) => {
     if (assignedChipIds.has(chipId)) return;
+    setHasTappedChip(true);
     setSelectedChipId((prev) => (prev === chipId ? null : chipId));
   };
 
@@ -591,6 +595,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       abilityAssignments: { ...prev.abilityAssignments, [ability]: selectedChipId },
     }));
     setSelectedChipId(null);
+    setHasAssignedOnce(true);
   };
 
   // Merged skill list = the player's class picks + background's free profs (deduped).
@@ -989,6 +994,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                   <AnimatePresence mode="popLayout">
                     {unassignedChips.map((chip, i) => {
                       const isSelected = selectedChipId === chip.id;
+                      const showNudge = !hasTappedChip && !hasAssignedOnce && i === 0 && selectedChipId === null;
                       return (
                         <motion.button
                           key={chip.id}
@@ -999,7 +1005,10 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                           dragSnapToOrigin
                           dragMomentum={false}
                           whileDrag={{ scale: 1.1, zIndex: 50 }}
-                          onDragStart={() => setSelectedChipId(chip.id)}
+                          onDragStart={() => {
+                            setHasTappedChip(true);
+                            setSelectedChipId(chip.id);
+                          }}
                           onDragEnd={(_, info) => {
                             const els = document.elementsFromPoint(info.point.x, info.point.y);
                             const slot = els.find((el) => (el as HTMLElement).dataset?.abilitySlot) as HTMLElement | undefined;
@@ -1010,19 +1019,40 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                                 abilityAssignments: { ...prev.abilityAssignments, [ability]: chip.id },
                               }));
                               setSelectedChipId(null);
+                              setHasAssignedOnce(true);
                             }
                           }}
                           initial={{ opacity: 0, scale: 0.5, y: -10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          animate={
+                            isSelected
+                              ? { opacity: 1, scale: 1.08, y: 0 }
+                              : showNudge
+                                ? { opacity: 1, scale: [1, 1.08, 1], y: [0, -2, 0] }
+                                : { opacity: 1, scale: 1, y: 0 }
+                          }
                           exit={{ opacity: 0, scale: 0.5 }}
-                          transition={{ type: "spring", stiffness: 320, damping: 22, delay: i * 0.06 }}
+                          transition={
+                            showNudge
+                              ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
+                              : { type: "spring", stiffness: 320, damping: 22, delay: i * 0.06 }
+                          }
                           className={`group relative flex flex-col items-center justify-center rounded-lg border-2 px-3 py-2 min-w-[64px] transition-colors cursor-grab active:cursor-grabbing touch-none ${
                             isSelected
-                              ? "border-primary bg-primary/15 ring-2 ring-primary/40"
-                              : "border-border/60 bg-card hover:border-primary/60 hover:bg-primary/5"
+                              ? "border-primary bg-primary/20 ring-4 ring-primary/40 shadow-lg shadow-primary/20"
+                              : showNudge
+                                ? "border-primary/70 bg-primary/5 ring-2 ring-primary/30"
+                                : "border-border/60 bg-card hover:border-primary/60 hover:bg-primary/5"
                           }`}
                           data-testid={`chip-score-${chip.total}-${i}`}
                         >
+                          {showNudge && (
+                            <span
+                              className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground shadow-md"
+                              data-testid="chip-nudge"
+                            >
+                              Tap me first
+                            </span>
+                          )}
                           <span className="font-mono text-2xl font-bold text-foreground tabular-nums">{chip.total}</span>
                           {chip.roll && (
                             <span className="text-[10px] text-muted-foreground/80 font-mono mt-0.5 leading-none">
@@ -1054,6 +1084,30 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
               </div>
             )}
 
+            <AnimatePresence>
+              {form.hasRolled && !hasAssignedOnce && (
+                <motion.div
+                  key="two-step-hint"
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-foreground"
+                  data-testid="two-step-hint"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 font-mono text-[10px] font-bold text-primary">1</span>
+                    Tap a rolled score
+                  </span>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-primary/20 font-mono text-[10px] font-bold text-primary">2</span>
+                    Tap an ability slot
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {ABILITY_NAMES.map((stat) => {
                 const finalScore = abilityScores[stat];
@@ -1075,7 +1129,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                         ? "border-primary/60 bg-primary/10 hover:bg-primary/15 hover:border-primary cursor-pointer"
                         : canDrop
                           ? "border-primary/50 border-dashed bg-primary/5 hover:bg-primary/10 cursor-pointer animate-pulse"
-                          : "border-border/40 border-dashed bg-muted/20"
+                          : "border-border/30 bg-muted/10"
                     } ${!form.hasRolled ? "opacity-60" : ""}`}
                     data-testid={`slot-${stat}`}
                     data-ability-slot={stat}
@@ -1091,12 +1145,18 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                     )}
                     <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{ABILITY_LABELS[stat]}</p>
                     <p className="font-mono text-3xl font-bold text-foreground tabular-nums">{finalScore ?? "—"}</p>
-                    <p className="text-xs text-muted-foreground h-4">
+                    <p className={`text-xs h-4 ${canDrop ? "text-primary font-medium" : "text-muted-foreground"}`}>
                       {mod !== null
                         ? bonus > 0 && baseTotal !== null
                           ? `${baseTotal}+${bonus} • mod ${mod >= 0 ? "+" : ""}${mod}`
                           : `Modifier: ${mod >= 0 ? "+" : ""}${mod}`
-                        : isAssigned ? "" : "tap to assign"}
+                        : isAssigned
+                          ? ""
+                          : canDrop
+                            ? "tap to assign"
+                            : form.hasRolled
+                              ? "pick a score above"
+                              : ""}
                     </p>
                   </button>
                 );
