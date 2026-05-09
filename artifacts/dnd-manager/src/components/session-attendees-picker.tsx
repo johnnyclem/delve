@@ -10,7 +10,14 @@ import {
   useDroppable,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { Users, UserPlus, X, Star, Plus } from "lucide-react";
+import {
+  SortableContext,
+  horizontalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Users, UserPlus, X, Star, Plus, GripVertical } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -135,15 +142,65 @@ export function SessionAttendeesPicker({
     );
   };
 
+  // Stable IDs for the selected chips so dnd-kit/sortable can track them
+  // across reorders. PCs use pc-<id>; NPCs use npc-<npcId> for roster NPCs
+  // and nq-<index>-<name> for quick-tag NPCs (which have no stable id yet).
+  type SelectedRow =
+    | { sortId: string; kind: "pc"; id: number }
+    | { sortId: string; kind: "npc"; index: number };
+  const selectedRows: SelectedRow[] = [
+    ...attendees.characterIds.map((id) => ({ sortId: `pc-${id}`, kind: "pc" as const, id })),
+    ...attendees.npcs.map((n, index) => ({
+      sortId: n.npcId !== undefined ? `npc-${n.npcId}` : `nq-${index}-${n.name}`,
+      kind: "npc" as const,
+      index,
+    })),
+  ];
+  const sortIds = selectedRows.map((r) => r.sortId);
+
+  const reorderSelected = (fromSortId: string, toSortId: string) => {
+    const fromIdx = selectedRows.findIndex((r) => r.sortId === fromSortId);
+    const toIdx = selectedRows.findIndex((r) => r.sortId === toSortId);
+    if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+    const reorderedRows = arrayMove(selectedRows, fromIdx, toIdx);
+    applyUpdate((prev) => {
+      const newCharacterIds: number[] = [];
+      const newNpcs: SessionAttendees["npcs"] = [];
+      for (const row of reorderedRows) {
+        if (row.kind === "pc") {
+          newCharacterIds.push(row.id);
+        } else {
+          const original = prev.npcs[row.index];
+          if (original) newNpcs.push(original);
+        }
+      }
+      return { characterIds: newCharacterIds, npcs: newNpcs };
+    });
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
-    if (event.over?.id !== "attendees-dropzone") return;
-    const data = event.active.data.current as { kind: "pc" | "npc"; id: number } | undefined;
+    const activeId = String(event.active.id);
+    const overId = event.over ? String(event.over.id) : null;
+    const data = event.active.data.current as
+      | { kind: "pc" | "npc"; id: number; source: "roster" | "selected" }
+      | undefined;
     if (!data) return;
-    if (data.kind === "pc") {
-      addCharacter(data.id);
-    } else {
-      const npc = allNpcs.find((n) => n.id === data.id);
-      if (npc) addRosterNpc(npc);
+    if (data.source === "roster") {
+      // Add into the dropzone (or onto any selected chip, which lives inside
+      // the dropzone — both count as a drop into the zone).
+      if (overId === "attendees-dropzone" || sortIds.includes(overId ?? "")) {
+        if (data.kind === "pc") {
+          addCharacter(data.id);
+        } else {
+          const npc = allNpcs.find((n) => n.id === data.id);
+          if (npc) addRosterNpc(npc);
+        }
+      }
+      return;
+    }
+    // source === "selected" → reorder within the dropzone
+    if (overId && overId !== activeId && sortIds.includes(overId)) {
+      reorderSelected(activeId, overId);
     }
   };
 
@@ -211,37 +268,44 @@ export function SessionAttendeesPicker({
                 Drag from the roster, or quick-add an NPC below.
               </p>
             ) : (
-              <div className="flex flex-wrap gap-1.5 mb-2">
-                {attendees.characterIds.map((id) => {
-                  const c = characters.find((x) => x.id === id);
-                  return (
-                    <SelectedChip
-                      key={`sel-pc-${id}`}
-                      label={c?.name ?? `Character #${id}`}
-                      accent="primary"
-                      onRemove={() => !disabled && removeCharacter(id)}
-                      disabled={disabled}
-                      testId={`selected-pc-${id}`}
-                    />
-                  );
-                })}
-                {attendees.npcs.map((n, i) => (
-                  <SelectedChip
-                    key={`sel-npc-${i}-${n.npcId ?? n.name}`}
-                    label={n.name}
-                    accent={n.npcId === undefined ? "amber" : "muted"}
-                    onRemove={() => !disabled && removeNpcAt(i)}
-                    onSaveToRoster={
-                      n.npcId === undefined && !disabled
-                        ? () => handleSaveToRoster(i)
-                        : undefined
+              <SortableContext items={sortIds} strategy={horizontalListSortingStrategy}>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {selectedRows.map((row) => {
+                    if (row.kind === "pc") {
+                      const c = characters.find((x) => x.id === row.id);
+                      return (
+                        <SortableSelectedChip
+                          key={row.sortId}
+                          sortId={row.sortId}
+                          label={c?.name ?? `Character #${row.id}`}
+                          accent="primary"
+                          onRemove={() => !disabled && removeCharacter(row.id)}
+                          disabled={disabled}
+                          testId={`selected-pc-${row.id}`}
+                        />
+                      );
                     }
-                    saving={createNpc.isPending}
-                    disabled={disabled}
-                    testId={`selected-npc-${i}`}
-                  />
-                ))}
-              </div>
+                    const n = attendees.npcs[row.index];
+                    return (
+                      <SortableSelectedChip
+                        key={row.sortId}
+                        sortId={row.sortId}
+                        label={n.name}
+                        accent={n.npcId === undefined ? "amber" : "muted"}
+                        onRemove={() => !disabled && removeNpcAt(row.index)}
+                        onSaveToRoster={
+                          n.npcId === undefined && !disabled
+                            ? () => handleSaveToRoster(row.index)
+                            : undefined
+                        }
+                        saving={createNpc.isPending}
+                        disabled={disabled}
+                        testId={`selected-npc-${row.index}`}
+                      />
+                    );
+                  })}
+                </div>
+              </SortableContext>
             )}
             {!disabled && (
               <div className="flex items-center gap-1.5 mt-2">
@@ -315,7 +379,7 @@ function RosterChip({
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id,
-    data: dragData,
+    data: { ...dragData, source: "roster" as const },
     disabled,
   });
   const accentCls =
@@ -341,7 +405,8 @@ function RosterChip({
   );
 }
 
-function SelectedChip({
+function SortableSelectedChip({
+  sortId,
   label,
   accent,
   onRemove,
@@ -350,6 +415,7 @@ function SelectedChip({
   disabled,
   testId,
 }: {
+  sortId: string;
   label: string;
   accent: "primary" | "muted" | "amber";
   onRemove: () => void;
@@ -358,6 +424,16 @@ function SelectedChip({
   disabled: boolean;
   testId: string;
 }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sortId,
+    data: { source: "selected" as const },
+    disabled,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
   const accentCls =
     accent === "primary"
       ? "border-primary/40 bg-primary/15 text-primary-foreground"
@@ -366,10 +442,23 @@ function SelectedChip({
         : "border-white/10 bg-white/5 text-foreground";
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full border pl-2.5 pr-1 py-1 text-xs ${accentCls}`}
+      ref={setNodeRef}
+      style={style}
+      className={`inline-flex items-center gap-1 rounded-full border pl-1 pr-1 py-1 text-xs ${accentCls}`}
       data-testid={testId}
     >
-      <span className="font-medium">{label}</span>
+      <button
+        type="button"
+        className={`rounded-full p-0.5 ${disabled ? "opacity-40 cursor-not-allowed" : "cursor-grab active:cursor-grabbing hover:bg-white/10"} transition-colors`}
+        aria-label={`Reorder ${label}`}
+        title="Drag to reorder"
+        data-testid={`${testId}-drag-handle`}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-3 w-3" />
+      </button>
+      <span className="font-medium pr-1">{label}</span>
       {onSaveToRoster && (
         <button
           type="button"
@@ -401,45 +490,81 @@ function SelectedChip({
  * Read-only "Who was there" strip for the session detail view. Resolves
  * character names live so renames flow through; NPC names are taken from the
  * stored attendees blob (so deleting an NPC from the roster leaves the
- * historical name intact).
+ * historical name intact). When `onSaveNpcToRoster` is provided (DM only),
+ * unsaved quick-tag NPCs show a ★ button to promote them to the roster.
  */
-export function SessionAttendeesStrip({ attendees }: { attendees: SessionAttendees | null | undefined }) {
+export function SessionAttendeesStrip({
+  attendees,
+  isDm = false,
+  onSaveNpcToRoster,
+  savingNpcIndex,
+}: {
+  attendees: SessionAttendees | null | undefined;
+  isDm?: boolean;
+  onSaveNpcToRoster?: (index: number) => void;
+  savingNpcIndex?: number | null;
+}) {
   const { data: charactersData } = useListCharacters();
   const characters = (charactersData ?? []) as Character[];
-  if (!attendees) return null;
-  const total = attendees.characterIds.length + attendees.npcs.length;
-  if (total === 0) return null;
+  const total = (attendees?.characterIds.length ?? 0) + (attendees?.npcs.length ?? 0);
+
   return (
     <div className="rounded-xl glass-panel p-3" data-testid="session-attendees-strip">
       <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
         <Users className="h-3.5 w-3.5" />
         Who was there
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {attendees.characterIds.map((id) => {
-          const c = characters.find((x) => x.id === id);
-          return (
-            <span
-              key={`strip-pc-${id}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/15 px-2.5 py-1 text-xs text-primary-foreground"
-              data-testid={`strip-pc-${id}`}
-            >
-              <span className="font-medium">{c?.name ?? `Character #${id}`}</span>
-              <span className="text-[10px] uppercase opacity-60">PC</span>
-            </span>
-          );
-        })}
-        {attendees.npcs.map((n, i) => (
-          <span
-            key={`strip-npc-${i}-${n.npcId ?? n.name}`}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-foreground"
-            data-testid={`strip-npc-${i}`}
-          >
-            <span className="font-medium">{n.name}</span>
-            <span className="text-[10px] uppercase opacity-60">NPC</span>
-          </span>
-        ))}
-      </div>
+      {total === 0 ? (
+        <p className="text-xs text-muted-foreground" data-testid="strip-empty">
+          {isDm ? "No one tagged yet — use Add attendees to record who showed up." : "The DM hasn't tagged attendees for this session yet."}
+        </p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {attendees!.characterIds.map((id) => {
+            const c = characters.find((x) => x.id === id);
+            return (
+              <span
+                key={`strip-pc-${id}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/15 px-2.5 py-1 text-xs text-primary-foreground"
+                data-testid={`strip-pc-${id}`}
+              >
+                <span className="font-medium">{c?.name ?? `Character #${id}`}</span>
+                <span className="text-[10px] uppercase opacity-60">PC</span>
+              </span>
+            );
+          })}
+          {attendees!.npcs.map((n, i) => {
+            const isUnsaved = n.npcId === undefined;
+            const showSave = isDm && isUnsaved && onSaveNpcToRoster;
+            const accentCls = isUnsaved
+              ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
+              : "border-white/10 bg-white/5 text-foreground";
+            return (
+              <span
+                key={`strip-npc-${i}-${n.npcId ?? n.name}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${accentCls}`}
+                data-testid={`strip-npc-${i}`}
+              >
+                <span className="font-medium">{n.name}</span>
+                <span className="text-[10px] uppercase opacity-60">NPC</span>
+                {showSave && (
+                  <button
+                    type="button"
+                    onClick={() => onSaveNpcToRoster!(i)}
+                    disabled={savingNpcIndex === i}
+                    className="rounded-full p-0.5 -mr-0.5 hover:bg-amber-400/20 transition-colors disabled:opacity-50"
+                    aria-label={`Save ${n.name} to roster`}
+                    title="Save to roster"
+                    data-testid={`strip-npc-${i}-save`}
+                  >
+                    <Star className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

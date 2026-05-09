@@ -5,7 +5,7 @@ import { campaignsTable } from "./campaigns";
 
 export const npcsTable = pgTable("npcs", {
   id: serial("id").primaryKey(),
-  campaignId: integer("campaign_id").notNull().references(() => campaignsTable.id),
+  campaignId: integer("campaign_id").notNull().references(() => campaignsTable.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   shortNote: text("short_note"),
   avatarUrl: text("avatar_url"),

@@ -7,16 +7,10 @@ import { CreateNpcBody } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 
-// DM-only: the NPC roster can hold spoiler-y names (recurring villains, twist
-// reveals, etc.). Players see NPCs only after the DM tags them into a session,
-// via the embedded names in the session_logs.attendees blob.
-router.get("/npcs", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// Read-open to all campaign members so players can see who's been tagged,
+// but writes (POST/DELETE) stay DM-only.
+router.get("/npcs", requireAuth, requireCampaignMember, async (_req, res): Promise<void> => {
   const campaignId = await getOrCreateCampaign();
-  if (!(await isDm(campaignId, userId))) {
-    res.status(403).json({ error: "Only the DM can view the NPC roster" });
-    return;
-  }
   const npcs = await db
     .select()
     .from(npcsTable)

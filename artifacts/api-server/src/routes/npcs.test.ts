@@ -8,6 +8,8 @@ const TEST_CAMPAIGN_ID = 1;
 
 type Result = unknown;
 const selectQueue: Result[] = [];
+const insertQueue: Result[] = [];
+const deleteQueue: Result[] = [];
 
 function chainable(resultPromise: () => Promise<Result>) {
   const obj: Record<string, unknown> = {};
@@ -28,8 +30,14 @@ const mockDb = {
     const next = selectQueue.shift();
     return chainable(() => Promise.resolve(next ?? []));
   },
-  insert: () => chainable(() => Promise.resolve([])),
-  delete: () => chainable(() => Promise.resolve([])),
+  insert: () => {
+    const next = insertQueue.shift();
+    return chainable(() => Promise.resolve(next ?? []));
+  },
+  delete: () => {
+    const next = deleteQueue.shift();
+    return chainable(() => Promise.resolve(next ?? []));
+  },
 };
 
 vi.mock("@workspace/db", () => ({
@@ -79,12 +87,23 @@ function buildApp(): Express {
 
 beforeEach(() => {
   selectQueue.length = 0;
+  insertQueue.length = 0;
+  deleteQueue.length = 0;
 });
 
-describe("GET /npcs role gate", () => {
+function primeMemberOnly(member: typeof dmMember | typeof playerMember) {
+  if (!campaignCachePrimed) {
+    selectQueue.push([campaignRow]);
+    campaignCachePrimed = true;
+  }
+  // requireCampaignMember only — GET path doesn't call isDm
+  selectQueue.push([member]);
+}
+
+describe("GET /npcs", () => {
   it("returns the roster for the DM", async () => {
     currentUserId = TEST_DM_ID;
-    primeAuth(dmMember);
+    primeMemberOnly(dmMember);
     selectQueue.push([
       { id: 10, campaignId: TEST_CAMPAIGN_ID, name: "Brogg", shortNote: null, avatarUrl: null, createdByUserId: TEST_DM_ID, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     ]);
@@ -95,21 +114,98 @@ describe("GET /npcs role gate", () => {
     expect(res.body[0].name).toBe("Brogg");
   });
 
-  it("rejects players with 403 — the roster can hold spoilers", async () => {
+  it("returns the roster for players too — read is campaign-member open", async () => {
     currentUserId = TEST_PLAYER_ID;
-    primeAuth(playerMember);
+    primeMemberOnly(playerMember);
+    selectQueue.push([
+      { id: 11, campaignId: TEST_CAMPAIGN_ID, name: "Innkeeper", shortNote: null, avatarUrl: null, createdByUserId: TEST_DM_ID, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    ]);
 
     const res = await request(buildApp()).get("/npcs");
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(res.body[0].name).toBe("Innkeeper");
   });
 });
 
-describe("POST /npcs role gate", () => {
+describe("POST /npcs", () => {
+  it("creates an NPC for the DM and returns the persisted row", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+    const created = {
+      id: 42,
+      campaignId: TEST_CAMPAIGN_ID,
+      name: "Brogg",
+      shortNote: null,
+      avatarUrl: null,
+      createdByUserId: TEST_DM_ID,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    insertQueue.push([created]);
+
+    const res = await request(buildApp()).post("/npcs").send({ name: "  Brogg  " });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      id: 42,
+      name: "Brogg",
+      campaignId: TEST_CAMPAIGN_ID,
+      createdByUserId: TEST_DM_ID,
+    });
+  });
+
   it("rejects players with 403", async () => {
     currentUserId = TEST_PLAYER_ID;
     primeAuth(playerMember);
 
     const res = await request(buildApp()).post("/npcs").send({ name: "Sneaky" });
     expect(res.status).toBe(403);
+    // Insert should never have been attempted.
+    expect(insertQueue).toHaveLength(0);
+  });
+
+  it("rejects empty name with 400", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+
+    const res = await request(buildApp()).post("/npcs").send({ name: "   " });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("DELETE /npcs/:id", () => {
+  it("deletes an NPC for the DM and returns success", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+    deleteQueue.push([{ id: 5 }]);
+
+    const res = await request(buildApp()).delete("/npcs/5");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true });
+  });
+
+  it("returns 404 when the NPC doesn't belong to this campaign", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+    deleteQueue.push([]);
+
+    const res = await request(buildApp()).delete("/npcs/9999");
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects players with 403", async () => {
+    currentUserId = TEST_PLAYER_ID;
+    primeAuth(playerMember);
+
+    const res = await request(buildApp()).delete("/npcs/5");
+    expect(res.status).toBe(403);
+    expect(deleteQueue).toHaveLength(0);
+  });
+
+  it("rejects invalid id with 400", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+
+    const res = await request(buildApp()).delete("/npcs/not-a-number");
+    expect(res.status).toBe(400);
   });
 });

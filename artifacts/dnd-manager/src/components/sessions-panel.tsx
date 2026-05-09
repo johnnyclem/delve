@@ -9,8 +9,9 @@ import {
   useMarkRecapViewed, useNotifyRecap,
   useListSessionNotifications,
   useResendNotification, useResendFailedNotifications,
+  useCreateNpc,
   getListSessionsQueryKey, getGetSessionQueryKey, getGetDashboardQueryKey,
-  getListSessionNotificationsQueryKey,
+  getListSessionNotificationsQueryKey, getListNpcsQueryKey,
   updateSession as updateSessionApi,
 } from "@workspace/api-client-react";
 import { useAutosave } from "@/hooks/use-autosave";
@@ -248,6 +249,45 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
 
   const [editingAttendees, setEditingAttendees] = useState(false);
   const [draftAttendees, setDraftAttendees] = useState<SessionAttendees>(emptyAttendees());
+  const [savingNpcStripIdx, setSavingNpcStripIdx] = useState<number | null>(null);
+  const createNpcInline = useCreateNpc();
+
+  const handleStripSaveNpc = (index: number) => {
+    if (!s?.attendees) return;
+    const npc = s.attendees.npcs[index];
+    if (!npc || npc.npcId !== undefined) return;
+    const originalName = npc.name;
+    setSavingNpcStripIdx(index);
+    createNpcInline.mutate(
+      { data: { name: originalName } },
+      {
+        onSuccess: (created) => {
+          queryClient.invalidateQueries({ queryKey: getListNpcsQueryKey() });
+          // Re-find by name in case the session row drifted; do not use index.
+          const nextNpcs = (s.attendees!.npcs).map((n) =>
+            n.npcId === undefined && n.name === originalName ? { name: created.name, npcId: created.id } : n,
+          );
+          updateSession.mutate(
+            { id, data: { attendees: { characterIds: s.attendees!.characterIds, npcs: nextNpcs } } },
+            {
+              onSuccess: () => {
+                queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(id) });
+                toast({ title: `Saved "${created.name}" to roster` });
+              },
+              onError: () => {
+                toast({ title: "Saved NPC, but couldn't link it to this session", variant: "destructive" });
+              },
+              onSettled: () => setSavingNpcStripIdx(null),
+            },
+          );
+        },
+        onError: () => {
+          setSavingNpcStripIdx(null);
+          toast({ title: "Couldn't save NPC to roster", variant: "destructive" });
+        },
+      },
+    );
+  };
 
   const handleSaveAttendees = () => {
     const totalAttendees = draftAttendees.characterIds.length + draftAttendees.npcs.length;
@@ -849,7 +889,12 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
         </div>
       ) : (
         <div className="space-y-2">
-          <SessionAttendeesStrip attendees={s.attendees} />
+          <SessionAttendeesStrip
+            attendees={s.attendees}
+            isDm={isDm}
+            onSaveNpcToRoster={isDm ? handleStripSaveNpc : undefined}
+            savingNpcIndex={savingNpcStripIdx}
+          />
           {isDm && (
             <Button
               variant="ghost"

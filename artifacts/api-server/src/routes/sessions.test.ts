@@ -61,6 +61,8 @@ vi.mock("@workspace/db", () => ({
   },
   campaignsTable: { id: "id" },
   recapViewsTable: { sessionLogId: "sessionLogId", userId: "userId" },
+  charactersTable: { id: "id", campaignId: "campaignId", name: "name" },
+  npcsTable: { id: "id", campaignId: "campaignId" },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -218,5 +220,56 @@ describe("PATCH /sessions/:id conflict detection", () => {
     expect(res.status).toBe(404);
     expect(res.body).toMatchObject({ error: "Session not found" });
     expect(selectQueue).toHaveLength(0);
+  });
+});
+
+describe("PATCH /sessions/:id attendee validation", () => {
+  it("rejects attendees with the wrong shape (400, before any DB lookup)", async () => {
+    primePerRequestAuthSelects();
+
+    const res = await request(buildApp())
+      .patch(`/sessions/${TEST_SESSION_ID}`)
+      .send({ attendees: { characterIds: ["not-a-number"], npcs: [] } });
+
+    expect(res.status).toBe(400);
+    // No update should have been issued.
+    expect(updateQueue).toHaveLength(0);
+  });
+
+  it("rejects unknown character IDs (cross-campaign or deleted) with 400", async () => {
+    primePerRequestAuthSelects();
+    // validateAttendees -> select on charactersTable returns []
+    selectQueue.push([]);
+
+    const res = await request(buildApp())
+      .patch(`/sessions/${TEST_SESSION_ID}`)
+      .send({ attendees: { characterIds: [9999], npcs: [] } });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Unknown character/i);
+  });
+
+  it("rejects unknown NPC IDs with 400", async () => {
+    primePerRequestAuthSelects();
+    // validateAttendees -> select on npcsTable returns []
+    selectQueue.push([]);
+
+    const res = await request(buildApp())
+      .patch(`/sessions/${TEST_SESSION_ID}`)
+      .send({ attendees: { characterIds: [], npcs: [{ name: "Ghost", npcId: 8888 }] } });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/Unknown NPC/i);
+  });
+
+  it("rejects an attending NPC with an empty name", async () => {
+    primePerRequestAuthSelects();
+
+    const res = await request(buildApp())
+      .patch(`/sessions/${TEST_SESSION_ID}`)
+      .send({ attendees: { characterIds: [], npcs: [{ name: "   " }] } });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/non-empty name/i);
   });
 });
