@@ -20,10 +20,12 @@ import type {
   CalendarEvent,
   CalendarEventWithRsvps,
   Campaign,
+  CampaignEntity,
   CampaignMember,
   Character,
   ConflictError,
   CreateCharacterBody,
+  CreateEntityBody,
   CreateEventBody,
   CreateMapBody,
   CreateNpcBody,
@@ -32,11 +34,13 @@ import type {
   DeleteEvent200,
   DeleteEventParams,
   DiceRoll,
+  EntityAuditEntry,
   ErrorResponse,
   EventInviteLog,
   GeneratedRecap,
   GetRuleParams,
   HealthStatus,
+  ListEntitiesParams,
   Map,
   MapSummary,
   NotificationLog,
@@ -56,6 +60,7 @@ import type {
   SuccessResponse,
   UpdateCampaignBody,
   UpdateCharacterBody,
+  UpdateEntityBody,
   UpdateEventBody,
   UpdateMapBody,
   UpdateNotificationPrefsBody,
@@ -3986,6 +3991,697 @@ export function useGetRecentRolls<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetRecentRollsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List campaign wiki entities. Players only see revealed entities and never see secret fields.
+ */
+export const getListEntitiesUrl = (params?: ListEntitiesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/entities?${stringifiedParams}`
+    : `/api/entities`;
+};
+
+export const listEntities = async (
+  params?: ListEntitiesParams,
+  options?: RequestInit,
+): Promise<CampaignEntity[]> => {
+  return customFetch<CampaignEntity[]>(getListEntitiesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListEntitiesQueryKey = (params?: ListEntitiesParams) => {
+  return [`/api/entities`, ...(params ? [params] : [])] as const;
+};
+
+export const getListEntitiesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listEntities>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListEntitiesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntities>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListEntitiesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listEntities>>> = ({
+    signal,
+  }) => listEntities(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listEntities>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListEntitiesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listEntities>>
+>;
+export type ListEntitiesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List campaign wiki entities. Players only see revealed entities and never see secret fields.
+ */
+
+export function useListEntities<
+  TData = Awaited<ReturnType<typeof listEntities>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListEntitiesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listEntities>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListEntitiesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Create a new campaign entity (DM only)
+ */
+export const getCreateEntityUrl = () => {
+  return `/api/entities`;
+};
+
+export const createEntity = async (
+  createEntityBody: CreateEntityBody,
+  options?: RequestInit,
+): Promise<CampaignEntity> => {
+  return customFetch<CampaignEntity>(getCreateEntityUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createEntityBody),
+  });
+};
+
+export const getCreateEntityMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createEntity>>,
+    TError,
+    { data: BodyType<CreateEntityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createEntity>>,
+  TError,
+  { data: BodyType<CreateEntityBody> },
+  TContext
+> => {
+  const mutationKey = ["createEntity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createEntity>>,
+    { data: BodyType<CreateEntityBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createEntity(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateEntityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createEntity>>
+>;
+export type CreateEntityMutationBody = BodyType<CreateEntityBody>;
+export type CreateEntityMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a new campaign entity (DM only)
+ */
+export const useCreateEntity = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createEntity>>,
+    TError,
+    { data: BodyType<CreateEntityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createEntity>>,
+  TError,
+  { data: BodyType<CreateEntityBody> },
+  TContext
+> => {
+  return useMutation(getCreateEntityMutationOptions(options));
+};
+
+/**
+ * @summary Get a single entity. Hidden entities return 404 to non-DMs.
+ */
+export const getGetEntityUrl = (id: number) => {
+  return `/api/entities/${id}`;
+};
+
+export const getEntity = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CampaignEntity> => {
+  return customFetch<CampaignEntity>(getGetEntityUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetEntityQueryKey = (id: number) => {
+  return [`/api/entities/${id}`] as const;
+};
+
+export const getGetEntityQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEntity>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEntity>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEntityQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntity>>> = ({
+    signal,
+  }) => getEntity(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getEntity>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetEntityQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEntity>>
+>;
+export type GetEntityQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Get a single entity. Hidden entities return 404 to non-DMs.
+ */
+
+export function useGetEntity<
+  TData = Awaited<ReturnType<typeof getEntity>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEntity>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEntityQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update an entity (DM only)
+ */
+export const getUpdateEntityUrl = (id: number) => {
+  return `/api/entities/${id}`;
+};
+
+export const updateEntity = async (
+  id: number,
+  updateEntityBody: UpdateEntityBody,
+  options?: RequestInit,
+): Promise<CampaignEntity> => {
+  return customFetch<CampaignEntity>(getUpdateEntityUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateEntityBody),
+  });
+};
+
+export const getUpdateEntityMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateEntity>>,
+    TError,
+    { id: number; data: BodyType<UpdateEntityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateEntity>>,
+  TError,
+  { id: number; data: BodyType<UpdateEntityBody> },
+  TContext
+> => {
+  const mutationKey = ["updateEntity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateEntity>>,
+    { id: number; data: BodyType<UpdateEntityBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateEntity(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateEntityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateEntity>>
+>;
+export type UpdateEntityMutationBody = BodyType<UpdateEntityBody>;
+export type UpdateEntityMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an entity (DM only)
+ */
+export const useUpdateEntity = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateEntity>>,
+    TError,
+    { id: number; data: BodyType<UpdateEntityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateEntity>>,
+  TError,
+  { id: number; data: BodyType<UpdateEntityBody> },
+  TContext
+> => {
+  return useMutation(getUpdateEntityMutationOptions(options));
+};
+
+/**
+ * @summary Delete an entity (DM only)
+ */
+export const getDeleteEntityUrl = (id: number) => {
+  return `/api/entities/${id}`;
+};
+
+export const deleteEntity = async (
+  id: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getDeleteEntityUrl(id), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteEntityMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteEntity>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteEntity>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["deleteEntity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteEntity>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return deleteEntity(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteEntityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteEntity>>
+>;
+
+export type DeleteEntityMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete an entity (DM only)
+ */
+export const useDeleteEntity = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteEntity>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteEntity>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getDeleteEntityMutationOptions(options));
+};
+
+/**
+ * @summary Reveal an entity to players (DM only)
+ */
+export const getRevealEntityUrl = (id: number) => {
+  return `/api/entities/${id}/reveal`;
+};
+
+export const revealEntity = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CampaignEntity> => {
+  return customFetch<CampaignEntity>(getRevealEntityUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRevealEntityMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revealEntity>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revealEntity>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["revealEntity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revealEntity>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return revealEntity(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RevealEntityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revealEntity>>
+>;
+
+export type RevealEntityMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Reveal an entity to players (DM only)
+ */
+export const useRevealEntity = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revealEntity>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof revealEntity>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getRevealEntityMutationOptions(options));
+};
+
+/**
+ * @summary Hide a previously revealed entity (DM only)
+ */
+export const getUnrevealEntityUrl = (id: number) => {
+  return `/api/entities/${id}/unreveal`;
+};
+
+export const unrevealEntity = async (
+  id: number,
+  options?: RequestInit,
+): Promise<CampaignEntity> => {
+  return customFetch<CampaignEntity>(getUnrevealEntityUrl(id), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getUnrevealEntityMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unrevealEntity>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof unrevealEntity>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  const mutationKey = ["unrevealEntity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof unrevealEntity>>,
+    { id: number }
+  > = (props) => {
+    const { id } = props ?? {};
+
+    return unrevealEntity(id, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UnrevealEntityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof unrevealEntity>>
+>;
+
+export type UnrevealEntityMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Hide a previously revealed entity (DM only)
+ */
+export const useUnrevealEntity = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof unrevealEntity>>,
+    TError,
+    { id: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof unrevealEntity>>,
+  TError,
+  { id: number },
+  TContext
+> => {
+  return useMutation(getUnrevealEntityMutationOptions(options));
+};
+
+/**
+ * @summary Audit timeline of reveal/edit actions for an entity (DM only)
+ */
+export const getGetEntityAuditUrl = (id: number) => {
+  return `/api/entities/${id}/audit`;
+};
+
+export const getEntityAudit = async (
+  id: number,
+  options?: RequestInit,
+): Promise<EntityAuditEntry[]> => {
+  return customFetch<EntityAuditEntry[]>(getGetEntityAuditUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetEntityAuditQueryKey = (id: number) => {
+  return [`/api/entities/${id}/audit`] as const;
+};
+
+export const getGetEntityAuditQueryOptions = <
+  TData = Awaited<ReturnType<typeof getEntityAudit>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEntityAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetEntityAuditQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEntityAudit>>> = ({
+    signal,
+  }) => getEntityAudit(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getEntityAudit>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetEntityAuditQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getEntityAudit>>
+>;
+export type GetEntityAuditQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Audit timeline of reveal/edit actions for an entity (DM only)
+ */
+
+export function useGetEntityAudit<
+  TData = Awaited<ReturnType<typeof getEntityAudit>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getEntityAudit>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEntityAuditQueryOptions(id, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

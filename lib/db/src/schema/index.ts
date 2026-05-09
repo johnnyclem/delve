@@ -10,3 +10,4 @@ export * from "./notification_logs";
 export * from "./maps";
 export * from "./npcs";
 export * from "./reference_chunks";
+export * from "./campaign_entities";

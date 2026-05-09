@@ -2045,3 +2045,295 @@ export const GetRecentRollsResponseItem = zod.object({
   rolledAt: zod.coerce.date(),
 });
 export const GetRecentRollsResponse = zod.array(GetRecentRollsResponseItem);
+
+/**
+ * @summary List campaign wiki entities. Players only see revealed entities and never see secret fields.
+ */
+export const ListEntitiesQueryParams = zod.object({
+  kind: zod
+    .enum([
+      "npc",
+      "quest",
+      "location",
+      "story_beat",
+      "mob_encounter",
+      "plot_twist",
+      "faction",
+      "item_unique",
+    ])
+    .optional(),
+});
+
+export const ListEntitiesResponseItem = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  kind: zod.enum([
+    "npc",
+    "quest",
+    "location",
+    "story_beat",
+    "mob_encounter",
+    "plot_twist",
+    "faction",
+    "item_unique",
+  ]),
+  slug: zod.string(),
+  name: zod.string(),
+  publicMd: zod.string().nullable(),
+  data: zod.record(zod.string(), zod.unknown()),
+  revealed: zod.boolean(),
+  revealedAt: zod.coerce.date().nullable(),
+  revealedBy: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  dmNotes: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  secretMd: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  trueMotivation: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+});
+export const ListEntitiesResponse = zod.array(ListEntitiesResponseItem);
+
+/**
+ * @summary Create a new campaign entity (DM only)
+ */
+export const createEntityBodyNameMax = 160;
+
+export const CreateEntityBody = zod.object({
+  kind: zod.enum([
+    "npc",
+    "quest",
+    "location",
+    "story_beat",
+    "mob_encounter",
+    "plot_twist",
+    "faction",
+    "item_unique",
+  ]),
+  name: zod.string().min(1).max(createEntityBodyNameMax),
+  publicMd: zod.string().nullish(),
+  dmNotes: zod.string().nullish(),
+  secretMd: zod.string().nullish(),
+  trueMotivation: zod.string().nullish(),
+  data: zod.record(zod.string(), zod.unknown()).optional(),
+});
+
+/**
+ * @summary Get a single entity. Hidden entities return 404 to non-DMs.
+ */
+export const GetEntityParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetEntityResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  kind: zod.enum([
+    "npc",
+    "quest",
+    "location",
+    "story_beat",
+    "mob_encounter",
+    "plot_twist",
+    "faction",
+    "item_unique",
+  ]),
+  slug: zod.string(),
+  name: zod.string(),
+  publicMd: zod.string().nullable(),
+  data: zod.record(zod.string(), zod.unknown()),
+  revealed: zod.boolean(),
+  revealedAt: zod.coerce.date().nullable(),
+  revealedBy: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  dmNotes: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  secretMd: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  trueMotivation: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+});
+
+/**
+ * @summary Update an entity (DM only)
+ */
+export const UpdateEntityParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateEntityBodyNameMax = 160;
+
+export const UpdateEntityBody = zod
+  .object({
+    name: zod.string().min(1).max(updateEntityBodyNameMax).optional(),
+    publicMd: zod.string().nullish(),
+    dmNotes: zod.string().nullish(),
+    secretMd: zod.string().nullish(),
+    trueMotivation: zod.string().nullish(),
+    data: zod.record(zod.string(), zod.unknown()).optional(),
+  })
+  .describe("Partial update. Send only the fields you want to change.");
+
+export const UpdateEntityResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  kind: zod.enum([
+    "npc",
+    "quest",
+    "location",
+    "story_beat",
+    "mob_encounter",
+    "plot_twist",
+    "faction",
+    "item_unique",
+  ]),
+  slug: zod.string(),
+  name: zod.string(),
+  publicMd: zod.string().nullable(),
+  data: zod.record(zod.string(), zod.unknown()),
+  revealed: zod.boolean(),
+  revealedAt: zod.coerce.date().nullable(),
+  revealedBy: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  dmNotes: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  secretMd: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  trueMotivation: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+});
+
+/**
+ * @summary Delete an entity (DM only)
+ */
+export const DeleteEntityParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const DeleteEntityResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Reveal an entity to players (DM only)
+ */
+export const RevealEntityParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const RevealEntityResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  kind: zod.enum([
+    "npc",
+    "quest",
+    "location",
+    "story_beat",
+    "mob_encounter",
+    "plot_twist",
+    "faction",
+    "item_unique",
+  ]),
+  slug: zod.string(),
+  name: zod.string(),
+  publicMd: zod.string().nullable(),
+  data: zod.record(zod.string(), zod.unknown()),
+  revealed: zod.boolean(),
+  revealedAt: zod.coerce.date().nullable(),
+  revealedBy: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  dmNotes: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  secretMd: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  trueMotivation: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+});
+
+/**
+ * @summary Hide a previously revealed entity (DM only)
+ */
+export const UnrevealEntityParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UnrevealEntityResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  kind: zod.enum([
+    "npc",
+    "quest",
+    "location",
+    "story_beat",
+    "mob_encounter",
+    "plot_twist",
+    "faction",
+    "item_unique",
+  ]),
+  slug: zod.string(),
+  name: zod.string(),
+  publicMd: zod.string().nullable(),
+  data: zod.record(zod.string(), zod.unknown()),
+  revealed: zod.boolean(),
+  revealedAt: zod.coerce.date().nullable(),
+  revealedBy: zod.string().nullable(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+  dmNotes: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  secretMd: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+  trueMotivation: zod
+    .string()
+    .nullish()
+    .describe("DM-only field. Omitted for players."),
+});
+
+/**
+ * @summary Audit timeline of reveal/edit actions for an entity (DM only)
+ */
+export const GetEntityAuditParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetEntityAuditResponseItem = zod.object({
+  id: zod.number(),
+  entityId: zod.number(),
+  campaignId: zod.number(),
+  action: zod.enum(["reveal", "unreveal", "edit_public", "edit_secret"]),
+  actor: zod.string(),
+  at: zod.coerce.date(),
+});
+export const GetEntityAuditResponse = zod.array(GetEntityAuditResponseItem);

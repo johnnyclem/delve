@@ -858,6 +858,115 @@ export interface UpdateMapBody {
   tokens?: MapToken[];
 }
 
+export type EntityKind = (typeof EntityKind)[keyof typeof EntityKind];
+
+export const EntityKind = {
+  npc: "npc",
+  quest: "quest",
+  location: "location",
+  story_beat: "story_beat",
+  mob_encounter: "mob_encounter",
+  plot_twist: "plot_twist",
+  faction: "faction",
+  item_unique: "item_unique",
+} as const;
+
+export type CampaignEntityData = { [key: string]: unknown };
+
+export interface CampaignEntity {
+  id: number;
+  campaignId: number;
+  kind: EntityKind;
+  slug: string;
+  name: string;
+  /** @nullable */
+  publicMd: string | null;
+  data: CampaignEntityData;
+  revealed: boolean;
+  /** @nullable */
+  revealedAt: string | null;
+  /** @nullable */
+  revealedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  /**
+   * DM-only field. Omitted for players.
+   * @nullable
+   */
+  dmNotes?: string | null;
+  /**
+   * DM-only field. Omitted for players.
+   * @nullable
+   */
+  secretMd?: string | null;
+  /**
+   * DM-only field. Omitted for players.
+   * @nullable
+   */
+  trueMotivation?: string | null;
+}
+
+export type CreateEntityBodyData = { [key: string]: unknown };
+
+export interface CreateEntityBody {
+  kind: EntityKind;
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  name: string;
+  /** @nullable */
+  publicMd?: string | null;
+  /** @nullable */
+  dmNotes?: string | null;
+  /** @nullable */
+  secretMd?: string | null;
+  /** @nullable */
+  trueMotivation?: string | null;
+  data?: CreateEntityBodyData;
+}
+
+export type UpdateEntityBodyData = { [key: string]: unknown };
+
+/**
+ * Partial update. Send only the fields you want to change.
+ */
+export interface UpdateEntityBody {
+  /**
+   * @minLength 1
+   * @maxLength 160
+   */
+  name?: string;
+  /** @nullable */
+  publicMd?: string | null;
+  /** @nullable */
+  dmNotes?: string | null;
+  /** @nullable */
+  secretMd?: string | null;
+  /** @nullable */
+  trueMotivation?: string | null;
+  data?: UpdateEntityBodyData;
+}
+
+export type EntityAuditEntryAction =
+  (typeof EntityAuditEntryAction)[keyof typeof EntityAuditEntryAction];
+
+export const EntityAuditEntryAction = {
+  reveal: "reveal",
+  unreveal: "unreveal",
+  edit_public: "edit_public",
+  edit_secret: "edit_secret",
+} as const;
+
+export interface EntityAuditEntry {
+  id: number;
+  entityId: number;
+  campaignId: number;
+  action: EntityAuditEntryAction;
+  actor: string;
+  at: string;
+}
+
 export type SearchRulesParams = {
   /**
    * @minLength 1
@@ -898,4 +1007,8 @@ export type DeleteEventParams = {
 
 export type DeleteEvent200 = {
   deleted: number;
+};
+
+export type ListEntitiesParams = {
+  kind?: EntityKind;
 };

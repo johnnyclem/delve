@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
   Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -19,13 +19,14 @@ import MyCharacterPanel from "@/components/my-character-panel";
 import SessionsPanel from "@/components/sessions-panel";
 import CalendarPanel from "@/components/calendar-panel";
 import RulesLookupPanel from "@/components/rules-lookup";
+import WorldPanel from "@/components/world-panel";
 import { useClerk } from "@clerk/react";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
-type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "dice" | "rules";
+type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules";
 
 interface NavItem {
   id: NavId;
@@ -45,6 +46,7 @@ function buildNavItems(opts: { showMyCharacter: boolean }): NavItem[] {
     { id: "sessions", label: "Sessions", icon: ScrollText },
     { id: "calendar", label: "Schedule", icon: Calendar },
     { id: "maps", label: "Maps", icon: MapIcon },
+    { id: "world", label: "World", icon: Compass },
     { id: "dice", label: "Dice", icon: Dice5 },
     { id: "rules", label: "Rules Lookup", icon: Library },
   );
@@ -350,6 +352,7 @@ export default function DashboardPage() {
           )}
           {activeTab === "dice" && <DiceRollerPanel />}
           {activeTab === "rules" && <RulesLookupPanel />}
+          {activeTab === "world" && <WorldPanel />}
         </main>
       </div>
     </div>

@@ -29,6 +29,8 @@ tags:
     description: Battle maps with server-enforced fog of war
   - name: rules
     description: SRD reference lookup
+  - name: entities
+    description: Campaign wiki entities (NPCs, quests, locations, etc.) with reveal gating
   - name: Storage
     description: Object storage upload and serving endpoints.
 
@@ -1120,6 +1122,180 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/DiceRoll"
+
+  /entities:
+    get:
+      operationId: listEntities
+      tags: [entities]
+      summary: List campaign wiki entities. Players only see revealed entities and never see secret fields.
+      parameters:
+        - name: kind
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EntityKind"
+      responses:
+        "200":
+          description: List of entities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CampaignEntity"
+    post:
+      operationId: createEntity
+      tags: [entities]
+      summary: Create a new campaign entity (DM only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEntityBody"
+      responses:
+        "201":
+          description: Created entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignEntity"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Not authorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /entities/{id}:
+    get:
+      operationId: getEntity
+      tags: [entities]
+      summary: Get a single entity. Hidden entities return 404 to non-DMs.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Entity details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignEntity"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateEntity
+      tags: [entities]
+      summary: Update an entity (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateEntityBody"
+      responses:
+        "200":
+          description: Updated entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignEntity"
+    delete:
+      operationId: deleteEntity
+      tags: [entities]
+      summary: Delete an entity (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /entities/{id}/reveal:
+    post:
+      operationId: revealEntity
+      tags: [entities]
+      summary: Reveal an entity to players (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignEntity"
+
+  /entities/{id}/unreveal:
+    post:
+      operationId: unrevealEntity
+      tags: [entities]
+      summary: Hide a previously revealed entity (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignEntity"
+
+  /entities/{id}/audit:
+    get:
+      operationId: getEntityAudit
+      tags: [entities]
+      summary: Audit timeline of reveal/edit actions for an entity (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit entries (newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EntityAuditEntry"
 
 components:
   schemas:
@@ -2468,6 +2644,139 @@ components:
           maxItems: 50
           items:
             $ref: "#/components/schemas/MapToken"
+
+    EntityKind:
+      type: string
+      enum:
+        - npc
+        - quest
+        - location
+        - story_beat
+        - mob_encounter
+        - plot_twist
+        - faction
+        - item_unique
+
+    CampaignEntity:
+      type: object
+      properties:
+        id:
+          type: integer
+        campaignId:
+          type: integer
+        kind:
+          $ref: "#/components/schemas/EntityKind"
+        slug:
+          type: string
+        name:
+          type: string
+        publicMd:
+          type: ["string", "null"]
+        data:
+          type: object
+          additionalProperties: true
+        revealed:
+          type: boolean
+        revealedAt:
+          type: ["string", "null"]
+          format: date-time
+        revealedBy:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        dmNotes:
+          type: ["string", "null"]
+          description: DM-only field. Omitted for players.
+        secretMd:
+          type: ["string", "null"]
+          description: DM-only field. Omitted for players.
+        trueMotivation:
+          type: ["string", "null"]
+          description: DM-only field. Omitted for players.
+      required:
+        - id
+        - campaignId
+        - kind
+        - slug
+        - name
+        - publicMd
+        - data
+        - revealed
+        - revealedAt
+        - revealedBy
+        - createdAt
+        - updatedAt
+
+    CreateEntityBody:
+      type: object
+      required: [kind, name]
+      properties:
+        kind:
+          $ref: "#/components/schemas/EntityKind"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        publicMd:
+          type: ["string", "null"]
+        dmNotes:
+          type: ["string", "null"]
+        secretMd:
+          type: ["string", "null"]
+        trueMotivation:
+          type: ["string", "null"]
+        data:
+          type: object
+          additionalProperties: true
+
+    UpdateEntityBody:
+      type: object
+      description: Partial update. Send only the fields you want to change.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        publicMd:
+          type: ["string", "null"]
+        dmNotes:
+          type: ["string", "null"]
+        secretMd:
+          type: ["string", "null"]
+        trueMotivation:
+          type: ["string", "null"]
+        data:
+          type: object
+          additionalProperties: true
+
+    EntityAuditEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        entityId:
+          type: integer
+        campaignId:
+          type: integer
+        action:
+          type: string
+          enum: [reveal, unreveal, edit_public, edit_secret]
+        actor:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - entityId
+        - campaignId
+        - action
+        - actor
+        - at
 
     PartyMemberSummary:
       type: object

@@ -13,6 +13,7 @@ import storageRouter from "./storage";
 import mapsRouter from "./maps";
 import npcsRouter from "./npcs";
 import rulesRouter from "./rules";
+import entitiesRouter from "./entities";
 
 const router: IRouter = Router();
 
@@ -30,5 +31,6 @@ router.use(storageRouter);
 router.use(mapsRouter);
 router.use(npcsRouter);
 router.use(rulesRouter);
+router.use(entitiesRouter);
 
 export default router;
