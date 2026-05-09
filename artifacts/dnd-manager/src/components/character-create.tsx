@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Sparkles, Plus, X, Dices, Wand2, RotateCcw } from "lucide-react";
+import { ArrowLeft, ArrowRight, Sparkles, Plus, X, Dices, Wand2, RotateCcw, Lock, ChevronDown, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,16 @@ import {
   isCombatValid,
   isFormValidForSubmit,
 } from "@/lib/character-form-validation";
+import {
+  RACE_DATA,
+  CLASS_DATA,
+  ABILITY_LABEL_TO_NAME,
+  level1MaxHp,
+  modifierFor,
+  type ClassInfo,
+  type RaceInfo,
+  type HitDieSize,
+} from "@/lib/dnd-srd";
 
 const DND_SKILLS = [
   "Acrobatics", "Animal Handling", "Arcana", "Athletics",
@@ -90,6 +100,11 @@ interface FormState {
   scorePool: ScoreChip[]; // unassigned + assigned chips combined
   abilityAssignments: AbilityAssignments; // ability -> chip id
   hasRolled: boolean;
+  // Auto-fill (Phase 2: from race/class SRD data)
+  racialBonuses: Partial<Record<AbilityName, number>>;
+  hitDie: HitDieSize | null;
+  // True until the user manually edits Max HP, then we stop auto-recomputing.
+  maxHpAuto: boolean;
   // Combat
   maxHp: number;
   currentHp: number;
@@ -99,6 +114,8 @@ interface FormState {
   savingThrows: string[];
   // Details
   skills: string[];
+  // Per-slot equipment selection: slot label -> choice index (-1 = skip)
+  equipmentChoices: Record<string, number>;
   inventory: string[];
   newInventoryItem: string;
   notes: string;
@@ -127,6 +144,9 @@ const defaultForm: FormState = {
   scorePool: [],
   abilityAssignments: { ...emptyAssignments },
   hasRolled: false,
+  racialBonuses: {},
+  hitDie: null,
+  maxHpAuto: true,
   maxHp: 10,
   currentHp: 10,
   armorClass: 10,
@@ -134,6 +154,7 @@ const defaultForm: FormState = {
   proficiencyBonus: 2,
   savingThrows: [],
   skills: [],
+  equipmentChoices: {},
   inventory: [],
   newInventoryItem: "",
   notes: "",
@@ -203,6 +224,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   const [form, setForm] = useState<FormState>(defaultForm);
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null);
   const [rollAnimationKey, setRollAnimationKey] = useState(0);
+  const [optionalOpen, setOptionalOpen] = useState(false);
   const createMutation = useCreateCharacter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -231,7 +253,55 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   const resolvedRace = form.race === CUSTOM_OPTION_VALUE ? form.customRace : form.race;
   const resolvedClass = form.charClass === CUSTOM_OPTION_VALUE ? form.customClass : form.charClass;
 
-  // Derive the six numeric ability scores from assignments (for submit).
+  // SRD lookups (null when "Custom" is chosen — auto-fill is skipped).
+  const raceInfo: RaceInfo | null = form.race && form.race !== CUSTOM_OPTION_VALUE ? RACE_DATA[form.race] ?? null : null;
+  const classInfo: ClassInfo | null = form.charClass && form.charClass !== CUSTOM_OPTION_VALUE ? CLASS_DATA[form.charClass] ?? null : null;
+
+  // ---- Auto-fill effects ----
+
+  // Race change: stamp racial ability bonuses + race default speed.
+  // Custom race clears auto-fill but doesn't reset user-entered speed.
+  useEffect(() => {
+    if (raceInfo) {
+      setForm((prev) => ({
+        ...prev,
+        racialBonuses: { ...raceInfo.abilityBonuses },
+        speed: raceInfo.speed,
+      }));
+    } else if (form.race === CUSTOM_OPTION_VALUE || form.race === "") {
+      setForm((prev) =>
+        Object.keys(prev.racialBonuses).length === 0 ? prev : { ...prev, racialBonuses: {} },
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.race]);
+
+  // Class change: pre-check & lock class saves, set hit die, reset class-specific
+  // auto-fills (skills, equipment) so they don't carry across class swaps.
+  useEffect(() => {
+    if (classInfo) {
+      const lockedLabels = classInfo.savingThrows.map(
+        (s) => s.charAt(0).toUpperCase() + s.slice(1),
+      );
+      setForm((prev) => ({
+        ...prev,
+        hitDie: classInfo.hitDie,
+        // Replace existing saves with the class-mandated set (player may add extras).
+        savingThrows: Array.from(new Set([...lockedLabels])),
+        // Filter to allowed skills AND trim to the class's count so swapping from
+        // a high-count or custom class doesn't leave over-picks.
+        skills: prev.skills
+          .filter((s) => classInfo.skillChoices.from.includes(s))
+          .slice(0, classInfo.skillChoices.count),
+        equipmentChoices: {},
+      }));
+    } else if (form.charClass === CUSTOM_OPTION_VALUE || form.charClass === "") {
+      setForm((prev) => (prev.hitDie === null ? prev : { ...prev, hitDie: null, equipmentChoices: {} }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.charClass]);
+
+  // Derive the six numeric ability scores from assignments + racial bonuses.
   const abilityScores: Record<AbilityName, number | null> = useMemo(() => {
     const out = { strength: null, dexterity: null, constitution: null,
                   intelligence: null, wisdom: null, charisma: null } as Record<AbilityName, number | null>;
@@ -239,10 +309,27 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       const chipId = form.abilityAssignments[ability];
       if (!chipId) continue;
       const chip = form.scorePool.find((c) => c.id === chipId);
-      out[ability] = chip ? chip.total : null;
+      if (!chip) continue;
+      const bonus = form.racialBonuses[ability] ?? 0;
+      out[ability] = chip.total + bonus;
     }
     return out;
-  }, [form.abilityAssignments, form.scorePool]);
+  }, [form.abilityAssignments, form.scorePool, form.racialBonuses]);
+
+  // Auto-recompute level-1 max HP when class hit die or final CON changes —
+  // but only while `maxHpAuto` is still true (user hasn't manually edited HP).
+  const conScoreFinal = abilityScores.constitution;
+  useEffect(() => {
+    if (form.hitDie === null || conScoreFinal === null) return;
+    const auto = level1MaxHp(form.hitDie, conScoreFinal);
+    setForm((prev) => {
+      if (!prev.maxHpAuto) return prev;
+      if (prev.maxHp === auto) return prev;
+      // Preserve currentHp at 0 (unconscious) and only clamp the upper bound.
+      const newCurrent = Math.min(prev.currentHp, auto);
+      return { ...prev, maxHp: auto, currentHp: newCurrent };
+    });
+  }, [form.hitDie, conScoreFinal]);
 
   const assignedChipIds = new Set(
     Object.values(form.abilityAssignments).filter((v): v is string => v !== null),
@@ -367,6 +454,16 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   // ---- Submit ----
   const handleSubmit = () => {
     if (!formIsValid) return;
+    // Combine class-equipment items + manually-added items.
+    const equipmentItems: string[] = classInfo
+      ? classInfo.startingEquipmentOptions.flatMap((slot) => {
+          const idx = form.equipmentChoices[slot.slot];
+          if (idx === undefined || idx === -1) return [];
+          return slot.choices[idx]?.items ?? [];
+        })
+      : [];
+    const fullInventory = [...equipmentItems, ...form.inventory];
+
     const sheet: CharacterSheet = {
       strength: abilityScores.strength!,
       dexterity: abilityScores.dexterity!,
@@ -381,7 +478,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       proficiencyBonus: form.proficiencyBonus,
       savingThrows: form.savingThrows,
       skills: form.skills,
-      inventory: form.inventory.length > 0 ? form.inventory : undefined,
+      inventory: fullInventory.length > 0 ? fullInventory : undefined,
       notes: form.notes || undefined,
     };
 
@@ -718,9 +815,13 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
             {/* Ability slots */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {ABILITY_NAMES.map((stat) => {
-                const score = abilityScores[stat];
-                const mod = score !== null ? Math.floor((score - 10) / 2) : null;
-                const isAssigned = score !== null;
+                const finalScore = abilityScores[stat];
+                const bonus = form.racialBonuses[stat] ?? 0;
+                const chipId = form.abilityAssignments[stat];
+                const baseChip = chipId ? form.scorePool.find((c) => c.id === chipId) : null;
+                const baseTotal = baseChip ? baseChip.total : null;
+                const mod = finalScore !== null ? modifierFor(finalScore) : null;
+                const isAssigned = finalScore !== null;
                 const canDrop = !isAssigned && selectedChipId !== null;
                 return (
                   <button
@@ -728,7 +829,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                     type="button"
                     onClick={() => handleSlotClick(stat)}
                     disabled={!form.hasRolled || (!isAssigned && !selectedChipId)}
-                    className={`rounded-lg border-2 p-3 text-center space-y-1 transition-colors ${
+                    className={`relative rounded-lg border-2 p-3 text-center space-y-1 transition-colors ${
                       isAssigned
                         ? "border-primary/60 bg-primary/10 hover:bg-primary/15 hover:border-primary cursor-pointer"
                         : canDrop
@@ -738,14 +839,27 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                     data-testid={`slot-${stat}`}
                     data-ability-slot={stat}
                   >
+                    {bonus > 0 && (
+                      <span
+                        className="absolute -top-1.5 -right-1.5 rounded-full bg-amber-500/90 text-[10px] font-bold text-amber-50 px-1.5 py-0.5 shadow"
+                        data-testid={`bonus-${stat}`}
+                        title={`Racial bonus from ${resolvedRace}`}
+                      >
+                        +{bonus}
+                      </span>
+                    )}
                     <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                       {ABILITY_LABELS[stat]}
                     </p>
                     <p className="font-mono text-3xl font-bold text-foreground tabular-nums">
-                      {score ?? "—"}
+                      {finalScore ?? "—"}
                     </p>
                     <p className="text-xs text-muted-foreground h-4">
-                      {mod !== null ? `Modifier: ${mod >= 0 ? "+" : ""}${mod}` : isAssigned ? "" : "tap to assign"}
+                      {mod !== null
+                        ? bonus > 0 && baseTotal !== null
+                          ? `${baseTotal}+${bonus} • mod ${mod >= 0 ? "+" : ""}${mod}`
+                          : `Modifier: ${mod >= 0 ? "+" : ""}${mod}`
+                        : isAssigned ? "" : "tap to assign"}
                     </p>
                   </button>
                 );
@@ -768,7 +882,13 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                 min={1}
                 fallback={10}
                 onChange={(v) =>
-                  setForm((prev) => ({ ...prev, maxHp: v, currentHp: Math.min(prev.currentHp, v) }))
+                  setForm((prev) => ({
+                    ...prev,
+                    maxHp: v,
+                    // Any manual edit opts out of further auto-recomputation.
+                    maxHpAuto: false,
+                    currentHp: Math.min(prev.currentHp, v),
+                  }))
                 }
                 testId="input-max-hp"
               />
@@ -817,88 +937,240 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
 
             <div className="space-y-3">
               <Label>Saving Throw Proficiencies</Label>
+              {classInfo && (
+                <p className="text-xs text-muted-foreground">
+                  <Lock className="inline h-3 w-3 mr-1 -mt-0.5" />
+                  {classInfo.name}s are always proficient in{" "}
+                  {classInfo.savingThrows
+                    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+                    .join(" & ")} saves.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
-                {SAVING_THROW_OPTIONS.map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => toggleSavingThrow(st)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      form.savingThrows.includes(st)
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                    }`}
-                    data-testid={`toggle-save-${st.toLowerCase()}`}
-                  >
-                    {st}
-                  </button>
-                ))}
+                {SAVING_THROW_OPTIONS.map((st) => {
+                  const ability = ABILITY_LABEL_TO_NAME[st];
+                  const isLocked =
+                    !!classInfo && classInfo.savingThrows.includes(ability);
+                  const isChecked = form.savingThrows.includes(st);
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => { if (!isLocked) toggleSavingThrow(st); }}
+                      disabled={isLocked}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        isChecked
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                      } ${isLocked ? "opacity-90 cursor-not-allowed ring-1 ring-primary/40" : ""}`}
+                      data-testid={`toggle-save-${st.toLowerCase()}`}
+                    >
+                      {isLocked && <Lock className="h-3 w-3" />}
+                      {st}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
         )}
 
         {step === 3 && (
-          <div className="space-y-5" data-testid="step-details">
+          <div className="space-y-6" data-testid="step-details">
+            {(classInfo || raceInfo) && (
+              <p className="text-xs text-muted-foreground italic">
+                Based on the 5e SRD. Your DM may use homebrew rules — you can adjust anything before saving.
+              </p>
+            )}
+
+            {/* Skill picker */}
             <div className="space-y-3">
-              <Label>Skill Proficiencies</Label>
+              <div className="flex items-center justify-between">
+                <Label>Skill Proficiencies</Label>
+                {classInfo && (
+                  <span className="text-xs text-muted-foreground" data-testid="text-skill-counter">
+                    Pick {classInfo.skillChoices.count} — {Math.max(0, classInfo.skillChoices.count - form.skills.length)} left
+                  </span>
+                )}
+              </div>
               <div className="flex flex-wrap gap-2">
-                {DND_SKILLS.map((skill) => (
-                  <button
-                    key={skill}
-                    type="button"
-                    onClick={() => toggleSkill(skill)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      form.skills.includes(skill)
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                    }`}
-                    data-testid={`toggle-skill-${skill.toLowerCase().replace(/ /g, "-")}`}
-                  >
-                    {skill}
-                  </button>
-                ))}
+                {(classInfo ? classInfo.skillChoices.from : DND_SKILLS).map((skill) => {
+                  const checked = form.skills.includes(skill);
+                  const atLimit =
+                    classInfo !== null &&
+                    !checked &&
+                    form.skills.length >= classInfo.skillChoices.count;
+                  return (
+                    <button
+                      key={skill}
+                      type="button"
+                      onClick={() => { if (!atLimit) toggleSkill(skill); }}
+                      disabled={atLimit}
+                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        checked
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                      } ${atLimit ? "opacity-40 cursor-not-allowed" : ""}`}
+                      data-testid={`toggle-skill-${skill.toLowerCase().replace(/ /g, "-")}`}
+                    >
+                      {skill}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <div className="space-y-3">
-              <Label>Inventory</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={form.newInventoryItem}
-                  onChange={(e) => update("newInventoryItem", e.target.value)}
-                  placeholder="Add an item..."
-                  onKeyDown={(e) => e.key === "Enter" && addInventoryItem()}
-                  data-testid="input-inventory-item"
-                />
-                <Button variant="outline" size="sm" onClick={addInventoryItem} data-testid="button-add-inventory">
-                  <Plus className="h-4 w-4" />
-                </Button>
+            {/* Starting equipment picker */}
+            {classInfo && (
+              <div className="space-y-3" data-testid="equipment-picker">
+                <Label>Starting Equipment</Label>
+                <div className="space-y-3">
+                  {classInfo.startingEquipmentOptions.map((slot) => {
+                    const selected = form.equipmentChoices[slot.slot];
+                    return (
+                      <div key={slot.slot} className="rounded-lg border border-border/50 bg-muted/10 p-3 space-y-2">
+                        <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                          {slot.slot}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {slot.choices.map((choice, idx) => {
+                            const isOn = selected === idx;
+                            return (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    equipmentChoices: { ...prev.equipmentChoices, [slot.slot]: idx },
+                                  }))
+                                }
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                  isOn
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted/40 text-foreground hover:bg-muted/70"
+                                }`}
+                                data-testid={`equipment-${slot.slot.toLowerCase().replace(/ /g, "-")}-${idx}`}
+                              >
+                                {choice.label}
+                              </button>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setForm((prev) => ({
+                                ...prev,
+                                equipmentChoices: { ...prev.equipmentChoices, [slot.slot]: -1 },
+                              }))
+                            }
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              selected === -1
+                                ? "bg-muted text-muted-foreground ring-1 ring-border"
+                                : "bg-transparent text-muted-foreground hover:bg-muted/30"
+                            }`}
+                            data-testid={`equipment-${slot.slot.toLowerCase().replace(/ /g, "-")}-skip`}
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-              {form.inventory.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {form.inventory.map((item, i) => (
-                    <span key={i} className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs text-foreground">
-                      {item}
-                      <button onClick={() => removeInventoryItem(i)} className="text-muted-foreground hover:text-foreground">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ))}
+            )}
+
+            {/* Racial Traits + Class Features (read-only flavor cards) */}
+            {(raceInfo || classInfo) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {raceInfo && (
+                  <div className="rounded-lg border border-border/50 bg-card/60 p-3 space-y-2" data-testid="card-racial-traits">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                      {raceInfo.name} Traits
+                    </p>
+                    <ul className="space-y-1.5 text-xs">
+                      {raceInfo.traits.map((t) => (
+                        <li key={t.name}>
+                          <span className="font-medium text-foreground">{t.name}.</span>{" "}
+                          <span className="text-muted-foreground">{t.summary}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {classInfo && (
+                  <div className="rounded-lg border border-border/50 bg-card/60 p-3 space-y-2" data-testid="card-class-features">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                      {classInfo.name} — Level 1 Features
+                    </p>
+                    <ul className="space-y-1.5 text-xs">
+                      {classInfo.level1Features.map((f) => (
+                        <li key={f.name}>
+                          <span className="font-medium text-foreground">{f.name}.</span>{" "}
+                          <span className="text-muted-foreground">{f.summary}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Optional details collapsible */}
+            <div className="rounded-lg border border-border/50">
+              <button
+                type="button"
+                onClick={() => setOptionalOpen((v) => !v)}
+                className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/30 transition-colors rounded-lg"
+                data-testid="button-toggle-optional"
+              >
+                <span className="text-sm font-medium text-foreground">Optional details</span>
+                {optionalOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </button>
+              {optionalOpen && (
+                <div className="p-3 pt-0 space-y-4">
+                  <div className="space-y-2">
+                    <Label>Extra inventory items</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={form.newInventoryItem}
+                        onChange={(e) => update("newInventoryItem", e.target.value)}
+                        placeholder="Add an item..."
+                        onKeyDown={(e) => e.key === "Enter" && addInventoryItem()}
+                        data-testid="input-inventory-item"
+                      />
+                      <Button variant="outline" size="sm" onClick={addInventoryItem} data-testid="button-add-inventory">
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {form.inventory.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {form.inventory.map((item, i) => (
+                          <span key={i} className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs text-foreground">
+                            {item}
+                            <button onClick={() => removeInventoryItem(i)} className="text-muted-foreground hover:text-foreground">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="char-notes">Backstory & notes</Label>
+                    <Textarea
+                      id="char-notes"
+                      value={form.notes}
+                      onChange={(e) => update("notes", e.target.value)}
+                      placeholder="Backstory, personality traits, bonds, flaws..."
+                      rows={4}
+                      data-testid="input-notes"
+                    />
+                  </div>
                 </div>
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="char-notes">Notes</Label>
-              <Textarea
-                id="char-notes"
-                value={form.notes}
-                onChange={(e) => update("notes", e.target.value)}
-                placeholder="Backstory, personality traits, bonds, flaws..."
-                rows={4}
-                data-testid="input-notes"
-              />
             </div>
           </div>
         )}
