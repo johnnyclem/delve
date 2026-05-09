@@ -444,6 +444,12 @@ export const ListCharactersResponseItem = zod.object({
       .optional(),
     inventory: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
+    background: zod
+      .string()
+      .optional()
+      .describe(
+        'Optional 5e SRD background label (e.g. \"Soldier\", \"Acolyte\"). Not required for back-compat with characters created before backgrounds were tracked.',
+      ),
     asiHistory: zod
       .array(
         zod
@@ -533,6 +539,12 @@ export const CreateCharacterBody = zod.object({
         .optional(),
       inventory: zod.array(zod.string()).optional(),
       notes: zod.string().optional(),
+      background: zod
+        .string()
+        .optional()
+        .describe(
+          'Optional 5e SRD background label (e.g. \"Soldier\", \"Acolyte\"). Not required for back-compat with characters created before backgrounds were tracked.',
+        ),
       asiHistory: zod
         .array(
           zod
@@ -626,6 +638,12 @@ export const GetCharacterResponse = zod.object({
       .optional(),
     inventory: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
+    background: zod
+      .string()
+      .optional()
+      .describe(
+        'Optional 5e SRD background label (e.g. \"Soldier\", \"Acolyte\"). Not required for back-compat with characters created before backgrounds were tracked.',
+      ),
     asiHistory: zod
       .array(
         zod
@@ -716,6 +734,12 @@ export const UpdateCharacterBody = zod.object({
         .optional(),
       inventory: zod.array(zod.string()).optional(),
       notes: zod.string().optional(),
+      background: zod
+        .string()
+        .optional()
+        .describe(
+          'Optional 5e SRD background label (e.g. \"Soldier\", \"Acolyte\"). Not required for back-compat with characters created before backgrounds were tracked.',
+        ),
       asiHistory: zod
         .array(
           zod
@@ -802,6 +826,12 @@ export const UpdateCharacterResponse = zod.object({
       .optional(),
     inventory: zod.array(zod.string()).optional(),
     notes: zod.string().optional(),
+    background: zod
+      .string()
+      .optional()
+      .describe(
+        'Optional 5e SRD background label (e.g. \"Soldier\", \"Acolyte\"). Not required for back-compat with characters created before backgrounds were tracked.',
+      ),
     asiHistory: zod
       .array(
         zod

@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Sparkles, Plus, X, Dices, Wand2, RotateCcw, Lock, ChevronDown, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  ArrowLeft, ArrowRight, Sparkles, Plus, X, Dices, Wand2, RotateCcw, Lock,
+  ChevronDown, ChevronRight, Heart, Shield, Zap, Award, Flame,
+  Axe, Music, Cross, Leaf, Sword, Hand, ShieldCheck, Target, VenetianMask, Eye,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,23 +37,29 @@ import {
 import {
   rollAbilityScores,
   STANDARD_ARRAY,
-  abilityRollLabel,
   type AbilityRoll,
 } from "@/lib/dice";
 import {
-  isStep0Valid,
-  isStep1Valid,
-  isCombatValid,
+  isIdentityValid,
+  isOriginValid,
+  isCallingValid,
+  isBackgroundValid,
+  isAbilitiesValid,
+  isAbilityAssignmentsValid,
+  isCombatNumericsValid,
   isFormValidForSubmit,
 } from "@/lib/character-form-validation";
 import {
   RACE_DATA,
   CLASS_DATA,
+  BACKGROUND_DATA,
+  DND_BACKGROUNDS,
   ABILITY_LABEL_TO_NAME,
   level1MaxHp,
   modifierFor,
   type ClassInfo,
   type RaceInfo,
+  type BackgroundInfo,
   type HitDieSize,
 } from "@/lib/dnd-srd";
 
@@ -69,17 +79,51 @@ const ABILITY_LABELS: Record<AbilityName, string> = {
   strength: "STR", dexterity: "DEX", constitution: "CON",
   intelligence: "INT", wisdom: "WIS", charisma: "CHA",
 };
+const ABILITY_FULL: Record<AbilityName, string> = {
+  strength: "Strength", dexterity: "Dexterity", constitution: "Constitution",
+  intelligence: "Intelligence", wisdom: "Wisdom", charisma: "Charisma",
+};
 
 const SAVING_THROW_OPTIONS = ["Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma"];
 
-const STEP_TITLES = ["Basics", "Ability Scores", "Combat", "Details"];
+// 6-step AAA-FTUE wizard. Each step is one focused decision; subtitles set tone.
+const STEP_TITLES = ["Identity", "Origin", "Calling", "Background", "Abilities", "Review"] as const;
+const STEP_SUBTITLES: Record<number, string> = {
+  0: "How shall the bards remember you?",
+  1: "Your race shapes your body and your story.",
+  2: "Your calling decides your role in the party.",
+  3: "Where did your story begin?",
+  4: "Forge your strengths and weaknesses.",
+  5: "Your hero stands ready. Take one last look.",
+};
+
+// Big iconography for the picker grids — emoji for races/backgrounds (most
+// expressive at large sizes), lucide for classes (cleaner alongside our UI).
+const RACE_EMOJI: Record<string, string> = {
+  Dragonborn: "🐲", Dwarf: "⛏️", Elf: "🧝", Gnome: "🎩", "Half-Elf": "🌙",
+  Halfling: "🍀", "Half-Orc": "💪", Human: "🧑", Tiefling: "😈",
+};
+const CLASS_ICON: Record<string, { icon: typeof Sword; tint: string }> = {
+  Barbarian: { icon: Axe, tint: "text-rose-300" },
+  Bard: { icon: Music, tint: "text-pink-300" },
+  Cleric: { icon: Cross, tint: "text-yellow-200" },
+  Druid: { icon: Leaf, tint: "text-emerald-300" },
+  Fighter: { icon: Sword, tint: "text-slate-200" },
+  Monk: { icon: Hand, tint: "text-orange-200" },
+  Paladin: { icon: ShieldCheck, tint: "text-sky-200" },
+  Ranger: { icon: Target, tint: "text-lime-300" },
+  Rogue: { icon: VenetianMask, tint: "text-zinc-300" },
+  Sorcerer: { icon: Flame, tint: "text-fuchsia-300" },
+  Warlock: { icon: Eye, tint: "text-violet-300" },
+  Wizard: { icon: Wand2, tint: "text-indigo-300" },
+};
 
 type ScoreSource = "rolled" | "standard";
 interface ScoreChip {
   id: string;
   source: ScoreSource;
   total: number;
-  roll?: AbilityRoll; // present when source === "rolled"
+  roll?: AbilityRoll;
 }
 
 type AbilityAssignments = Record<AbilityName, string | null>;
@@ -91,31 +135,28 @@ const emptyAssignments: AbilityAssignments = {
 
 interface FormState {
   name: string;
+  portraitUrl: string;
   race: string;
   customRace: string;
   charClass: string;
   customClass: string;
+  background: string;
+  customBackground: string;
   level: number;
-  // Ability score generation
   scoreMode: "rolled" | "standard";
-  scorePool: ScoreChip[]; // unassigned + assigned chips combined
-  abilityAssignments: AbilityAssignments; // ability -> chip id
+  scorePool: ScoreChip[];
+  abilityAssignments: AbilityAssignments;
   hasRolled: boolean;
-  // Auto-fill (Phase 2: from race/class SRD data)
   racialBonuses: Partial<Record<AbilityName, number>>;
   hitDie: HitDieSize | null;
-  // True until the user manually edits Max HP, then we stop auto-recomputing.
   maxHpAuto: boolean;
-  // Combat
   maxHp: number;
   currentHp: number;
   armorClass: number;
   speed: number;
   proficiencyBonus: number;
   savingThrows: string[];
-  // Details
   skills: string[];
-  // Per-slot equipment selection: slot label -> choice index (-1 = skip)
   equipmentChoices: Record<string, number>;
   inventory: string[];
   newInventoryItem: string;
@@ -126,21 +167,22 @@ interface FormState {
 function makeChipId(): string {
   return `chip-${Math.random().toString(36).slice(2, 10)}`;
 }
-
 function buildStandardArrayChips(): ScoreChip[] {
   return STANDARD_ARRAY.map((total) => ({ id: makeChipId(), source: "standard", total }));
 }
-
 function buildRolledChips(rolls: AbilityRoll[]): ScoreChip[] {
   return rolls.map((roll) => ({ id: makeChipId(), source: "rolled", total: roll.total, roll }));
 }
 
 const defaultForm: FormState = {
   name: "",
+  portraitUrl: "",
   race: "",
   customRace: "",
   charClass: "",
   customClass: "",
+  background: "",
+  customBackground: "",
   level: 1,
   scoreMode: "rolled",
   scorePool: [],
@@ -181,15 +223,9 @@ interface NumberFieldProps {
   className?: string;
 }
 
-// Numeric input that snaps NaN/empty back to a safe value on blur, so the
-// wizard never submits sheetJson with NaN — which is the root cause of the
-// "Failed to create character" toast (server requires every numeric field).
 function NumberField({ id, label, value, min, max, step, fallback, onChange, testId, className }: NumberFieldProps) {
   const [text, setText] = useState<string>(String(value));
-  // Keep the visible text in sync when the value changes externally (e.g., auto-fill).
-  useEffect(() => {
-    setText(String(value));
-  }, [value]);
+  useEffect(() => { setText(String(value)); }, [value]);
   return (
     <div className={`space-y-2 ${className ?? ""}`}>
       <Label htmlFor={id}>{label}</Label>
@@ -222,20 +258,126 @@ function NumberField({ id, label, value, min, max, step, fallback, onChange, tes
   );
 }
 
+// Persistent wizard chrome: progress bar, eyebrow ("Step N of 6"), big
+// title, warm subtitle, animated body, sticky footer w/ Back / Next.
+function WizardShell({
+  step, totalSteps, title, subtitle, children, footer,
+}: {
+  step: number;
+  totalSteps: number;
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+  footer: ReactNode;
+}) {
+  const pct = Math.round(((step + 1) / totalSteps) * 100);
+  return (
+    <div className="space-y-6">
+      <div className="space-y-3" data-testid="wizard-header">
+        <div className="h-1.5 w-full rounded-full bg-muted/40 overflow-hidden">
+          <motion.div
+            className="h-full bg-primary"
+            initial={false}
+            animate={{ width: `${pct}%` }}
+            transition={{ type: "spring", stiffness: 220, damping: 28 }}
+            data-testid="wizard-progress"
+          />
+        </div>
+        <p
+          className="text-[11px] uppercase tracking-[0.2em] text-primary/80 font-semibold"
+          data-testid="wizard-step-counter"
+        >
+          Step {step + 1} of {totalSteps} — {STEP_TITLES[step]}
+        </p>
+        <h2
+          className="font-serif text-3xl sm:text-4xl md:text-5xl font-bold text-foreground tracking-tight"
+          data-testid="wizard-title"
+        >
+          {title}
+        </h2>
+        <p className="text-sm sm:text-base text-muted-foreground" data-testid="wizard-subtitle">
+          {subtitle}
+        </p>
+      </div>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.22 }}
+          className="rounded-2xl glass-panel p-5 sm:p-6"
+        >
+          {children}
+        </motion.div>
+      </AnimatePresence>
+      <div className="sticky bottom-2 z-10">
+        <div className="rounded-xl glass-panel p-3 flex justify-between items-center">
+          {footer}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Tappable picker card (used by Origin / Calling / Background grids).
+function PickerCard({
+  selected, onClick, autoFocus, title, subtitle, leading, children, testId,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  autoFocus?: boolean;
+  title: string;
+  subtitle?: string;
+  leading: ReactNode;
+  children?: ReactNode;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      autoFocus={autoFocus}
+      onClick={onClick}
+      data-testid={testId}
+      className={`group relative w-full text-left rounded-2xl border-2 p-4 sm:p-5 transition-all duration-150 min-h-[112px] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${
+        selected
+          ? "border-primary bg-primary/10 shadow-[0_0_24px_-6px_hsl(270_100%_60%/0.55)] scale-[1.01]"
+          : "border-border/50 bg-card/60 hover:border-primary/60 hover:bg-primary/5 active:scale-[0.99]"
+      }`}
+    >
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0">{leading}</div>
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="font-semibold text-base sm:text-lg text-foreground leading-tight">{title}</p>
+          {subtitle && (
+            <p className="text-xs sm:text-sm text-muted-foreground leading-snug">{subtitle}</p>
+          )}
+          {children}
+        </div>
+      </div>
+      {selected && (
+        <span className="absolute top-2 right-2 rounded-full bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 shadow">
+          ✓
+        </span>
+      )}
+    </button>
+  );
+}
+
 export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: () => void }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState<FormState>(defaultForm);
   const [selectedChipId, setSelectedChipId] = useState<string | null>(null);
   const [rollAnimationKey, setRollAnimationKey] = useState(0);
   const [optionalOpen, setOptionalOpen] = useState(false);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
   const createMutation = useCreateCharacter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { data: campaign } = useGetCampaign();
   const homebrewRules = campaign?.homebrewRules ?? null;
 
-  // When the campaign rules first load (or change), seed the form's
-  // proficiency bonus to match the campaign's rule for the current level.
+  // Seed proficiency bonus from the campaign rules on first load.
   useEffect(() => {
     if (!campaign) return;
     const auto = proficiencyBonusForLevel(form.level, homebrewRules);
@@ -255,15 +397,20 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
 
   const resolvedRace = form.race === CUSTOM_OPTION_VALUE ? form.customRace : form.race;
   const resolvedClass = form.charClass === CUSTOM_OPTION_VALUE ? form.customClass : form.charClass;
+  const resolvedBackground = form.background === CUSTOM_OPTION_VALUE
+    ? form.customBackground
+    : form.background;
 
-  // SRD lookups (null when "Custom" is chosen — auto-fill is skipped).
-  const raceInfo: RaceInfo | null = form.race && form.race !== CUSTOM_OPTION_VALUE ? RACE_DATA[form.race] ?? null : null;
-  const classInfo: ClassInfo | null = form.charClass && form.charClass !== CUSTOM_OPTION_VALUE ? CLASS_DATA[form.charClass] ?? null : null;
+  const raceInfo: RaceInfo | null =
+    form.race && form.race !== CUSTOM_OPTION_VALUE ? RACE_DATA[form.race] ?? null : null;
+  const classInfo: ClassInfo | null =
+    form.charClass && form.charClass !== CUSTOM_OPTION_VALUE ? CLASS_DATA[form.charClass] ?? null : null;
+  const backgroundInfo: BackgroundInfo | null =
+    form.background && form.background !== CUSTOM_OPTION_VALUE
+      ? BACKGROUND_DATA[form.background] ?? null
+      : null;
 
-  // ---- Auto-fill effects ----
-
-  // Race change: stamp racial ability bonuses + race default speed.
-  // Custom race clears auto-fill but doesn't reset user-entered speed.
+  // Race change → racial ability bonuses + race default speed.
   useEffect(() => {
     if (raceInfo) {
       setForm((prev) => ({
@@ -279,8 +426,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.race]);
 
-  // Class change: pre-check & lock class saves, set hit die, reset class-specific
-  // auto-fills (skills, equipment) so they don't carry across class swaps.
+  // Class change → lock saves, set hit die, reset class-specific picks.
   useEffect(() => {
     if (classInfo) {
       const lockedLabels = classInfo.savingThrows.map(
@@ -289,28 +435,27 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       setForm((prev) => ({
         ...prev,
         hitDie: classInfo.hitDie,
-        // Re-arm HP auto-derivation so picking a class always applies the
-        // hitDie + CON formula even if the user had tweaked HP earlier.
         maxHpAuto: true,
-        // Replace existing saves with the class-mandated set (player may add extras).
         savingThrows: Array.from(new Set([...lockedLabels])),
-        // Filter to allowed skills AND trim to the class's count so swapping from
-        // a high-count or custom class doesn't leave over-picks.
         skills: prev.skills
           .filter((s) => classInfo.skillChoices.from.includes(s))
           .slice(0, classInfo.skillChoices.count),
         equipmentChoices: {},
       }));
     } else if (form.charClass === CUSTOM_OPTION_VALUE || form.charClass === "") {
-      setForm((prev) => (prev.hitDie === null ? prev : { ...prev, hitDie: null, equipmentChoices: {} }));
+      setForm((prev) =>
+        prev.hitDie === null ? prev : { ...prev, hitDie: null, equipmentChoices: {} },
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.charClass]);
 
-  // Derive the six numeric ability scores from assignments + racial bonuses.
+  // Final ability scores = chip + racial bonus.
   const abilityScores: Record<AbilityName, number | null> = useMemo(() => {
-    const out = { strength: null, dexterity: null, constitution: null,
-                  intelligence: null, wisdom: null, charisma: null } as Record<AbilityName, number | null>;
+    const out = {
+      strength: null, dexterity: null, constitution: null,
+      intelligence: null, wisdom: null, charisma: null,
+    } as Record<AbilityName, number | null>;
     for (const ability of ABILITY_NAMES) {
       const chipId = form.abilityAssignments[ability];
       if (!chipId) continue;
@@ -322,8 +467,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     return out;
   }, [form.abilityAssignments, form.scorePool, form.racialBonuses]);
 
-  // Auto-recompute level-1 max HP when class hit die or final CON changes —
-  // but only while `maxHpAuto` is still true (user hasn't manually edited HP).
+  // Auto-recompute level-1 max HP while the user hasn't manually edited it.
   const conScoreFinal = abilityScores.constitution;
   useEffect(() => {
     if (form.hitDie === null || conScoreFinal === null) return;
@@ -331,7 +475,6 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     setForm((prev) => {
       if (!prev.maxHpAuto) return prev;
       if (prev.maxHp === auto) return prev;
-      // Preserve currentHp at 0 (unconscious) and only clamp the upper bound.
       const newCurrent = Math.min(prev.currentHp, auto);
       return { ...prev, maxHp: auto, currentHp: newCurrent };
     });
@@ -341,13 +484,13 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     Object.values(form.abilityAssignments).filter((v): v is string => v !== null),
   );
   const unassignedChips = form.scorePool.filter((c) => !assignedChipIds.has(c.id));
-  const allAbilitiesAssigned = ABILITY_NAMES.every((a) => abilityScores[a] !== null);
 
-  // ---- Step validity (delegated to pure helpers in character-form-validation.ts) ----
+  // ---- Step validity ----
   const validatable = {
     name: form.name,
     resolvedRace,
     resolvedClass,
+    resolvedBackground,
     scorePool: form.scorePool.map((c) => ({ id: c.id, total: c.total })),
     abilityAssignments: form.abilityAssignments,
     maxHp: form.maxHp,
@@ -356,18 +499,22 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     speed: form.speed,
     proficiencyBonus: form.proficiencyBonus,
   };
-  const canProceedStep0 = isStep0Valid(validatable);
-  const step1Valid = isStep1Valid(validatable);
-  const combatNumericsValid = isCombatValid(validatable);
-  const formIsValid = isFormValidForSubmit(validatable);
+  const stepValid: Record<number, boolean> = {
+    0: isIdentityValid(validatable),
+    1: isOriginValid(validatable),
+    2: isCallingValid(validatable),
+    3: isBackgroundValid(validatable),
+    4: isAbilitiesValid(validatable),
+    5: isFormValidForSubmit(validatable),
+  };
+  const formIsValid = stepValid[5];
 
-  const failingStepLabel = !canProceedStep0
-    ? "Basics"
-    : !step1Valid
-      ? "Ability Scores"
-      : !combatNumericsValid
-        ? "Combat"
-        : null;
+  const failingStepLabel = !stepValid[0] ? "Identity"
+    : !stepValid[1] ? "Origin"
+    : !stepValid[2] ? "Calling"
+    : !stepValid[3] ? "Background"
+    : !stepValid[4] ? "Abilities"
+    : null;
 
   // ---- Roll & assign ----
   const handleRoll = () => {
@@ -382,12 +529,6 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     }));
     setSelectedChipId(null);
     setRollAnimationKey((k) => k + 1);
-
-    // Note: we deliberately do NOT post these rolls to /dice/roll. The current
-    // dice endpoint re-rolls server-side from the expression, so the persisted
-    // result wouldn't match the dice shown in the UI. Logging character-creation
-    // rolls into dice history requires the API to accept pre-rolled dice (or a
-    // `purpose: "character_creation"` tag), which is filed as a follow-up task.
   };
 
   const handleRerollUnassigned = () => {
@@ -415,16 +556,12 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
 
   const handleAutoAssign = () => {
     if (form.scorePool.length !== 6) return;
-    const order =
-      RECOMMENDED_ABILITY_ORDER[resolvedClass] ?? DEFAULT_ABILITY_ORDER;
-    // Sort chips highest-first; assign in priority order.
+    const order = RECOMMENDED_ABILITY_ORDER[resolvedClass] ?? DEFAULT_ABILITY_ORDER;
     const sortedChipIds = [...form.scorePool]
       .sort((a, b) => b.total - a.total)
       .map((c) => c.id);
     const next: AbilityAssignments = { ...emptyAssignments };
-    order.forEach((ability, i) => {
-      next[ability] = sortedChipIds[i] ?? null;
-    });
+    order.forEach((ability, i) => { next[ability] = sortedChipIds[i] ?? null; });
     update("abilityAssignments", next);
     setSelectedChipId(null);
   };
@@ -435,14 +572,13 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
   };
 
   const handleChipClick = (chipId: string) => {
-    if (assignedChipIds.has(chipId)) return; // chip is in a slot
+    if (assignedChipIds.has(chipId)) return;
     setSelectedChipId((prev) => (prev === chipId ? null : chipId));
   };
 
   const handleSlotClick = (ability: AbilityName) => {
     const currentlyAssigned = form.abilityAssignments[ability];
     if (currentlyAssigned) {
-      // Tap an assigned slot to return its chip to the pool.
       setForm((prev) => ({
         ...prev,
         abilityAssignments: { ...prev.abilityAssignments, [ability]: null },
@@ -457,10 +593,16 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
     setSelectedChipId(null);
   };
 
+  // Merged skill list = the player's class picks + background's free profs (deduped).
+  const mergedSkills = useMemo(() => {
+    const set = new Set(form.skills);
+    if (backgroundInfo) for (const s of backgroundInfo.skillProficiencies) set.add(s);
+    return Array.from(set);
+  }, [form.skills, backgroundInfo]);
+
   // ---- Submit ----
   const handleSubmit = () => {
     if (!formIsValid) return;
-    // Combine class-equipment items + manually-added items.
     const equipmentItems: string[] = classInfo
       ? classInfo.startingEquipmentOptions.flatMap((slot) => {
           const idx = form.equipmentChoices[slot.slot];
@@ -483,10 +625,11 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       speed: form.speed,
       proficiencyBonus: form.proficiencyBonus,
       savingThrows: form.savingThrows,
-      skills: form.skills,
+      skills: mergedSkills,
       inventory: fullInventory.length > 0 ? fullInventory : undefined,
       notes: form.notes || undefined,
       spellSlots: form.spellSlots ?? undefined,
+      background: resolvedBackground.trim() || undefined,
     };
 
     const body: CreateCharacterBody = {
@@ -495,6 +638,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       class: resolvedClass.trim(),
       level: form.level,
       sheetJson: sheet,
+      ...(form.portraitUrl.trim() ? { portraitUrl: form.portraitUrl.trim() } : {}),
     };
 
     createMutation.mutate(
@@ -502,12 +646,10 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListCharactersQueryKey() });
-          toast({ title: "Character created!" });
+          toast({ title: "Character forged!" });
           onCreated();
         },
         onError: (err: unknown) => {
-          // Surface whatever the server tells us (e.g. validation message)
-          // instead of the generic toast so the player has a real clue.
           let detail = "";
           const maybe = err as { response?: { data?: { error?: string } }; message?: string };
           if (maybe?.response?.data?.error) detail = maybe.response.data.error;
@@ -528,54 +670,64 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       update("newInventoryItem", "");
     }
   };
-
   const removeInventoryItem = (index: number) => {
     update("inventory", form.inventory.filter((_, i) => i !== index));
   };
-
   const toggleSkill = (skill: string) => {
     update("skills", form.skills.includes(skill) ? form.skills.filter((s) => s !== skill) : [...form.skills, skill]);
   };
-
   const toggleSavingThrow = (st: string) => {
     update("savingThrows", form.savingThrows.includes(st) ? form.savingThrows.filter((s) => s !== st) : [...form.savingThrows, st]);
   };
 
-  return (
-    <div className="space-y-6" data-testid="character-create-form">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={onCancel} data-testid="button-cancel-create">
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Cancel
+  // ---- Footer ----
+  const onNext = () => setStep((s) => Math.min(STEP_TITLES.length - 1, s + 1));
+  const onBack = () => setStep((s) => Math.max(0, s - 1));
+  const isLast = step === STEP_TITLES.length - 1;
+  const canAdvance = stepValid[step];
+
+  const footer = (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={step === 0 ? onCancel : onBack}
+        data-testid={step === 0 ? "button-cancel-create" : "button-prev-step"}
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        {step === 0 ? "Cancel" : "Back"}
+      </Button>
+      {!isLast ? (
+        <Button onClick={onNext} disabled={!canAdvance} data-testid="button-next-step">
+          Next
+          <ArrowRight className="h-4 w-4 ml-1" />
         </Button>
-        <h2 className="font-serif text-2xl font-bold text-foreground flex items-center gap-2">
-          <Sparkles className="h-6 w-6 text-primary" />
-          Create Character
-        </h2>
-      </div>
+      ) : (
+        <Button
+          onClick={handleSubmit}
+          disabled={createMutation.isPending || !formIsValid}
+          data-testid="button-create-character"
+          className="bg-primary hover:bg-primary/90"
+        >
+          <Sparkles className="h-4 w-4 mr-1.5" />
+          {createMutation.isPending ? "Forging…" : "Forge Character"}
+        </Button>
+      )}
+    </>
+  );
 
-      <div className="flex gap-2 mb-6">
-        {STEP_TITLES.map((title, i) => (
-          <button
-            key={title}
-            onClick={() => { if (i < step) setStep(i); }}
-            className={`flex-1 text-center py-2 text-xs font-medium rounded-lg transition-colors ${
-              i === step
-                ? "bg-primary text-primary-foreground"
-                : i < step
-                  ? "bg-primary/20 text-primary cursor-pointer hover:bg-primary/30"
-                  : "bg-muted/50 text-muted-foreground"
-            }`}
-            data-testid={`step-${i}`}
-          >
-            {title}
-          </button>
-        ))}
-      </div>
-
-      <div className="rounded-xl border border-border/50 bg-card p-6">
+  return (
+    <div data-testid="character-create-form">
+      <WizardShell
+        step={step}
+        totalSteps={STEP_TITLES.length}
+        title={STEP_TITLES[step]}
+        subtitle={STEP_SUBTITLES[step]}
+        footer={footer}
+      >
+        {/* ---- Step 0: Identity ---- */}
         {step === 0 && (
-          <div className="space-y-5" data-testid="step-basics">
+          <div className="space-y-5" data-testid="step-identity">
             <div className="space-y-2">
               <Label htmlFor="char-name">Character Name *</Label>
               <Input
@@ -583,61 +735,14 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                 value={form.name}
                 onChange={(e) => update("name", e.target.value)}
                 placeholder="e.g. Thalion Stormwind"
+                autoFocus
+                className="text-lg"
                 data-testid="input-char-name"
               />
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Race *</Label>
-                <Select value={form.race} onValueChange={(v) => update("race", v)}>
-                  <SelectTrigger data-testid="select-race">
-                    <SelectValue placeholder="Select a race" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DND_RACES.map((r) => (
-                      <SelectItem key={r} value={r}>{r}</SelectItem>
-                    ))}
-                    <SelectItem value={CUSTOM_OPTION_VALUE}>Other (custom)</SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.race === CUSTOM_OPTION_VALUE && (
-                  <Input
-                    value={form.customRace}
-                    onChange={(e) => update("customRace", e.target.value)}
-                    placeholder="Enter custom race"
-                    data-testid="input-custom-race"
-                  />
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Class *</Label>
-                <Select value={form.charClass} onValueChange={(v) => update("charClass", v)}>
-                  <SelectTrigger data-testid="select-class">
-                    <SelectValue placeholder="Select a class" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DND_CLASSES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                    <SelectItem value={CUSTOM_OPTION_VALUE}>Other (custom)</SelectItem>
-                  </SelectContent>
-                </Select>
-                {form.charClass === CUSTOM_OPTION_VALUE && (
-                  <Input
-                    value={form.customClass}
-                    onChange={(e) => update("customClass", e.target.value)}
-                    placeholder="Enter custom class"
-                    data-testid="input-custom-class"
-                  />
-                )}
-              </div>
-            </div>
-
             <NumberField
               id="char-level"
-              label="Level"
+              label="Starting Level"
               value={form.level}
               min={1}
               max={20}
@@ -645,89 +750,231 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
               onChange={(lvl) => {
                 setForm((prev) => {
                   const auto = proficiencyBonusForLevel(lvl, homebrewRules);
-                  return {
-                    ...prev,
-                    level: lvl,
-                    proficiencyBonus: auto ?? prev.proficiencyBonus,
-                  };
+                  return { ...prev, level: lvl, proficiencyBonus: auto ?? prev.proficiencyBonus };
                 });
               }}
               testId="input-level"
               className="max-w-[200px]"
             />
+            <div className="space-y-2">
+              <Label htmlFor="char-portrait">Portrait URL <span className="text-muted-foreground text-xs">(optional)</span></Label>
+              <Input
+                id="char-portrait"
+                type="url"
+                value={form.portraitUrl}
+                onChange={(e) => update("portraitUrl", e.target.value)}
+                placeholder="https://example.com/portrait.png"
+                data-testid="input-portrait-url"
+              />
+              <p className="text-xs text-muted-foreground">You can also upload one later from the character page.</p>
+            </div>
           </div>
         )}
 
+        {/* ---- Step 1: Origin (race grid) ---- */}
         {step === 1 && (
+          <div className="space-y-4" data-testid="step-origin">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {DND_RACES.map((race, i) => {
+                const info = RACE_DATA[race];
+                const bonusBits = Object.entries(info.abilityBonuses)
+                  .map(([k, v]) => `+${v} ${ABILITY_LABELS[k as AbilityName]}`)
+                  .join(" · ");
+                return (
+                  <PickerCard
+                    key={race}
+                    selected={form.race === race}
+                    autoFocus={i === 0 && form.race === ""}
+                    onClick={() => update("race", race)}
+                    title={race}
+                    subtitle={`Speed ${info.speed} ft · ${bonusBits || "no fixed bonus"}`}
+                    leading={<span className="text-5xl leading-none" aria-hidden="true">{RACE_EMOJI[race] ?? "✨"}</span>}
+                    testId={`card-race-${race.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                  >
+                    <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">
+                      {info.traits[0]?.summary}
+                    </p>
+                  </PickerCard>
+                );
+              })}
+              <PickerCard
+                selected={form.race === CUSTOM_OPTION_VALUE}
+                onClick={() => update("race", CUSTOM_OPTION_VALUE)}
+                title="Other"
+                subtitle="Bring your own race name (homebrew)."
+                leading={<span className="text-5xl leading-none" aria-hidden="true">✨</span>}
+                testId="card-race-custom"
+              />
+            </div>
+            {form.race === CUSTOM_OPTION_VALUE && (
+              <Input
+                value={form.customRace}
+                onChange={(e) => update("customRace", e.target.value)}
+                placeholder="Enter custom race"
+                data-testid="input-custom-race"
+              />
+            )}
+          </div>
+        )}
+
+        {/* ---- Step 2: Calling (class grid) ---- */}
+        {step === 2 && (
+          <div className="space-y-4" data-testid="step-calling">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {DND_CLASSES.map((cls, i) => {
+                const info = CLASS_DATA[cls];
+                const meta = CLASS_ICON[cls] ?? { icon: Sword, tint: "text-foreground" };
+                const Icon = meta.icon;
+                return (
+                  <PickerCard
+                    key={cls}
+                    selected={form.charClass === cls}
+                    autoFocus={i === 0 && form.charClass === ""}
+                    onClick={() => update("charClass", cls)}
+                    title={cls}
+                    subtitle={`Hit die d${info.hitDie} · Saves: ${info.savingThrows.map((s) => s.slice(0, 3).toUpperCase()).join(" & ")}`}
+                    leading={
+                      <span
+                        className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/30 ${meta.tint}`}
+                        aria-hidden="true"
+                      >
+                        <Icon className="h-6 w-6" />
+                      </span>
+                    }
+                    testId={`card-class-${cls.toLowerCase()}`}
+                  >
+                    <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">
+                      {info.level1Features[0]?.name}: {info.level1Features[0]?.summary}
+                    </p>
+                  </PickerCard>
+                );
+              })}
+              <PickerCard
+                selected={form.charClass === CUSTOM_OPTION_VALUE}
+                onClick={() => update("charClass", CUSTOM_OPTION_VALUE)}
+                title="Other"
+                subtitle="Bring your own class name (homebrew)."
+                leading={
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/30">
+                    <Sparkles className="h-6 w-6 text-primary" />
+                  </span>
+                }
+                testId="card-class-custom"
+              />
+            </div>
+            {form.charClass === CUSTOM_OPTION_VALUE && (
+              <Input
+                value={form.customClass}
+                onChange={(e) => update("customClass", e.target.value)}
+                placeholder="Enter custom class"
+                data-testid="input-custom-class"
+              />
+            )}
+          </div>
+        )}
+
+        {/* ---- Step 3: Background ---- */}
+        {step === 3 && (
+          <div className="space-y-4" data-testid="step-background">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {DND_BACKGROUNDS.map((bg, i) => {
+                const info = BACKGROUND_DATA[bg];
+                return (
+                  <PickerCard
+                    key={bg}
+                    selected={form.background === bg}
+                    autoFocus={i === 0 && form.background === ""}
+                    onClick={() => update("background", bg)}
+                    title={bg}
+                    subtitle={info.description}
+                    leading={<span className="text-5xl leading-none" aria-hidden="true">{info.emoji}</span>}
+                    testId={`card-background-${bg.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                  >
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {info.skillProficiencies.map((s) => (
+                        <span
+                          key={s}
+                          className="rounded-full bg-primary/15 text-primary text-[10px] font-medium px-2 py-0.5 ring-1 ring-primary/30"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </PickerCard>
+                );
+              })}
+              <PickerCard
+                selected={form.background === CUSTOM_OPTION_VALUE}
+                onClick={() => update("background", CUSTOM_OPTION_VALUE)}
+                title="Other"
+                subtitle="Write your own — no auto skill profs."
+                leading={<span className="text-5xl leading-none" aria-hidden="true">✍️</span>}
+                testId="card-background-custom"
+              />
+            </div>
+            {form.background === CUSTOM_OPTION_VALUE && (
+              <Input
+                value={form.customBackground}
+                onChange={(e) => update("customBackground", e.target.value)}
+                placeholder="Enter custom background"
+                data-testid="input-custom-background"
+              />
+            )}
+            {backgroundInfo && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs space-y-1" data-testid="background-feature">
+                <p className="font-semibold text-foreground">{backgroundInfo.feature.name}</p>
+                <p className="text-muted-foreground">{backgroundInfo.feature.description}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---- Step 4: Abilities ---- */}
+        {step === 4 && (
           <div className="space-y-5" data-testid="step-abilities">
-            <div className="space-y-2">
+            <div className="space-y-1">
               <p className="text-sm text-muted-foreground">
-                In 5e you don't pick your stats — you roll for them. Tap{" "}
-                <span className="font-medium text-foreground">Roll Stats</span> to roll{" "}
-                <span className="font-mono">4d6</span> six times (dropping the lowest die each time),
-                then tap a score and tap an ability slot to assign it.
+                Tap <span className="font-medium text-foreground">Roll Stats</span> for{" "}
+                <span className="font-mono">4d6</span> (drop lowest) ×6, then tap a score and tap an ability slot to assign it.
               </p>
-              {!form.hasRolled && (
-                <p className="text-xs text-muted-foreground/80">
-                  Prefer not to roll? Use the standard array (15, 14, 13, 12, 10, 8) instead.
+              {classInfo && (
+                <p className="text-xs text-muted-foreground/90">
+                  Higher numbers make d20 rolls more likely to succeed.{" "}
+                  <span className="text-foreground font-medium">{classInfo.name}s</span> usually want high{" "}
+                  <span className="text-primary font-semibold">
+                    {ABILITY_FULL[(RECOMMENDED_ABILITY_ORDER[resolvedClass] ?? DEFAULT_ABILITY_ORDER)[0]]}
+                  </span>.
                 </p>
               )}
             </div>
 
-            {/* Action buttons */}
             <div className="flex flex-wrap gap-2">
-              <Button
-                onClick={handleRoll}
-                variant={form.hasRolled ? "outline" : "default"}
-                size="sm"
-                data-testid="button-roll-stats"
-              >
+              <Button onClick={handleRoll} variant={form.hasRolled ? "outline" : "default"} size="sm" data-testid="button-roll-stats">
                 <Dices className="h-4 w-4 mr-1.5" />
                 {form.hasRolled ? "Reroll all" : "Roll Stats"}
               </Button>
               {form.scoreMode === "rolled" && form.hasRolled && unassignedChips.length > 0 && unassignedChips.length < 6 && (
-                <Button
-                  onClick={handleRerollUnassigned}
-                  variant="outline"
-                  size="sm"
-                  data-testid="button-reroll-unassigned"
-                >
+                <Button onClick={handleRerollUnassigned} variant="outline" size="sm" data-testid="button-reroll-unassigned">
                   <RotateCcw className="h-4 w-4 mr-1.5" />
                   Reroll unassigned ({unassignedChips.length})
                 </Button>
               )}
-              <Button
-                onClick={handleStandardArray}
-                variant="outline"
-                size="sm"
-                data-testid="button-standard-array"
-              >
+              <Button onClick={handleStandardArray} variant="outline" size="sm" data-testid="button-standard-array">
                 Use standard array
               </Button>
               {form.hasRolled && form.scorePool.length === 6 && (
-                <Button
-                  onClick={handleAutoAssign}
-                  variant="outline"
-                  size="sm"
-                  data-testid="button-auto-assign"
-                >
+                <Button onClick={handleAutoAssign} variant="outline" size="sm" data-testid="button-auto-assign">
                   <Wand2 className="h-4 w-4 mr-1.5" />
                   Auto-assign{resolvedClass ? ` for ${resolvedClass}` : ""}
                 </Button>
               )}
               {form.hasRolled && Object.values(form.abilityAssignments).some((v) => v !== null) && (
-                <Button
-                  onClick={handleClearAssignments}
-                  variant="ghost"
-                  size="sm"
-                  data-testid="button-clear-assignments"
-                >
+                <Button onClick={handleClearAssignments} variant="ghost" size="sm" data-testid="button-clear-assignments">
                   Clear
                 </Button>
               )}
             </div>
 
-            {/* Score pool */}
             {form.hasRolled && (
               <div className="rounded-lg border border-border/50 bg-muted/20 p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -755,17 +1002,12 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                           onDragStart={() => setSelectedChipId(chip.id)}
                           onDragEnd={(_, info) => {
                             const els = document.elementsFromPoint(info.point.x, info.point.y);
-                            const slot = els.find((el) =>
-                              (el as HTMLElement).dataset?.abilitySlot,
-                            ) as HTMLElement | undefined;
+                            const slot = els.find((el) => (el as HTMLElement).dataset?.abilitySlot) as HTMLElement | undefined;
                             const ability = slot?.dataset.abilitySlot as AbilityName | undefined;
                             if (ability && !form.abilityAssignments[ability]) {
                               setForm((prev) => ({
                                 ...prev,
-                                abilityAssignments: {
-                                  ...prev.abilityAssignments,
-                                  [ability]: chip.id,
-                                },
+                                abilityAssignments: { ...prev.abilityAssignments, [ability]: chip.id },
                               }));
                               setSelectedChipId(null);
                             }
@@ -773,10 +1015,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                           initial={{ opacity: 0, scale: 0.5, y: -10 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.5 }}
-                          transition={{
-                            type: "spring", stiffness: 320, damping: 22,
-                            delay: i * 0.06,
-                          }}
+                          transition={{ type: "spring", stiffness: 320, damping: 22, delay: i * 0.06 }}
                           className={`group relative flex flex-col items-center justify-center rounded-lg border-2 px-3 py-2 min-w-[64px] transition-colors cursor-grab active:cursor-grabbing touch-none ${
                             isSelected
                               ? "border-primary bg-primary/15 ring-2 ring-primary/40"
@@ -784,17 +1023,13 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                           }`}
                           data-testid={`chip-score-${chip.total}-${i}`}
                         >
-                          <span className="font-mono text-2xl font-bold text-foreground tabular-nums">
-                            {chip.total}
-                          </span>
+                          <span className="font-mono text-2xl font-bold text-foreground tabular-nums">{chip.total}</span>
                           {chip.roll && (
                             <span className="text-[10px] text-muted-foreground/80 font-mono mt-0.5 leading-none">
                               {chip.roll.dice.map((d, idx) => (
                                 <span
                                   key={idx}
-                                  className={idx === chip.roll!.droppedIndex
-                                    ? "line-through opacity-50"
-                                    : ""}
+                                  className={idx === chip.roll!.droppedIndex ? "line-through opacity-50" : ""}
                                 >
                                   {d}{idx < 3 ? " " : ""}
                                 </span>
@@ -819,8 +1054,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
               </div>
             )}
 
-            {/* Ability slots */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {ABILITY_NAMES.map((stat) => {
                 const finalScore = abilityScores[stat];
                 const bonus = form.racialBonuses[stat] ?? 0;
@@ -836,7 +1070,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                     type="button"
                     onClick={() => handleSlotClick(stat)}
                     disabled={!form.hasRolled || (!isAssigned && !selectedChipId)}
-                    className={`relative rounded-lg border-2 p-3 text-center space-y-1 transition-colors ${
+                    className={`relative rounded-xl border-2 p-3 text-center space-y-1 transition-colors min-h-[88px] ${
                       isAssigned
                         ? "border-primary/60 bg-primary/10 hover:bg-primary/15 hover:border-primary cursor-pointer"
                         : canDrop
@@ -848,19 +1082,15 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                   >
                     {bonus > 0 && (
                       <span
-                        className="absolute -top-1.5 -right-1.5 rounded-full bg-amber-500/90 text-[10px] font-bold text-amber-50 px-1.5 py-0.5 shadow"
+                        className="absolute -top-1.5 -right-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 shadow"
                         data-testid={`bonus-${stat}`}
                         title={`Racial bonus from ${resolvedRace}`}
                       >
                         +{bonus}
                       </span>
                     )}
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      {ABILITY_LABELS[stat]}
-                    </p>
-                    <p className="font-mono text-3xl font-bold text-foreground tabular-nums">
-                      {finalScore ?? "—"}
-                    </p>
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{ABILITY_LABELS[stat]}</p>
+                    <p className="font-mono text-3xl font-bold text-foreground tabular-nums">{finalScore ?? "—"}</p>
                     <p className="text-xs text-muted-foreground h-4">
                       {mod !== null
                         ? bonus > 0 && baseTotal !== null
@@ -873,379 +1103,433 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
               })}
             </div>
 
-            {form.hasRolled && form.scorePool.length === 6 && unassignedChips.length === 1 && (
-              <p className="text-xs text-muted-foreground">Almost there — just one left.</p>
-            )}
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="space-y-5" data-testid="step-combat">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <NumberField
-                id="max-hp"
-                label="Max HP"
-                value={form.maxHp}
-                min={1}
-                fallback={10}
-                onChange={(v) =>
-                  setForm((prev) => ({
-                    ...prev,
-                    maxHp: v,
-                    // Any manual edit opts out of further auto-recomputation.
-                    maxHpAuto: false,
-                    currentHp: Math.min(prev.currentHp, v),
-                  }))
-                }
-                testId="input-max-hp"
-              />
-              <NumberField
-                id="current-hp"
-                label="Current HP"
-                value={form.currentHp}
-                min={0}
-                max={form.maxHp}
-                fallback={form.maxHp}
-                onChange={(v) => update("currentHp", v)}
-                testId="input-current-hp"
-              />
-              <NumberField
-                id="armor-class"
-                label="Armor Class"
-                value={form.armorClass}
-                min={0}
-                fallback={10}
-                onChange={(v) => update("armorClass", v)}
-                testId="input-armor-class"
-              />
-              <NumberField
-                id="speed"
-                label="Speed (ft)"
-                value={form.speed}
-                min={0}
-                step={5}
-                fallback={30}
-                onChange={(v) => update("speed", v)}
-                testId="input-speed"
-              />
-            </div>
-
-            <NumberField
-              id="prof-bonus"
-              label="Proficiency Bonus"
-              value={form.proficiencyBonus}
-              min={1}
-              max={6}
-              fallback={2}
-              onChange={(v) => update("proficiencyBonus", v)}
-              testId="input-proficiency-bonus"
-              className="max-w-[200px]"
-            />
-
-            <div className="space-y-3">
-              <Label>Saving Throw Proficiencies</Label>
-              {classInfo && (
-                <p className="text-xs text-muted-foreground">
-                  <Lock className="inline h-3 w-3 mr-1 -mt-0.5" />
-                  {classInfo.name}s are always proficient in{" "}
-                  {classInfo.savingThrows
-                    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-                    .join(" & ")} saves.
+            {/* Auto-filled summary card */}
+            {(classInfo || form.maxHp > 0) && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4" data-testid="auto-fill-summary">
+                <p className="text-[11px] uppercase tracking-wider text-primary/90 font-semibold mb-2">
+                  Auto-filled from your class
                 </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {SAVING_THROW_OPTIONS.map((st) => {
-                  const ability = ABILITY_LABEL_TO_NAME[st];
-                  const isLocked =
-                    !!classInfo && classInfo.savingThrows.includes(ability);
-                  const isChecked = form.savingThrows.includes(st);
-                  return (
-                    <button
-                      key={st}
-                      type="button"
-                      onClick={() => { if (!isLocked) toggleSavingThrow(st); }}
-                      disabled={isLocked}
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        isChecked
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                      } ${isLocked ? "opacity-90 cursor-not-allowed ring-1 ring-primary/40" : ""}`}
-                      data-testid={`toggle-save-${st.toLowerCase()}`}
-                    >
-                      {isLocked && <Lock className="h-3 w-3" />}
-                      {st}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="space-y-6" data-testid="step-details">
-            {(classInfo || raceInfo) && (
-              <p className="text-xs text-muted-foreground italic">
-                Based on the 5e SRD. Your DM may use homebrew rules — you can adjust anything before saving.
-              </p>
-            )}
-
-            {/* Skill picker */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Skill Proficiencies</Label>
-                {classInfo && (
-                  <span className="text-xs text-muted-foreground" data-testid="text-skill-counter">
-                    Pick {classInfo.skillChoices.count} — {Math.max(0, classInfo.skillChoices.count - form.skills.length)} left
-                  </span>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(classInfo ? classInfo.skillChoices.from : DND_SKILLS).map((skill) => {
-                  const checked = form.skills.includes(skill);
-                  const atLimit =
-                    classInfo !== null &&
-                    !checked &&
-                    form.skills.length >= classInfo.skillChoices.count;
-                  return (
-                    <button
-                      key={skill}
-                      type="button"
-                      onClick={() => { if (!atLimit) toggleSkill(skill); }}
-                      disabled={atLimit}
-                      className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        checked
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/50 text-muted-foreground hover:bg-muted"
-                      } ${atLimit ? "opacity-40 cursor-not-allowed" : ""}`}
-                      data-testid={`toggle-skill-${skill.toLowerCase().replace(/ /g, "-")}`}
-                    >
-                      {skill}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Starting equipment picker */}
-            {classInfo && (() => {
-              const derivedEquipment = classInfo.startingEquipmentOptions.flatMap((slot) => {
-                const idx = form.equipmentChoices[slot.slot];
-                if (idx === undefined || idx === -1) return [];
-                return slot.choices[idx]?.items ?? [];
-              });
-              return (
-              <div className="space-y-3" data-testid="equipment-picker">
-                <Label>Starting Equipment</Label>
-                <div className="space-y-3">
-                  {classInfo.startingEquipmentOptions.map((slot) => {
-                    const selected = form.equipmentChoices[slot.slot] as number | undefined;
-                    return (
-                      <div key={slot.slot} className="rounded-lg border border-border/50 bg-muted/10 p-3 space-y-2">
-                        <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                          {slot.slot}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {slot.choices.map((choice, idx) => {
-                            const isOn = selected === idx;
-                            return (
-                              <button
-                                key={idx}
-                                type="button"
-                                onClick={() =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    equipmentChoices: { ...prev.equipmentChoices, [slot.slot]: idx },
-                                  }))
-                                }
-                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                                  isOn
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted/40 text-foreground hover:bg-muted/70"
-                                }`}
-                                data-testid={`equipment-${slot.slot.toLowerCase().replace(/ /g, "-")}-${idx}`}
-                              >
-                                {choice.label}
-                              </button>
-                            );
-                          })}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setForm((prev) => ({
-                                ...prev,
-                                equipmentChoices: { ...prev.equipmentChoices, [slot.slot]: -1 },
-                              }))
-                            }
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                              selected === -1
-                                ? "bg-muted text-muted-foreground ring-1 ring-border"
-                                : "bg-transparent text-muted-foreground hover:bg-muted/30"
-                            }`}
-                            data-testid={`equipment-${slot.slot.toLowerCase().replace(/ /g, "-")}-skip`}
-                          >
-                            Skip
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Max HP</p>
+                    <p className="font-mono text-xl font-bold text-foreground tabular-nums">{form.maxHp}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">AC</p>
+                    <p className="font-mono text-xl font-bold text-foreground tabular-nums">{form.armorClass}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Speed</p>
+                    <p className="font-mono text-xl font-bold text-foreground tabular-nums">{form.speed}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Prof. Bonus</p>
+                    <p className="font-mono text-xl font-bold text-foreground tabular-nums">+{form.proficiencyBonus}</p>
+                  </div>
                 </div>
-                {derivedEquipment.length > 0 && (
-                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1" data-testid="equipment-preview">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      Items added from your picks
-                    </p>
-                    <ul className="text-xs text-foreground list-disc pl-5 space-y-0.5">
-                      {derivedEquipment.map((item, i) => (
-                        <li key={`${item}-${i}`}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              );
-            })()}
-
-            {/* Racial Traits + Class Features (read-only flavor cards) */}
-            {(raceInfo || classInfo) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {raceInfo && (
-                  <div className="rounded-lg border border-border/50 bg-card/60 p-3 space-y-2" data-testid="card-racial-traits">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      {raceInfo.name} Traits
-                    </p>
-                    <ul className="space-y-1.5 text-xs">
-                      {raceInfo.traits.map((t) => (
-                        <li key={t.name}>
-                          <span className="font-medium text-foreground">{t.name}.</span>{" "}
-                          <span className="text-muted-foreground">{t.summary}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {classInfo && (
-                  <div className="rounded-lg border border-border/50 bg-card/60 p-3 space-y-2" data-testid="card-class-features">
-                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
-                      {classInfo.name} — Level 1 Features
-                    </p>
-                    <ul className="space-y-1.5 text-xs">
-                      {classInfo.level1Features.map((f) => (
-                        <li key={f.name}>
-                          <span className="font-medium text-foreground">{f.name}.</span>{" "}
-                          <span className="text-muted-foreground">{f.summary}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
             )}
 
-            {/* Optional details collapsible */}
+            {/* Customize disclosure (combat numerics + saves + skills + equipment + traits + optional) */}
             <div className="rounded-lg border border-border/50">
               <button
                 type="button"
-                onClick={() => setOptionalOpen((v) => !v)}
+                onClick={() => setCustomizeOpen((v) => !v)}
                 className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/30 transition-colors rounded-lg"
-                data-testid="button-toggle-optional"
+                data-testid="button-toggle-customize"
               >
-                <span className="text-sm font-medium text-foreground">Optional details</span>
-                {optionalOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                <span className="text-sm font-medium text-foreground">Customize details (HP / AC / saves / skills / gear)</span>
+                {customizeOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
               </button>
-              {optionalOpen && (
-                <div className="p-3 pt-0 space-y-4">
-                  <div className="space-y-2">
-                    <Label>Extra inventory items</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={form.newInventoryItem}
-                        onChange={(e) => update("newInventoryItem", e.target.value)}
-                        placeholder="Add an item..."
-                        onKeyDown={(e) => e.key === "Enter" && addInventoryItem()}
-                        data-testid="input-inventory-item"
-                      />
-                      <Button variant="outline" size="sm" onClick={addInventoryItem} data-testid="button-add-inventory">
-                        <Plus className="h-4 w-4" />
-                      </Button>
+              {customizeOpen && (
+                <div className="p-3 pt-0 space-y-5">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <NumberField
+                      id="max-hp" label="Max HP" value={form.maxHp} min={1} fallback={10}
+                      onChange={(v) => setForm((prev) => ({
+                        ...prev, maxHp: v, maxHpAuto: false,
+                        currentHp: Math.min(prev.currentHp, v),
+                      }))}
+                      testId="input-max-hp"
+                    />
+                    <NumberField
+                      id="current-hp" label="Current HP" value={form.currentHp} min={0}
+                      max={form.maxHp} fallback={form.maxHp}
+                      onChange={(v) => update("currentHp", v)}
+                      testId="input-current-hp"
+                    />
+                    <NumberField
+                      id="armor-class" label="Armor Class" value={form.armorClass} min={0} fallback={10}
+                      onChange={(v) => update("armorClass", v)}
+                      testId="input-armor-class"
+                    />
+                    <NumberField
+                      id="speed" label="Speed (ft)" value={form.speed} min={0} step={5} fallback={30}
+                      onChange={(v) => update("speed", v)}
+                      testId="input-speed"
+                    />
+                  </div>
+                  <NumberField
+                    id="prof-bonus" label="Proficiency Bonus" value={form.proficiencyBonus} min={1} max={6} fallback={2}
+                    onChange={(v) => update("proficiencyBonus", v)}
+                    testId="input-proficiency-bonus" className="max-w-[200px]"
+                  />
+
+                  {/* Saving throws */}
+                  <div className="space-y-3">
+                    <Label>Saving Throw Proficiencies</Label>
+                    {classInfo && (
+                      <p className="text-xs text-muted-foreground">
+                        <Lock className="inline h-3 w-3 mr-1 -mt-0.5" />
+                        {classInfo.name}s are always proficient in{" "}
+                        {classInfo.savingThrows.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" & ")} saves.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {SAVING_THROW_OPTIONS.map((st) => {
+                        const ability = ABILITY_LABEL_TO_NAME[st];
+                        const isLocked = !!classInfo && classInfo.savingThrows.includes(ability);
+                        const isChecked = form.savingThrows.includes(st);
+                        return (
+                          <button
+                            key={st}
+                            type="button"
+                            onClick={() => { if (!isLocked) toggleSavingThrow(st); }}
+                            disabled={isLocked}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              isChecked
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                            } ${isLocked ? "opacity-90 cursor-not-allowed ring-1 ring-primary/40" : ""}`}
+                            data-testid={`toggle-save-${st.toLowerCase()}`}
+                          >
+                            {isLocked && <Lock className="h-3 w-3" />}
+                            {st}
+                          </button>
+                        );
+                      })}
                     </div>
-                    {form.inventory.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {form.inventory.map((item, i) => (
-                          <span key={i} className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs text-foreground">
-                            {item}
-                            <button onClick={() => removeInventoryItem(i)} className="text-muted-foreground hover:text-foreground">
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
+                  </div>
+
+                  {/* Skill picker (class) */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Class Skill Proficiencies</Label>
+                      {classInfo && (
+                        <span className="text-xs text-muted-foreground" data-testid="text-skill-counter">
+                          Pick {classInfo.skillChoices.count} — {Math.max(0, classInfo.skillChoices.count - form.skills.length)} left
+                        </span>
+                      )}
+                    </div>
+                    {backgroundInfo && (
+                      <p className="text-xs text-muted-foreground">
+                        Your <span className="text-foreground">{backgroundInfo.name}</span> background already grants{" "}
+                        {backgroundInfo.skillProficiencies.join(" & ")}.
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {(classInfo ? classInfo.skillChoices.from : DND_SKILLS).map((skill) => {
+                        const checked = form.skills.includes(skill);
+                        const grantedByBg = backgroundInfo?.skillProficiencies.includes(skill) ?? false;
+                        const atLimit =
+                          classInfo !== null &&
+                          !checked &&
+                          form.skills.length >= classInfo.skillChoices.count;
+                        return (
+                          <button
+                            key={skill}
+                            type="button"
+                            onClick={() => { if (!atLimit) toggleSkill(skill); }}
+                            disabled={atLimit}
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              checked || grantedByBg
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                            } ${atLimit ? "opacity-40 cursor-not-allowed" : ""}`}
+                            data-testid={`toggle-skill-${skill.toLowerCase().replace(/ /g, "-")}`}
+                            title={grantedByBg ? "Granted by your background" : undefined}
+                          >
+                            {skill}{grantedByBg ? " ✦" : ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Equipment picker */}
+                  {classInfo && (() => {
+                    const derivedEquipment = classInfo.startingEquipmentOptions.flatMap((slot) => {
+                      const idx = form.equipmentChoices[slot.slot];
+                      if (idx === undefined || idx === -1) return [];
+                      return slot.choices[idx]?.items ?? [];
+                    });
+                    return (
+                      <div className="space-y-3" data-testid="equipment-picker">
+                        <Label>Starting Equipment</Label>
+                        <div className="space-y-3">
+                          {classInfo.startingEquipmentOptions.map((slot) => {
+                            const selected = form.equipmentChoices[slot.slot] as number | undefined;
+                            return (
+                              <div key={slot.slot} className="rounded-lg border border-border/50 bg-muted/10 p-3 space-y-2">
+                                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{slot.slot}</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {slot.choices.map((choice, idx) => {
+                                    const isOn = selected === idx;
+                                    return (
+                                      <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() =>
+                                          setForm((prev) => ({
+                                            ...prev,
+                                            equipmentChoices: { ...prev.equipmentChoices, [slot.slot]: idx },
+                                          }))
+                                        }
+                                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                          isOn
+                                            ? "bg-primary text-primary-foreground"
+                                            : "bg-muted/40 text-foreground hover:bg-muted/70"
+                                        }`}
+                                        data-testid={`equipment-${slot.slot.toLowerCase().replace(/ /g, "-")}-${idx}`}
+                                      >
+                                        {choice.label}
+                                      </button>
+                                    );
+                                  })}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setForm((prev) => ({
+                                        ...prev,
+                                        equipmentChoices: { ...prev.equipmentChoices, [slot.slot]: -1 },
+                                      }))
+                                    }
+                                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                                      selected === -1
+                                        ? "bg-muted text-muted-foreground ring-1 ring-border"
+                                        : "bg-transparent text-muted-foreground hover:bg-muted/30"
+                                    }`}
+                                    data-testid={`equipment-${slot.slot.toLowerCase().replace(/ /g, "-")}-skip`}
+                                  >
+                                    Skip
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {derivedEquipment.length > 0 && (
+                          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1" data-testid="equipment-preview">
+                            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                              Items added from your picks
+                            </p>
+                            <ul className="text-xs text-foreground list-disc pl-5 space-y-0.5">
+                              {derivedEquipment.map((item, i) => (
+                                <li key={`${item}-${i}`}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Optional details */}
+                  <div className="rounded-lg border border-border/50">
+                    <button
+                      type="button"
+                      onClick={() => setOptionalOpen((v) => !v)}
+                      className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/30 transition-colors rounded-lg"
+                      data-testid="button-toggle-optional"
+                    >
+                      <span className="text-sm font-medium text-foreground">Extra inventory & backstory</span>
+                      {optionalOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+                    {optionalOpen && (
+                      <div className="p-3 pt-0 space-y-4">
+                        <div className="space-y-2">
+                          <Label>Extra inventory items</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              value={form.newInventoryItem}
+                              onChange={(e) => update("newInventoryItem", e.target.value)}
+                              placeholder="Add an item..."
+                              onKeyDown={(e) => e.key === "Enter" && addInventoryItem()}
+                              data-testid="input-inventory-item"
+                            />
+                            <Button variant="outline" size="sm" onClick={addInventoryItem} data-testid="button-add-inventory">
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          {form.inventory.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {form.inventory.map((item, i) => (
+                                <span key={i} className="flex items-center gap-1 px-2 py-1 bg-muted/50 rounded text-xs text-foreground">
+                                  {item}
+                                  <button onClick={() => removeInventoryItem(i)} className="text-muted-foreground hover:text-foreground">
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="char-notes">Backstory & notes</Label>
+                          <Textarea
+                            id="char-notes"
+                            value={form.notes}
+                            onChange={(e) => update("notes", e.target.value)}
+                            placeholder="Backstory, personality traits, bonds, flaws..."
+                            rows={4}
+                            data-testid="input-notes"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="char-notes">Backstory & notes</Label>
-                    <Textarea
-                      id="char-notes"
-                      value={form.notes}
-                      onChange={(e) => update("notes", e.target.value)}
-                      placeholder="Backstory, personality traits, bonds, flaws..."
-                      rows={4}
-                      data-testid="input-notes"
-                    />
-                  </div>
+                  {/* Race traits + class L1 features */}
+                  {(raceInfo || classInfo) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {raceInfo && (
+                        <div className="rounded-lg border border-border/50 bg-card/60 p-3 space-y-2" data-testid="card-racial-traits">
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">{raceInfo.name} Traits</p>
+                          <ul className="space-y-1.5 text-xs">
+                            {raceInfo.traits.map((t) => (
+                              <li key={t.name}>
+                                <span className="font-medium text-foreground">{t.name}.</span>{" "}
+                                <span className="text-muted-foreground">{t.summary}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {classInfo && (
+                        <div className="rounded-lg border border-border/50 bg-card/60 p-3 space-y-2" data-testid="card-class-features">
+                          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                            {classInfo.name} — Level 1 Features
+                          </p>
+                          <ul className="space-y-1.5 text-xs">
+                            {classInfo.level1Features.map((f) => (
+                              <li key={f.name}>
+                                <span className="font-medium text-foreground">{f.name}.</span>{" "}
+                                <span className="text-muted-foreground">{f.summary}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
         )}
-      </div>
 
-      {/* Inline submit-validity hint */}
-      {step === STEP_TITLES.length - 1 && failingStepLabel && (
-        <p className="text-xs text-amber-400/90" data-testid="text-incomplete-hint">
-          {failingStepLabel} step is incomplete — go back and finish it before creating.
-        </p>
-      )}
+        {/* ---- Step 5: Review (hero card) ---- */}
+        {step === 5 && (
+          <div className="space-y-5" data-testid="step-review">
+            <div className="rounded-3xl border border-primary/40 bg-gradient-to-br from-primary/15 via-primary/5 to-transparent p-5 sm:p-6 space-y-5 shadow-[0_0_40px_-12px_hsl(270_100%_60%/0.5)]" data-testid="hero-card">
+              <div className="flex items-start gap-4">
+                <div className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-3xl bg-primary/15 ring-2 ring-primary/40 text-6xl flex-shrink-0">
+                  {RACE_EMOJI[form.race] ?? "✨"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-serif text-3xl sm:text-5xl font-bold text-foreground tracking-tight leading-tight" data-testid="review-name">
+                    {form.name || "Unnamed"}
+                  </h3>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-primary text-primary-foreground text-xs font-bold px-2.5 py-1">
+                      Lv. {form.level} {resolvedClass || "—"}
+                    </span>
+                    <span className="rounded-full bg-muted/40 text-foreground text-xs font-medium px-2.5 py-1">
+                      {resolvedRace || "—"}
+                    </span>
+                    {resolvedBackground && (
+                      <span className="rounded-full bg-muted/40 text-foreground text-xs font-medium px-2.5 py-1" data-testid="review-background">
+                        {resolvedBackground}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-      <div className="flex justify-between">
-        <Button
-          variant="outline"
-          onClick={() => setStep((s) => s - 1)}
-          disabled={step === 0}
-          data-testid="button-prev-step"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back
-        </Button>
+              {/* 4-up combat strip */}
+              <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                {[
+                  { label: "AC", value: form.armorClass, icon: Shield },
+                  { label: "Init", value: (() => {
+                      const dex = abilityScores.dexterity;
+                      const m = dex !== null ? modifierFor(dex) : 0;
+                      return `${m >= 0 ? "+" : ""}${m}`;
+                    })(), icon: Zap },
+                  { label: "Max HP", value: form.maxHp, icon: Heart },
+                  { label: "Prof.", value: `+${form.proficiencyBonus}`, icon: Award },
+                ].map(({ label, value, icon: Icon }) => (
+                  <div key={label} className="rounded-xl bg-card/60 p-2 sm:p-3 text-center">
+                    <Icon className="h-4 w-4 mx-auto text-primary mb-1" />
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+                    <p className="font-mono text-lg sm:text-xl font-bold text-foreground tabular-nums">{value}</p>
+                  </div>
+                ))}
+              </div>
 
-        {step < STEP_TITLES.length - 1 ? (
-          <Button
-            onClick={() => setStep((s) => s + 1)}
-            disabled={
-              (step === 0 && !canProceedStep0) ||
-              (step === 1 && !step1Valid) ||
-              (step === 2 && !combatNumericsValid)
-            }
-            data-testid="button-next-step"
-          >
-            Next
-            <ArrowRight className="h-4 w-4 ml-1" />
-          </Button>
-        ) : (
-          <Button
-            onClick={handleSubmit}
-            disabled={createMutation.isPending || !formIsValid}
-            data-testid="button-create-character"
-          >
-            {createMutation.isPending ? "Creating..." : "Create Character"}
-          </Button>
+              {/* Ability scores */}
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                {ABILITY_NAMES.map((stat) => {
+                  const v = abilityScores[stat] ?? 10;
+                  const m = modifierFor(v);
+                  return (
+                    <div key={stat} className="rounded-xl bg-card/60 p-2 text-center">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{ABILITY_LABELS[stat]}</p>
+                      <p className="font-mono text-xl font-bold text-foreground tabular-nums">{v}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                        {m >= 0 ? "+" : ""}{m}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Skill chips */}
+              {mergedSkills.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Skill Proficiencies</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {mergedSkills.map((s) => (
+                      <span
+                        key={s}
+                        className="rounded-full bg-primary/15 text-primary text-[11px] font-medium px-2 py-0.5 ring-1 ring-primary/30"
+                        data-testid={`review-skill-${s.toLowerCase().replace(/ /g, "-")}`}
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Your Legend */}
+              <p className="text-sm text-muted-foreground italic leading-relaxed border-l-2 border-primary/40 pl-3" data-testid="review-legend">
+                A {resolvedRace || "wandering"} {resolvedClass || "adventurer"} known as{" "}
+                <span className="text-foreground font-medium not-italic">{form.name || "the nameless one"}</span>.
+                {resolvedBackground ? ` Once a ${resolvedBackground.toLowerCase()},` : ""} they now stand on the
+                threshold of their first adventure — Level {form.level}, with{" "}
+                <span className="text-foreground not-italic">{form.maxHp} HP</span> and AC{" "}
+                <span className="text-foreground not-italic">{form.armorClass}</span>. The story begins now.
+              </p>
+            </div>
+
+            {failingStepLabel && (
+              <p className="text-xs text-primary/90" data-testid="text-incomplete-hint">
+                {failingStepLabel} step is incomplete — go back and finish it before forging.
+              </p>
+            )}
+          </div>
         )}
-      </div>
+      </WizardShell>
     </div>
   );
 }
-
-// Exported for potential future use (debug labels, dev tooling).
-export { abilityRollLabel };

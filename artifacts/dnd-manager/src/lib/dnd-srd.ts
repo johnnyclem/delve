@@ -849,3 +849,147 @@ export function getNewFeaturesAtLevel(className: string, level: number): ClassFe
   if (!map) return [];
   return map[level] ?? [];
 }
+
+// ---- SRD Backgrounds (added in Task #146 for the AAA-FTUE wizard) ----
+//
+// A small curated set of System Reference Document backgrounds.  Each entry
+// carries a short flavor description, the two skill proficiencies the
+// background grants (so the wizard can auto-merge them into the character's
+// skill list), and a one-line "feature" summary for the review/detail UI.
+// Equipment lists are intentionally short — players can add more from the
+// Optional Details panel.
+export interface BackgroundFeature {
+  name: string;
+  description: string;
+}
+
+export interface BackgroundInfo {
+  name: string;
+  /** Single emoji used as the card iconography in the wizard. */
+  emoji: string;
+  /** One-paragraph flavor description shown on the picker card. */
+  description: string;
+  /** The two SRD skill proficiencies granted by this background. */
+  skillProficiencies: string[];
+  feature: BackgroundFeature;
+  equipment?: string[];
+}
+
+export const BACKGROUND_DATA: Record<string, BackgroundInfo> = {
+  Acolyte: {
+    name: "Acolyte",
+    emoji: "🛐",
+    description:
+      "You spent your life in the service of a temple, learning sacred rites and tending to the faithful.",
+    skillProficiencies: ["Insight", "Religion"],
+    feature: {
+      name: "Shelter of the Faithful",
+      description:
+        "Fellow believers will provide free lodging, healing, and care at temples of your faith.",
+    },
+    equipment: [
+      "Holy symbol",
+      "Prayer book",
+      "5 sticks of incense",
+      "Vestments",
+      "Common clothes",
+      "Belt pouch (15 gp)",
+    ],
+  },
+  Criminal: {
+    name: "Criminal",
+    emoji: "🗝️",
+    description:
+      "Burglar, fence, smuggler — you've broken laws and kept your secrets close.",
+    skillProficiencies: ["Deception", "Stealth"],
+    feature: {
+      name: "Criminal Contact",
+      description:
+        "You have a reliable contact in the criminal underworld who can pass messages for you.",
+    },
+    equipment: [
+      "Crowbar",
+      "Set of dark common clothes with a hood",
+      "Belt pouch (15 gp)",
+    ],
+  },
+  "Folk Hero": {
+    name: "Folk Hero",
+    emoji: "🌾",
+    description:
+      "Born of common stock, you stood up for the people of your village when no one else would.",
+    skillProficiencies: ["Animal Handling", "Survival"],
+    feature: {
+      name: "Rustic Hospitality",
+      description:
+        "Common folk will shelter and shield you from the law or anyone else searching for you.",
+    },
+    equipment: [
+      "Set of artisan's tools",
+      "Shovel",
+      "Iron pot",
+      "Common clothes",
+      "Belt pouch (10 gp)",
+    ],
+  },
+  Noble: {
+    name: "Noble",
+    emoji: "👑",
+    description:
+      "You were born into wealth and privilege, and you've spent your life learning the games of court.",
+    skillProficiencies: ["History", "Persuasion"],
+    feature: {
+      name: "Position of Privilege",
+      description:
+        "You're welcome in high society and people assume you have the right to be wherever you are.",
+    },
+    equipment: [
+      "Set of fine clothes",
+      "Signet ring",
+      "Scroll of pedigree",
+      "Purse (25 gp)",
+    ],
+  },
+  Sage: {
+    name: "Sage",
+    emoji: "📚",
+    description:
+      "You spent years in libraries and lecture halls, chasing the answers to obscure questions.",
+    skillProficiencies: ["Arcana", "History"],
+    feature: {
+      name: "Researcher",
+      description:
+        "When you don't know a piece of lore, you usually know who or where to ask to find it.",
+    },
+    equipment: [
+      "Bottle of black ink",
+      "Quill",
+      "Small knife",
+      "Letter from a dead colleague",
+      "Common clothes",
+      "Belt pouch (10 gp)",
+    ],
+  },
+  Soldier: {
+    name: "Soldier",
+    emoji: "⚔️",
+    description:
+      "You served in a militia, mercenary company, or army, and the discipline of the line still shapes you.",
+    skillProficiencies: ["Athletics", "Intimidation"],
+    feature: {
+      name: "Military Rank",
+      description:
+        "Soldiers loyal to your former organization still recognize your authority and grant minor favors.",
+    },
+    equipment: [
+      "Insignia of rank",
+      "Trophy from a fallen enemy",
+      "Set of bone dice or deck of cards",
+      "Common clothes",
+      "Belt pouch (10 gp)",
+    ],
+  },
+};
+
+export const DND_BACKGROUNDS: readonly string[] = Object.keys(BACKGROUND_DATA);
+

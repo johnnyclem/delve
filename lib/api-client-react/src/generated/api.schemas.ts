@@ -154,6 +154,8 @@ export interface CharacterSheet {
   spellSlots?: CharacterSheetSpellSlots;
   inventory?: string[];
   notes?: string;
+  /** Optional 5e SRD background label (e.g. "Soldier", "Acolyte"). Not required for back-compat with characters created before backgrounds were tracked. */
+  background?: string;
   asiHistory?: AsiHistoryEntry[];
 }
 

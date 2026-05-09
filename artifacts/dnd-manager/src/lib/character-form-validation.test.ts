@@ -28,6 +28,7 @@ const validForm: CharacterFormValidatableState = {
   name: "Thalion",
   resolvedRace: "Elf",
   resolvedClass: "Wizard",
+  resolvedBackground: "Sage",
   scorePool: fullPool,
   abilityAssignments: { ...fullAssign },
   maxHp: 10,

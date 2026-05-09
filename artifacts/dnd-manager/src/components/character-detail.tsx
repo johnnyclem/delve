@@ -651,6 +651,9 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
           <p className="text-muted-foreground">
             Level <span className="font-mono tabular-nums">{char.level}</span> {char.race} {char.class} — played by {char.ownerDisplayName}
           </p>
+          <p className="text-xs text-muted-foreground mt-1" data-testid="text-character-background">
+            Background: <span className="text-foreground">{char.sheetJson?.background?.trim() ? char.sheetJson.background : "—"}</span>
+          </p>
           {isOwner && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input
