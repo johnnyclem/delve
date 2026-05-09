@@ -47,18 +47,35 @@ export class TemplateMissingError extends Error {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// src/lib → ../../assets
-const TEMPLATE_PATH = join(__dirname, "..", "..", "assets", "dnd-5e-character-sheet.pdf");
+
+// The template can live in two locations depending on how the server is run:
+//   - From source (vitest, dev): src/lib/character-pdf.ts → ../../assets/...
+//   - From the bundled output (pnpm start, deployed): dist/index.mjs → ./assets/...
+//     (build.mjs copies artifacts/api-server/assets/ to dist/assets/.)
+// Try each candidate path so the same code works in both contexts without
+// depending on a fragile single relative path.
+const TEMPLATE_CANDIDATE_PATHS = [
+  join(__dirname, "..", "..", "assets", "dnd-5e-character-sheet.pdf"),
+  join(__dirname, "assets", "dnd-5e-character-sheet.pdf"),
+];
 
 let templateBytesPromise: Promise<Uint8Array> | null = null;
 
 async function loadTemplateBytes(): Promise<Uint8Array> {
   if (!templateBytesPromise) {
-    templateBytesPromise = readFile(TEMPLATE_PATH).catch((err) => {
+    templateBytesPromise = (async () => {
+      let lastErr: unknown;
+      for (const candidate of TEMPLATE_CANDIDATE_PATHS) {
+        try {
+          return await readFile(candidate);
+        } catch (err) {
+          lastErr = err;
+        }
+      }
       // Reset cache on failure so a later request can retry after the asset is added.
       templateBytesPromise = null;
-      throw new TemplateMissingError(TEMPLATE_PATH, err);
-    });
+      throw new TemplateMissingError(TEMPLATE_CANDIDATE_PATHS.join(", "), lastErr);
+    })();
   }
   return templateBytesPromise;
 }
