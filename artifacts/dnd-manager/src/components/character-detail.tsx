@@ -20,7 +20,16 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
-import { DND_RACES, DND_CLASSES, CUSTOM_OPTION_VALUE, proficiencyBonusForLevel } from "@/lib/dnd-options";
+import {
+  DND_RACES,
+  DND_CLASSES,
+  CUSTOM_OPTION_VALUE,
+  proficiencyBonusForLevel,
+  computeLevelUpSuggestion,
+  suggestionHasChanges,
+  type LevelUpSuggestion,
+  type SpellSlotMap,
+} from "@/lib/dnd-options";
 import { PortraitCropperDialog } from "@/components/portrait-cropper-dialog";
 
 interface DetailsDraft {
@@ -54,6 +63,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const [editSheet, setEditSheet] = useState<CharacterSheet | null>(null);
   const [editingDetails, setEditingDetails] = useState(false);
   const [detailsDraft, setDetailsDraft] = useState<DetailsDraft | null>(null);
+  const [applyLevelUp, setApplyLevelUp] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [urlInputOpen, setUrlInputOpen] = useState(false);
   const [urlInputValue, setUrlInputValue] = useState("");
@@ -94,6 +104,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const startEditingDetails = () => {
     if (!char) return;
     setDetailsDraft(buildDetailsDraft(char));
+    setApplyLevelUp(true);
     setEditingDetails(true);
   };
 
@@ -116,6 +127,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
     && detailsDraft.level <= 20;
 
   const levelChanged = !!detailsDraft && !!char && detailsDraft.level !== char.level;
+  const levelIncreased = !!detailsDraft && !!char && detailsDraft.level > char.level;
   const currentProficiencyBonus = char?.sheetJson?.proficiencyBonus ?? 2;
   const expectedForOldLevel = char ? proficiencyBonusForLevel(char.level, homebrewRules) : 2;
   // Auto-progression is suppressed in two cases:
@@ -135,6 +147,21 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
     && newProficiencyBonus !== null
     && newProficiencyBonus !== currentProficiencyBonus;
 
+  const levelUpClass = resolvedDraftClass.trim();
+  const levelUpSuggestion: LevelUpSuggestion | null =
+    levelIncreased && char && levelUpClass !== ""
+      ? computeLevelUpSuggestion(
+          levelUpClass,
+          char.level,
+          detailsDraft!.level,
+          char.sheetJson?.constitution ?? 10,
+        )
+      : null;
+  const showLevelUpPreview =
+    !!levelUpSuggestion && (levelUpSuggestion.isStandardClass
+      ? suggestionHasChanges(levelUpSuggestion)
+      : true);
+
   const saveDetails = () => {
     if (!detailsDraft || !detailsValid || !char) return;
     const data: {
@@ -149,12 +176,48 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
       class: resolvedDraftClass.trim(),
       level: detailsDraft.level,
     };
+    let nextSheet: CharacterSheet | undefined;
     if (detailsDraft.level !== char.level && !skipAutoRecalc && newProficiencyBonus !== null) {
-      data.sheetJson = {
+      nextSheet = {
         ...char.sheetJson,
         proficiencyBonus: newProficiencyBonus,
       };
     }
+    if (
+      levelUpSuggestion
+      && levelUpSuggestion.isStandardClass
+      && applyLevelUp
+      && showLevelUpPreview
+    ) {
+      const base: CharacterSheet = nextSheet ?? { ...char.sheetJson };
+      if (levelUpSuggestion.hpGain > 0) {
+        const newMax = (base.maxHp ?? 0) + levelUpSuggestion.hpGain;
+        const hpDelta = newMax - (base.maxHp ?? 0);
+        base.maxHp = newMax;
+        base.currentHp = Math.max(0, (base.currentHp ?? 0) + hpDelta);
+      }
+      if (levelUpSuggestion.newSpellSlots) {
+        const merged: SpellSlotMap = {};
+        const prevSlots = base.spellSlots ?? {};
+        for (const [lvl, slot] of Object.entries(levelUpSuggestion.newSpellSlots)) {
+          const prevUsed = prevSlots[lvl]?.used ?? 0;
+          merged[lvl] = { total: slot.total, used: Math.min(prevUsed, slot.total) };
+        }
+        base.spellSlots = merged;
+      }
+      if (levelUpSuggestion.features.length > 0) {
+        const featureLines = levelUpSuggestion.features
+          .map((f) => `• Level ${f.level}: ${f.names.join(", ")}`)
+          .join("\n");
+        const header = `Level-up (to ${detailsDraft.level}):`;
+        const addition = `${header}\n${featureLines}`;
+        base.notes = base.notes && base.notes.trim() !== ""
+          ? `${base.notes}\n\n${addition}`
+          : addition;
+      }
+      nextSheet = base;
+    }
+    if (nextSheet) data.sheetJson = nextSheet;
     updateMutation.mutate(
       { id, data },
       {
@@ -467,6 +530,80 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
               </button>
             )}
           </div>
+          {showLevelUpPreview && levelUpSuggestion && char && (
+            <div
+              className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3"
+              data-testid="level-up-preview"
+            >
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <h4 className="font-semibold text-sm text-foreground">
+                  Level up: {char.level} → {detailsDraft!.level}
+                </h4>
+                {!levelUpSuggestion.isStandardClass && (
+                  <span
+                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                    data-testid="text-level-up-custom-class"
+                  >
+                    Custom class — features unknown
+                  </span>
+                )}
+              </div>
+              <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-5">
+                {levelUpSuggestion.hpGain > 0 && (
+                  <li data-testid="text-level-up-hp">
+                    Max HP: <span className="font-mono tabular-nums text-foreground">+{levelUpSuggestion.hpGain}</span>{" "}
+                    (avg d{levelUpSuggestion.hitDie} per level + CON modifier)
+                  </li>
+                )}
+                {levelUpSuggestion.newSpellSlots && (
+                  <li data-testid="text-level-up-slots">
+                    Spell slots become:{" "}
+                    <span className="font-mono tabular-nums text-foreground">
+                      {Object.entries(levelUpSuggestion.newSpellSlots)
+                        .sort(([a], [b]) => Number(a) - Number(b))
+                        .map(([lvl, s]) => `L${lvl}:${s.total}`)
+                        .join(" ")}
+                    </span>
+                  </li>
+                )}
+                {levelUpSuggestion.newCantripsKnown !== null
+                  && levelUpSuggestion.prevCantripsKnown !== null
+                  && levelUpSuggestion.newCantripsKnown > levelUpSuggestion.prevCantripsKnown && (
+                  <li data-testid="text-level-up-cantrips">
+                    Cantrips known:{" "}
+                    <span className="font-mono tabular-nums text-foreground">
+                      {levelUpSuggestion.prevCantripsKnown} → {levelUpSuggestion.newCantripsKnown}
+                    </span>{" "}
+                    (pick a new cantrip on your sheet)
+                  </li>
+                )}
+                {levelUpSuggestion.features.map((f) => (
+                  <li key={f.level} data-testid={`text-level-up-features-${f.level}`}>
+                    Level {f.level} features:{" "}
+                    <span className="text-foreground">{f.names.join(", ")}</span>
+                  </li>
+                ))}
+                {levelUpSuggestion.isStandardClass
+                  && levelUpSuggestion.hpGain === 0
+                  && !levelUpSuggestion.newSpellSlots
+                  && levelUpSuggestion.features.length === 0 && (
+                  <li>No automatic changes for this class at this level.</li>
+                )}
+              </ul>
+              {levelUpSuggestion.isStandardClass && (
+                <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 rounded border-border accent-primary"
+                    checked={applyLevelUp}
+                    onChange={(e) => setApplyLevelUp(e.target.checked)}
+                    data-testid="checkbox-apply-level-up"
+                  />
+                  Apply these changes to the sheet when I save
+                </label>
+              )}
+            </div>
+          )}
           <div className="flex gap-2">
             <Button
               size="sm"

@@ -28,6 +28,7 @@ import {
   RECOMMENDED_ABILITY_ORDER,
   DEFAULT_ABILITY_ORDER,
   type AbilityName,
+  type SpellSlotMap,
 } from "@/lib/dnd-options";
 import {
   rollAbilityScores,
@@ -119,6 +120,7 @@ interface FormState {
   inventory: string[];
   newInventoryItem: string;
   notes: string;
+  spellSlots: SpellSlotMap | null;
 }
 
 function makeChipId(): string {
@@ -158,6 +160,7 @@ const defaultForm: FormState = {
   inventory: [],
   newInventoryItem: "",
   notes: "",
+  spellSlots: null,
 };
 
 function clampInt(value: number, min: number, max: number, fallback: number): number {
@@ -483,6 +486,7 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       skills: form.skills,
       inventory: fullInventory.length > 0 ? fullInventory : undefined,
       notes: form.notes || undefined,
+      spellSlots: form.spellSlots ?? undefined,
     };
 
     const body: CreateCharacterBody = {
