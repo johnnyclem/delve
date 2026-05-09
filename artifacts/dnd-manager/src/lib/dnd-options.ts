@@ -11,6 +11,42 @@ export const DND_CLASSES = [
 
 export const CUSTOM_OPTION_VALUE = "__custom";
 
+export type AbilityName =
+  | "strength"
+  | "dexterity"
+  | "constitution"
+  | "intelligence"
+  | "wisdom"
+  | "charisma";
+
+export const ABILITY_ORDER: readonly AbilityName[] = [
+  "strength", "dexterity", "constitution",
+  "intelligence", "wisdom", "charisma",
+];
+
+// Suggested ability priority for each SRD class — used by the
+// "Auto-assign for my class" shortcut on the character creation wizard.
+// The first entry receives the highest rolled score, etc. Custom classes
+// fall back to a neutral STR-first order.
+export const RECOMMENDED_ABILITY_ORDER: Record<string, readonly AbilityName[]> = {
+  Barbarian:  ["strength",     "constitution", "dexterity",    "wisdom",       "charisma",     "intelligence"],
+  Bard:       ["charisma",     "dexterity",    "constitution", "wisdom",       "intelligence", "strength"],
+  Cleric:     ["wisdom",       "constitution", "strength",     "charisma",     "dexterity",    "intelligence"],
+  Druid:      ["wisdom",       "constitution", "dexterity",    "intelligence", "charisma",     "strength"],
+  Fighter:    ["strength",     "constitution", "dexterity",    "wisdom",       "charisma",     "intelligence"],
+  Monk:       ["dexterity",    "wisdom",       "constitution", "strength",     "charisma",     "intelligence"],
+  Paladin:    ["strength",     "charisma",     "constitution", "wisdom",       "dexterity",    "intelligence"],
+  Ranger:     ["dexterity",    "wisdom",       "constitution", "strength",     "intelligence", "charisma"],
+  Rogue:      ["dexterity",    "constitution", "intelligence", "wisdom",       "charisma",     "strength"],
+  Sorcerer:   ["charisma",     "constitution", "dexterity",    "wisdom",       "intelligence", "strength"],
+  Warlock:    ["charisma",     "constitution", "dexterity",    "wisdom",       "intelligence", "strength"],
+  Wizard:     ["intelligence", "constitution", "dexterity",    "wisdom",       "charisma",     "strength"],
+};
+
+export const DEFAULT_ABILITY_ORDER: readonly AbilityName[] = [
+  "strength", "constitution", "dexterity", "wisdom", "charisma", "intelligence",
+];
+
 export interface CampaignHomebrewRulesLike {
   disableProficiencyAutoProgression?: boolean;
   proficiencyBonusByLevel?: number[];
