@@ -477,6 +477,53 @@ export const ListCharactersResponseItem = zod.object({
           ),
       )
       .optional(),
+    levelHistory: zod
+      .array(
+        zod
+          .object({
+            level: zod.number().describe("The character level reached."),
+            hpGained: zod
+              .number()
+              .describe(
+                "Total HP added at this level (after CON modifier, minimum 1).",
+              ),
+            hpMethod: zod.enum(["roll", "average", "manual"]).optional(),
+            hpRoll: zod
+              .number()
+              .optional()
+              .describe(
+                'Raw hit-die value rolled before applying CON, when hpMethod is \"roll\".',
+              ),
+            asiBoosts: zod
+              .array(
+                zod.object({
+                  ability: zod.enum([
+                    "strength",
+                    "dexterity",
+                    "constitution",
+                    "intelligence",
+                    "wisdom",
+                    "charisma",
+                  ]),
+                  delta: zod.number(),
+                }),
+              )
+              .optional()
+              .describe("Ability score increases applied at this level."),
+            featNote: zod
+              .string()
+              .optional()
+              .describe("Description of the feat taken at this level, if any."),
+            featuresLearned: zod
+              .array(zod.string())
+              .optional()
+              .describe("Class features unlocked at this level."),
+          })
+          .describe(
+            "A record of what was gained when the character reached this level.",
+          ),
+      )
+      .optional(),
   }),
   portraitUrl: zod.string().nullish(),
   isActive: zod.boolean(),
@@ -575,6 +622,55 @@ export const CreateCharacterBody = zod.object({
             ),
         )
         .optional(),
+      levelHistory: zod
+        .array(
+          zod
+            .object({
+              level: zod.number().describe("The character level reached."),
+              hpGained: zod
+                .number()
+                .describe(
+                  "Total HP added at this level (after CON modifier, minimum 1).",
+                ),
+              hpMethod: zod.enum(["roll", "average", "manual"]).optional(),
+              hpRoll: zod
+                .number()
+                .optional()
+                .describe(
+                  'Raw hit-die value rolled before applying CON, when hpMethod is \"roll\".',
+                ),
+              asiBoosts: zod
+                .array(
+                  zod.object({
+                    ability: zod.enum([
+                      "strength",
+                      "dexterity",
+                      "constitution",
+                      "intelligence",
+                      "wisdom",
+                      "charisma",
+                    ]),
+                    delta: zod.number(),
+                  }),
+                )
+                .optional()
+                .describe("Ability score increases applied at this level."),
+              featNote: zod
+                .string()
+                .optional()
+                .describe(
+                  "Description of the feat taken at this level, if any.",
+                ),
+              featuresLearned: zod
+                .array(zod.string())
+                .optional()
+                .describe("Class features unlocked at this level."),
+            })
+            .describe(
+              "A record of what was gained when the character reached this level.",
+            ),
+        )
+        .optional(),
     })
     .optional(),
   portraitUrl: zod.string().nullish(),
@@ -670,6 +766,53 @@ export const GetCharacterResponse = zod.object({
           })
           .describe(
             "A record of an ability score boost taken at a specific level.",
+          ),
+      )
+      .optional(),
+    levelHistory: zod
+      .array(
+        zod
+          .object({
+            level: zod.number().describe("The character level reached."),
+            hpGained: zod
+              .number()
+              .describe(
+                "Total HP added at this level (after CON modifier, minimum 1).",
+              ),
+            hpMethod: zod.enum(["roll", "average", "manual"]).optional(),
+            hpRoll: zod
+              .number()
+              .optional()
+              .describe(
+                'Raw hit-die value rolled before applying CON, when hpMethod is \"roll\".',
+              ),
+            asiBoosts: zod
+              .array(
+                zod.object({
+                  ability: zod.enum([
+                    "strength",
+                    "dexterity",
+                    "constitution",
+                    "intelligence",
+                    "wisdom",
+                    "charisma",
+                  ]),
+                  delta: zod.number(),
+                }),
+              )
+              .optional()
+              .describe("Ability score increases applied at this level."),
+            featNote: zod
+              .string()
+              .optional()
+              .describe("Description of the feat taken at this level, if any."),
+            featuresLearned: zod
+              .array(zod.string())
+              .optional()
+              .describe("Class features unlocked at this level."),
+          })
+          .describe(
+            "A record of what was gained when the character reached this level.",
           ),
       )
       .optional(),
@@ -772,6 +915,55 @@ export const UpdateCharacterBody = zod.object({
             ),
         )
         .optional(),
+      levelHistory: zod
+        .array(
+          zod
+            .object({
+              level: zod.number().describe("The character level reached."),
+              hpGained: zod
+                .number()
+                .describe(
+                  "Total HP added at this level (after CON modifier, minimum 1).",
+                ),
+              hpMethod: zod.enum(["roll", "average", "manual"]).optional(),
+              hpRoll: zod
+                .number()
+                .optional()
+                .describe(
+                  'Raw hit-die value rolled before applying CON, when hpMethod is \"roll\".',
+                ),
+              asiBoosts: zod
+                .array(
+                  zod.object({
+                    ability: zod.enum([
+                      "strength",
+                      "dexterity",
+                      "constitution",
+                      "intelligence",
+                      "wisdom",
+                      "charisma",
+                    ]),
+                    delta: zod.number(),
+                  }),
+                )
+                .optional()
+                .describe("Ability score increases applied at this level."),
+              featNote: zod
+                .string()
+                .optional()
+                .describe(
+                  "Description of the feat taken at this level, if any.",
+                ),
+              featuresLearned: zod
+                .array(zod.string())
+                .optional()
+                .describe("Class features unlocked at this level."),
+            })
+            .describe(
+              "A record of what was gained when the character reached this level.",
+            ),
+        )
+        .optional(),
     })
     .optional(),
   portraitUrl: zod.string().nullish(),
@@ -860,6 +1052,53 @@ export const UpdateCharacterResponse = zod.object({
           })
           .describe(
             "A record of an ability score boost taken at a specific level.",
+          ),
+      )
+      .optional(),
+    levelHistory: zod
+      .array(
+        zod
+          .object({
+            level: zod.number().describe("The character level reached."),
+            hpGained: zod
+              .number()
+              .describe(
+                "Total HP added at this level (after CON modifier, minimum 1).",
+              ),
+            hpMethod: zod.enum(["roll", "average", "manual"]).optional(),
+            hpRoll: zod
+              .number()
+              .optional()
+              .describe(
+                'Raw hit-die value rolled before applying CON, when hpMethod is \"roll\".',
+              ),
+            asiBoosts: zod
+              .array(
+                zod.object({
+                  ability: zod.enum([
+                    "strength",
+                    "dexterity",
+                    "constitution",
+                    "intelligence",
+                    "wisdom",
+                    "charisma",
+                  ]),
+                  delta: zod.number(),
+                }),
+              )
+              .optional()
+              .describe("Ability score increases applied at this level."),
+            featNote: zod
+              .string()
+              .optional()
+              .describe("Description of the feat taken at this level, if any."),
+            featuresLearned: zod
+              .array(zod.string())
+              .optional()
+              .describe("Class features unlocked at this level."),
+          })
+          .describe(
+            "A record of what was gained when the character reached this level.",
           ),
       )
       .optional(),

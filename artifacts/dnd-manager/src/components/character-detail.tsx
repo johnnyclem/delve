@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check } from "lucide-react";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check, ChevronDown, History, Sparkles, Dice5 } from "lucide-react";
 import LevelUpModal from "@/components/level-up-modal";
 import { Button } from "@/components/ui/button";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership, useGetCampaign } from "@workspace/api-client-react";
@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
@@ -1137,6 +1138,10 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
             </div>
           )}
 
+          {!editing && (sheet.levelHistory?.length ?? 0) > 0 && (
+            <LevelingHistoryPanel entries={sheet.levelHistory ?? []} />
+          )}
+
           {(sheet.notes || editing) && (
             <div className="rounded-2xl glass-panel p-5 md:col-span-2 lg:col-span-3">
               <h3 className="font-semibold text-sm text-foreground mb-3">Notes</h3>
@@ -1207,6 +1212,94 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
         onCancel={handleCropCancel}
         onCropped={handleCropDone}
       />
+    </div>
+  );
+}
+
+const ABILITY_ABBR: Record<string, string> = {
+  strength: "STR",
+  dexterity: "DEX",
+  constitution: "CON",
+  intelligence: "INT",
+  wisdom: "WIS",
+  charisma: "CHA",
+};
+
+function LevelingHistoryPanel({
+  entries,
+}: {
+  entries: NonNullable<CharacterSheet["levelHistory"]>;
+}) {
+  const [open, setOpen] = useState(false);
+  const sorted = [...entries].sort((a, b) => a.level - b.level);
+  return (
+    <div className="rounded-2xl glass-panel p-5 md:col-span-2 lg:col-span-3" data-testid="leveling-history">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="w-full flex items-center justify-between text-left"
+            data-testid="button-toggle-leveling-history"
+          >
+            <h3 className="font-semibold text-sm text-foreground flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" /> Leveling history
+              <span className="text-xs text-muted-foreground font-normal">
+                ({sorted.length} {sorted.length === 1 ? "entry" : "entries"})
+              </span>
+            </h3>
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3">
+          <ol className="space-y-2">
+            {sorted.map((e, idx) => (
+              <li
+                key={`${e.level}-${idx}`}
+                className="rounded-lg bg-[rgba(255,255,255,0.04)] p-3 text-sm"
+                data-testid={`leveling-history-entry-${e.level}`}
+              >
+                <div className="flex items-baseline justify-between gap-2 mb-1">
+                  <p className="font-semibold text-foreground">Level {e.level}</p>
+                  <p className="text-xs text-muted-foreground font-mono tabular-nums flex items-center gap-1">
+                    <Heart className="h-3 w-3 text-red-400" /> +{e.hpGained} HP
+                    {e.hpMethod === "roll" && typeof e.hpRoll === "number" && (
+                      <span className="ml-1 inline-flex items-center gap-0.5">
+                        <Dice5 className="h-3 w-3" /> {e.hpRoll}
+                      </span>
+                    )}
+                    {e.hpMethod === "average" && <span className="ml-1">(avg)</span>}
+                    {e.hpMethod === "manual" && <span className="ml-1">(manual)</span>}
+                  </p>
+                </div>
+                {e.asiBoosts && e.asiBoosts.length > 0 && (
+                  <p className="text-xs text-muted-foreground" data-testid={`leveling-history-asi-${e.level}`}>
+                    ASI:{" "}
+                    {e.asiBoosts
+                      .map((b) => `+${b.delta} ${ABILITY_ABBR[b.ability] ?? b.ability.slice(0, 3).toUpperCase()}`)
+                      .join(", ")}
+                  </p>
+                )}
+                {e.featNote && (
+                  <p className="text-xs text-muted-foreground" data-testid={`leveling-history-feat-${e.level}`}>
+                    Feat: {e.featNote}
+                  </p>
+                )}
+                {e.featuresLearned && e.featuresLearned.length > 0 && (
+                  <p
+                    className="text-xs text-muted-foreground flex items-start gap-1"
+                    data-testid={`leveling-history-features-${e.level}`}
+                  >
+                    <Sparkles className="h-3 w-3 mt-0.5 text-primary flex-shrink-0" />
+                    <span>{e.featuresLearned.join(", ")}</span>
+                  </p>
+                )}
+              </li>
+            ))}
+          </ol>
+        </CollapsibleContent>
+      </Collapsible>
     </div>
   );
 }

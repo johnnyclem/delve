@@ -134,6 +134,51 @@ export interface AsiHistoryEntry {
   delta: number;
 }
 
+export type LevelHistoryEntryHpMethod =
+  (typeof LevelHistoryEntryHpMethod)[keyof typeof LevelHistoryEntryHpMethod];
+
+export const LevelHistoryEntryHpMethod = {
+  roll: "roll",
+  average: "average",
+  manual: "manual",
+} as const;
+
+export type LevelHistoryEntryAsiBoostsItemAbility =
+  (typeof LevelHistoryEntryAsiBoostsItemAbility)[keyof typeof LevelHistoryEntryAsiBoostsItemAbility];
+
+export const LevelHistoryEntryAsiBoostsItemAbility = {
+  strength: "strength",
+  dexterity: "dexterity",
+  constitution: "constitution",
+  intelligence: "intelligence",
+  wisdom: "wisdom",
+  charisma: "charisma",
+} as const;
+
+export type LevelHistoryEntryAsiBoostsItem = {
+  ability: LevelHistoryEntryAsiBoostsItemAbility;
+  delta: number;
+};
+
+/**
+ * A record of what was gained when the character reached this level.
+ */
+export interface LevelHistoryEntry {
+  /** The character level reached. */
+  level: number;
+  /** Total HP added at this level (after CON modifier, minimum 1). */
+  hpGained: number;
+  hpMethod?: LevelHistoryEntryHpMethod;
+  /** Raw hit-die value rolled before applying CON, when hpMethod is "roll". */
+  hpRoll?: number;
+  /** Ability score increases applied at this level. */
+  asiBoosts?: LevelHistoryEntryAsiBoostsItem[];
+  /** Description of the feat taken at this level, if any. */
+  featNote?: string;
+  /** Class features unlocked at this level. */
+  featuresLearned?: string[];
+}
+
 export interface CharacterSheet {
   strength: number;
   dexterity: number;
@@ -158,6 +203,7 @@ export interface CharacterSheet {
   /** Optional 5e SRD background label (e.g. "Soldier", "Acolyte"). Not required for back-compat with characters created before backgrounds were tracked. */
   background?: string;
   asiHistory?: AsiHistoryEntry[];
+  levelHistory?: LevelHistoryEntry[];
 }
 
 export interface Character {

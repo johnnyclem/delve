@@ -1189,6 +1189,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AsiHistoryEntry"
+        levelHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/LevelHistoryEntry"
       required:
         - strength
         - dexterity
@@ -1239,6 +1243,57 @@ components:
         - level
         - ability
         - delta
+
+    LevelHistoryEntry:
+      type: object
+      description: A record of what was gained when the character reached this level.
+      properties:
+        level:
+          type: integer
+          description: The character level reached.
+        hpGained:
+          type: integer
+          description: Total HP added at this level (after CON modifier, minimum 1).
+        hpMethod:
+          type: string
+          enum:
+            - roll
+            - average
+            - manual
+        hpRoll:
+          type: integer
+          description: Raw hit-die value rolled before applying CON, when hpMethod is "roll".
+        asiBoosts:
+          type: array
+          description: Ability score increases applied at this level.
+          items:
+            type: object
+            properties:
+              ability:
+                type: string
+                enum:
+                  - strength
+                  - dexterity
+                  - constitution
+                  - intelligence
+                  - wisdom
+                  - charisma
+              delta:
+                type: integer
+            required:
+              - ability
+              - delta
+        featNote:
+          type: string
+          description: Description of the feat taken at this level, if any.
+        featuresLearned:
+          type: array
+          description: Class features unlocked at this level.
+          items:
+            type: string
+      required:
+        - level
+        - hpGained
 
     Spell:
       type: object

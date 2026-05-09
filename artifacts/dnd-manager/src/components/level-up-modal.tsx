@@ -41,7 +41,7 @@ import {
   getListCharactersQueryKey,
   getGetRecentRollsQueryKey,
 } from "@workspace/api-client-react";
-import type { Character, CharacterSheet } from "@workspace/api-client-react";
+import type { Character, CharacterSheet, LevelHistoryEntry } from "@workspace/api-client-react";
 import { CLASS_DATA, getNewFeaturesAtLevel, modifierFor, type HitDieSize } from "@/lib/dnd-srd";
 import { ABILITY_ORDER, type AbilityName } from "@/lib/dnd-options";
 import { rollHitDie } from "@/lib/dice";
@@ -220,6 +220,14 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
     let bonusHp = hpDelta;
     let nextSheet: CharacterSheet = { ...working.sheet };
 
+    const historyEntry: LevelHistoryEntry = {
+      level: pass.toLevel,
+      hpGained: hpDelta,
+      ...(pass.hpMethod ? { hpMethod: pass.hpMethod } : {}),
+      ...(pass.hpMethod === "roll" && pass.hpRoll !== null ? { hpRoll: pass.hpRoll } : {}),
+      ...(newFeatures.length > 0 ? { featuresLearned: newFeatures.map((f) => f.name) } : {}),
+    };
+
     if (asiNeeded && pass.asi.kind !== "none") {
       if (pass.asi.kind === "plus2" || pass.asi.kind === "plus1x2") {
         const before = readAbilityScores(working.sheet);
@@ -236,8 +244,10 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
           ...after,
           asiHistory: [...(working.sheet.asiHistory ?? []), ...newEntries],
         } as CharacterSheet;
+        historyEntry.asiBoosts = newEntries.map((e) => ({ ability: e.ability, delta: e.delta }));
       } else if (pass.asi.kind === "feat") {
         nextSheet = { ...nextSheet, notes: appendFeatNote(working.sheet.notes, pass.toLevel, pass.asi.description) };
+        historyEntry.featNote = pass.asi.description.trim();
         // Curated feat picks land on a structured `feats` list so they show
         // up on the sheet, not just buried in notes.
         if (pass.asi.featId) {
@@ -256,10 +266,12 @@ export default function LevelUpModal({ character, targetLevel, open, onClose }: 
       }
     }
 
+    historyEntry.hpGained = bonusHp;
     nextSheet = {
       ...nextSheet,
       maxHp: (working.sheet.maxHp ?? 0) + bonusHp,
       currentHp: (working.sheet.currentHp ?? 0) + bonusHp,
+      levelHistory: [...(working.sheet.levelHistory ?? []), historyEntry],
     };
 
     updateMutation.mutate(
