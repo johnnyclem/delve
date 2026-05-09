@@ -286,6 +286,9 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
       setForm((prev) => ({
         ...prev,
         hitDie: classInfo.hitDie,
+        // Re-arm HP auto-derivation so picking a class always applies the
+        // hitDie + CON formula even if the user had tweaked HP earlier.
+        maxHpAuto: true,
         // Replace existing saves with the class-mandated set (player may add extras).
         savingThrows: Array.from(new Set([...lockedLabels])),
         // Filter to allowed skills AND trim to the class's count so swapping from
@@ -1021,12 +1024,18 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
             </div>
 
             {/* Starting equipment picker */}
-            {classInfo && (
+            {classInfo && (() => {
+              const derivedEquipment = classInfo.startingEquipmentOptions.flatMap((slot) => {
+                const idx = form.equipmentChoices[slot.slot];
+                if (idx === undefined || idx === -1) return [];
+                return slot.choices[idx]?.items ?? [];
+              });
+              return (
               <div className="space-y-3" data-testid="equipment-picker">
                 <Label>Starting Equipment</Label>
                 <div className="space-y-3">
                   {classInfo.startingEquipmentOptions.map((slot) => {
-                    const selected = form.equipmentChoices[slot.slot];
+                    const selected = form.equipmentChoices[slot.slot] as number | undefined;
                     return (
                       <div key={slot.slot} className="rounded-lg border border-border/50 bg-muted/10 p-3 space-y-2">
                         <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
@@ -1078,8 +1087,21 @@ export default function CharacterCreateForm({ onCancel, onCreated }: { onCancel:
                     );
                   })}
                 </div>
+                {derivedEquipment.length > 0 && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-1" data-testid="equipment-preview">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
+                      Items added from your picks
+                    </p>
+                    <ul className="text-xs text-foreground list-disc pl-5 space-y-0.5">
+                      {derivedEquipment.map((item, i) => (
+                        <li key={`${item}-${i}`}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-            )}
+              );
+            })()}
 
             {/* Racial Traits + Class Features (read-only flavor cards) */}
             {(raceInfo || classInfo) && (
