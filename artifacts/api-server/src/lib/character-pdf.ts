@@ -1,8 +1,6 @@
 import { PDFDocument, type PDFForm } from "pdf-lib";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import type { charactersTable } from "@workspace/db";
+import { AssetMissingError, getAssetCandidatePaths, loadAsset } from "./assets";
 
 type Character = typeof charactersTable.$inferSelect;
 
@@ -37,6 +35,8 @@ interface CharacterSheet {
   spellSlots?: Record<string, { total?: number; used?: number }>;
 }
 
+const TEMPLATE_REL_PATH = "dnd-5e-character-sheet.pdf";
+
 export class TemplateMissingError extends Error {
   constructor(public readonly templatePath: string, cause?: unknown) {
     super(`5e character sheet template not configured at ${templatePath}`);
@@ -45,36 +45,21 @@ export class TemplateMissingError extends Error {
   }
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// The template can live in two locations depending on how the server is run:
-//   - From source (vitest, dev): src/lib/character-pdf.ts → ../../assets/...
-//   - From the bundled output (pnpm start, deployed): dist/index.mjs → ./assets/...
-//     (build.mjs copies artifacts/api-server/assets/ to dist/assets/.)
-// Try each candidate path so the same code works in both contexts without
-// depending on a fragile single relative path.
-const TEMPLATE_CANDIDATE_PATHS = [
-  join(__dirname, "..", "..", "assets", "dnd-5e-character-sheet.pdf"),
-  join(__dirname, "assets", "dnd-5e-character-sheet.pdf"),
-];
-
 let templateBytesPromise: Promise<Uint8Array> | null = null;
 
 async function loadTemplateBytes(): Promise<Uint8Array> {
   if (!templateBytesPromise) {
     templateBytesPromise = (async () => {
-      let lastErr: unknown;
-      for (const candidate of TEMPLATE_CANDIDATE_PATHS) {
-        try {
-          return await readFile(candidate);
-        } catch (err) {
-          lastErr = err;
-        }
+      try {
+        return await loadAsset(TEMPLATE_REL_PATH);
+      } catch (err) {
+        // Reset cache on failure so a later request can retry after the asset is added.
+        templateBytesPromise = null;
+        const candidates = err instanceof AssetMissingError
+          ? err.candidates
+          : getAssetCandidatePaths(TEMPLATE_REL_PATH);
+        throw new TemplateMissingError(candidates.join(", "), err);
       }
-      // Reset cache on failure so a later request can retry after the asset is added.
-      templateBytesPromise = null;
-      throw new TemplateMissingError(TEMPLATE_CANDIDATE_PATHS.join(", "), lastErr);
     })();
   }
   return templateBytesPromise;
