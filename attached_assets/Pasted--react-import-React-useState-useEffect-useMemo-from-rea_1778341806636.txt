@@ -1,0 +1,473 @@
+```react
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, onSnapshot, query, deleteDoc } from 'firebase/firestore';
+import { 
+  User, Shield, Zap, Book, Scroll, Sword, Flame, Ghost, 
+  ChevronRight, ChevronLeft, Save, Trash2, Plus, 
+  CheckCircle2, Sparkles, Wand2, Heart, Scale, HelpCircle
+} from 'lucide-react';
+
+// --- Firebase Setup ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'dnd-character-forge';
+
+// --- Data definitions ---
+const RACES = [
+  { id: 'human', name: 'Human', emoji: '🧑', bonus: 'All Stats +1', desc: 'Versatile and ambitious, humans are the most common race.', stats: { str: 1, dex: 1, con: 1, int: 1, wis: 1, cha: 1 } },
+  { id: 'elf', name: 'Elf', emoji: '🧝', bonus: 'Dex +2, Int +1', desc: 'Magical people of long lifespans, living in the world but not entirely part of it.', stats: { dex: 2, int: 1 } },
+  { id: 'dwarf', name: 'Dwarf', emoji: '🧔', bonus: 'Con +2, Str +2', desc: 'Bold and hardy, dwarves are known as skilled warriors and miners.', stats: { con: 2, str: 2 } },
+  { id: 'halfling', name: 'Halfling', emoji: '🧒', bonus: 'Dex +2, Cha +1', desc: 'Small and resilient, halflings survive in a world of giants by staying out of sight.', stats: { dex: 2, cha: 1 } },
+  { id: 'dragonborn', name: 'Dragonborn', emoji: '🐉', bonus: 'Str +2, Cha +1', desc: 'Dragonborn look very much like dragons standing erect in humanoid form.', stats: { str: 2, cha: 1 } }
+];
+
+const CLASSES = [
+  { id: 'fighter', name: 'Fighter', icon: <Sword size={24}/>, hd: 10, prime: 'str', desc: 'Masters of martial combat, skilled with a variety of weapons and armor.', skills: ['Athletics', 'Perception'] },
+  { id: 'wizard', name: 'Wizard', icon: <Wand2 size={24}/>, hd: 6, prime: 'int', desc: 'Scholarly magic-users capable of manipulating the structures of reality.', skills: ['Arcana', 'History'] },
+  { id: 'rogue', name: 'Rogue', icon: <Zap size={24}/>, hd: 8, prime: 'dex', desc: 'Scoundrels who use stealth and trickery to overcome obstacles and enemies.', skills: ['Stealth', 'Acrobatics'] },
+  { id: 'cleric', name: 'Cleric', icon: <Flame size={24}/>, hd: 8, prime: 'wis', desc: 'Priestly champions who wield divine magic in service of a higher power.', skills: ['Insight', 'Medicine'] },
+  { id: 'paladin', name: 'Paladin', icon: <Shield size={24}/>, hd: 10, prime: 'cha', desc: 'Holy warriors bound by a sacred oath to uphold justice and righteousness.', skills: ['Persuasion', 'Religion'] }
+];
+
+const BACKGROUNDS = [
+  { id: 'soldier', name: 'Soldier', bonus: 'Athletics, Intimidation', desc: 'You were a professional warrior, trained in a military force.' },
+  { id: 'acolyte', name: 'Acolyte', bonus: 'Insight, Religion', desc: 'You have spent your life in service to a temple.' },
+  { id: 'criminal', name: 'Criminal', bonus: 'Deception, Stealth', desc: 'You have a history of breaking the law.' },
+  { id: 'sage', name: 'Sage', bonus: 'Arcana, History', desc: 'You spent years learning the lore of the multiverse.' }
+];
+
+const STEPS = ['IDENTITY', 'RACE', 'CLASS', 'ABILITIES', 'REVIEW'];
+
+const INITIAL_STATS = { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 };
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [characters, setCharacters] = useState([]);
+  const [step, setStep] = useState(0); // 0 = Dashboard/List, 1-5 = Creation Wizard
+  const [currentStep, setCurrentStep] = useState('DASHBOARD');
+  
+  // Character State
+  const [charData, setCharData] = useState({
+    name: '',
+    race: null,
+    class: null,
+    background: null,
+    stats: { ...INITIAL_STATS },
+    level: 1
+  });
+
+  // --- Auth & Data ---
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const charRef = collection(db, 'artifacts', appId, 'users', user.uid, 'characters');
+    const unsubscribe = onSnapshot(query(charRef), (snapshot) => {
+      setCharacters(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  // --- Logic ---
+  const calculateModifier = (score) => Math.floor((score - 10) / 2);
+
+  const getFinalStats = useMemo(() => {
+    const final = { ...charData.stats };
+    if (charData.race) {
+      Object.entries(charData.race.stats || {}).forEach(([stat, bonus]) => {
+        final[stat] += bonus;
+      });
+    }
+    return final;
+  }, [charData.stats, charData.race]);
+
+  const handleSave = async () => {
+    if (!user) return;
+    const id = charData.id || `char_${Date.now()}`;
+    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'characters', id), {
+      ...charData,
+      id,
+      finalStats: getFinalStats,
+      updatedAt: Date.now()
+    });
+    setCurrentStep('DASHBOARD');
+  };
+
+  const deleteCharacter = async (e, id) => {
+    e.stopPropagation();
+    if (confirm("Delete this character sheet?")) {
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'characters', id));
+    }
+  };
+
+  // --- Views ---
+  const renderDashboard = () => (
+    <div className="max-w-5xl mx-auto p-6 md:p-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col md:flex-row items-center justify-between mb-12 gap-6">
+        <div>
+          <h1 className="text-5xl font-black text-white mb-2 tracking-tight">Character Vault</h1>
+          <p className="text-stone-400">Manage your heroes and legends across the multiverse.</p>
+        </div>
+        <button 
+          onClick={() => {
+            setCharData({ name: '', race: null, class: null, background: null, stats: { ...INITIAL_STATS }, level: 1 });
+            setCurrentStep('IDENTITY');
+          }}
+          className="group flex items-center gap-3 px-8 py-4 bg-amber-600 hover:bg-amber-500 text-white rounded-2xl font-bold transition-all shadow-xl hover:-translate-y-1"
+        >
+          <Plus size={20} className="group-hover:rotate-90 transition-transform" /> 
+          New Character
+        </button>
+      </div>
+
+      {characters.length === 0 ? (
+        <div className="bg-stone-900/50 border-2 border-dashed border-stone-800 rounded-3xl p-20 text-center">
+          <div className="w-20 h-20 bg-stone-800 rounded-full flex items-center justify-center mx-auto mb-6 text-stone-500">
+            <User size={40} />
+          </div>
+          <h3 className="text-xl font-bold text-stone-300">Your vault is empty</h3>
+          <p className="text-stone-500 mt-2">Every legend starts with a single step. Create your first hero today.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {characters.map(char => (
+            <div 
+              key={char.id} 
+              onClick={() => { setCharData(char); setCurrentStep('REVIEW'); }}
+              className="bg-stone-900 border border-stone-800 p-6 rounded-2xl hover:border-amber-500/50 cursor-pointer transition-all group relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 p-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={(e) => deleteCharacter(e, char.id)} className="text-stone-500 hover:text-red-400 p-2"><Trash2 size={16}/></button>
+              </div>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="text-4xl">{char.race?.emoji || '👤'}</div>
+                <div>
+                  <h3 className="font-bold text-white text-lg">{char.name || 'Unnamed Hero'}</h3>
+                  <p className="text-xs text-amber-500 uppercase font-black tracking-widest">Lv. {char.level} {char.class?.name}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mt-4">
+                {Object.entries(char.finalStats || {}).map(([stat, val]) => (
+                  <div key={stat} className="bg-stone-950 p-2 rounded text-center border border-stone-800/50">
+                    <div className="text-[10px] uppercase font-bold text-stone-500">{stat}</div>
+                    <div className="text-sm font-bold text-stone-200">{val}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderWizardFrame = (title, subtitle, content) => {
+    const currentIndex = STEPS.indexOf(currentStep);
+    return (
+      <div className="min-h-screen bg-stone-950 flex flex-col">
+        <div className="h-2 bg-stone-900 w-full overflow-hidden">
+          <div 
+            className="h-full bg-amber-600 transition-all duration-700 ease-out" 
+            style={{ width: `${((currentIndex + 1) / STEPS.length) * 100}%` }}
+          ></div>
+        </div>
+
+        <div className="flex-1 flex flex-col p-6 md:p-12 animate-in fade-in duration-500">
+          <div className="max-w-4xl mx-auto w-full flex-1 flex flex-col">
+            <header className="mb-12">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-xs font-black uppercase tracking-widest text-amber-500">Step {currentIndex + 1} of {STEPS.length}</span>
+                <button onClick={() => setCurrentStep('DASHBOARD')} className="text-stone-500 hover:text-stone-300 transition-colors">
+                  <Trash2 size={18} />
+                </button>
+              </div>
+              <h2 className="text-5xl font-black text-white mb-2 tracking-tight">{title}</h2>
+              <p className="text-stone-400 text-lg leading-relaxed max-w-2xl">{subtitle}</p>
+            </header>
+
+            <div className="flex-1">
+              {content}
+            </div>
+
+            <footer className="mt-12 flex justify-between items-center py-8 border-t border-stone-900">
+              <button 
+                onClick={() => setCurrentStep(STEPS[currentIndex - 1] || 'DASHBOARD')}
+                className="flex items-center gap-2 px-6 py-3 rounded-xl text-stone-400 hover:text-white hover:bg-stone-900 transition-all"
+              >
+                <ChevronLeft size={20}/> Back
+              </button>
+              <button 
+                disabled={currentIndex === STEPS.length - 1}
+                onClick={() => setCurrentStep(STEPS[currentIndex + 1])}
+                className="flex items-center gap-2 px-8 py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 text-white rounded-xl font-bold transition-all shadow-xl"
+              >
+                Next <ChevronRight size={20}/>
+              </button>
+            </footer>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderIdentity = () => renderWizardFrame(
+    "Choose your name",
+    "How shall the bards remember you? A name is the first thread in your destiny's tapestry.",
+    <div className="space-y-8">
+      <div>
+        <label className="block text-xs font-bold uppercase text-stone-500 tracking-widest mb-3">Character Name</label>
+        <input 
+          autoFocus
+          value={charData.name}
+          onChange={(e) => setCharData({...charData, name: e.target.value})}
+          placeholder="e.g. Valerius the Bold"
+          className="w-full bg-stone-900 border-2 border-stone-800 focus:border-amber-500 rounded-2xl p-6 text-2xl font-bold outline-none text-white transition-all"
+        />
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {BACKGROUNDS.map(bg => (
+          <button 
+            key={bg.id}
+            onClick={() => setCharData({...charData, background: bg})}
+            className={`p-6 rounded-2xl border-2 text-left transition-all ${charData.background?.id === bg.id ? 'bg-amber-500/10 border-amber-500' : 'bg-stone-900 border-stone-800 hover:border-stone-600'}`}
+          >
+            <div className="font-bold text-white mb-1">{bg.name}</div>
+            <div className="text-sm text-stone-400 mb-2">{bg.desc}</div>
+            <div className="text-[10px] font-black uppercase text-amber-500 tracking-widest">{bg.bonus}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderRace = () => renderWizardFrame(
+    "Choose your Origin",
+    "Your race provides your base physical traits and cultural heritage.",
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {RACES.map(race => (
+        <button 
+          key={race.id}
+          onClick={() => setCharData({...charData, race})}
+          className={`group flex items-start gap-4 p-6 rounded-3xl border-2 transition-all ${charData.race?.id === race.id ? 'bg-amber-500/10 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.1)]' : 'bg-stone-900 border-stone-800 hover:border-stone-600'}`}
+        >
+          <div className="text-5xl shrink-0 transition-transform group-hover:scale-110">{race.emoji}</div>
+          <div className="text-left">
+            <h4 className="text-xl font-bold text-white mb-1">{race.name}</h4>
+            <p className="text-sm text-stone-400 mb-3 line-clamp-2">{race.desc}</p>
+            <div className="inline-block px-3 py-1 bg-stone-950 border border-stone-800 rounded-full text-[10px] font-black text-amber-500 uppercase tracking-widest">
+              {race.bonus}
+            </div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderClass = () => renderWizardFrame(
+    "Choose your Calling",
+    "Your class determines your role in the party and the powers you command.",
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {CLASSES.map(cls => (
+        <button 
+          key={cls.id}
+          onClick={() => setCharData({...charData, class: cls})}
+          className={`group flex items-center gap-6 p-6 rounded-3xl border-2 transition-all ${charData.class?.id === cls.id ? 'bg-amber-500/10 border-amber-500' : 'bg-stone-900 border-stone-800 hover:border-stone-600'}`}
+        >
+          <div className={`p-4 rounded-2xl ${charData.class?.id === cls.id ? 'bg-amber-600 text-white' : 'bg-stone-800 text-stone-400'}`}>
+            {cls.icon}
+          </div>
+          <div className="text-left">
+            <h4 className="text-xl font-bold text-white mb-1">{cls.name}</h4>
+            <p className="text-xs text-stone-500 uppercase font-black mb-1">d{cls.hd} Hit Die • Prof: {cls.skills.join(', ')}</p>
+            <p className="text-sm text-stone-400">{cls.desc}</p>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+
+  const renderAbilities = () => renderWizardFrame(
+    "Shape your Potential",
+    "Assign your ability scores. We've provided the Standard Array (15, 14, 13, 12, 10, 8) to get you started.",
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        {Object.keys(charData.stats).map(stat => {
+          const base = charData.stats[stat];
+          const bonus = charData.race?.stats[stat] || 0;
+          const total = base + bonus;
+          const mod = calculateModifier(total);
+          
+          return (
+            <div key={stat} className="bg-stone-900 border border-stone-800 rounded-3xl p-6 text-center relative overflow-hidden group">
+              <div className="absolute top-0 left-0 w-full h-1 bg-stone-800 group-hover:bg-amber-500 transition-colors"></div>
+              <div className="text-xs font-black uppercase text-stone-500 tracking-widest mb-2">{stat}</div>
+              <div className="text-4xl font-black text-white mb-4">
+                {total}
+                {bonus > 0 && <span className="text-xs text-green-500 align-top ml-1">+{bonus}</span>}
+              </div>
+              <div className="text-lg font-bold text-amber-500 bg-stone-950 w-12 h-12 flex items-center justify-center rounded-full mx-auto border border-stone-800">
+                {mod >= 0 ? `+${mod}` : mod}
+              </div>
+              <div className="mt-6 flex items-center justify-center gap-4">
+                <button 
+                  onClick={() => setCharData({...charData, stats: {...charData.stats, [stat]: Math.max(8, base - 1)}})}
+                  className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 flex items-center justify-center text-white"
+                >-</button>
+                <button 
+                  onClick={() => setCharData({...charData, stats: {...charData.stats, [stat]: Math.min(18, base + 1)}})}
+                  className="w-8 h-8 rounded-lg bg-stone-800 hover:bg-stone-700 flex items-center justify-center text-white"
+                >+</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="bg-amber-900/10 border border-amber-900/30 rounded-2xl p-4 flex gap-4 items-center">
+        <HelpCircle className="text-amber-500 shrink-0" />
+        <p className="text-sm text-stone-400">Higher numbers make your d20 rolls more likely to succeed. <strong>{charData.class?.name}s</strong> usually want high <strong>{charData.class?.prime}</strong>.</p>
+      </div>
+    </div>
+  );
+
+  const renderReview = () => {
+    const finalStats = getFinalStats;
+    const hp = (charData.class?.hd || 10) + calculateModifier(finalStats.con);
+    
+    return (
+      <div className="min-h-screen bg-stone-950 p-6 md:p-12 overflow-y-auto">
+        <div className="max-w-4xl mx-auto space-y-8 animate-in zoom-in-95 duration-500">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setCurrentStep('ABILITIES')} className="text-stone-500 hover:text-white flex items-center gap-2 font-bold"><ChevronLeft size={20}/> Back to Forge</button>
+            <button onClick={handleSave} className="px-8 py-3 bg-green-600 hover:bg-green-500 text-white font-black rounded-xl shadow-xl flex items-center gap-2"><Save size={20}/> Complete Legend</button>
+          </div>
+
+          <div className="bg-stone-900 border-2 border-stone-800 rounded-[32px] overflow-hidden shadow-2xl">
+            {/* Header section */}
+            <div className="p-8 md:p-12 bg-gradient-to-br from-stone-800 to-stone-900 flex flex-col md:flex-row items-center gap-8 border-b border-stone-800">
+              <div className="w-32 h-32 bg-stone-950 rounded-[40px] flex items-center justify-center text-6xl shadow-inner border border-stone-700">
+                {charData.race?.emoji}
+              </div>
+              <div className="text-center md:text-left flex-1">
+                <h1 className="text-5xl font-black text-white mb-2 leading-tight">{charData.name || 'Hero of the Realm'}</h1>
+                <div className="flex flex-wrap justify-center md:justify-start gap-3">
+                  <span className="px-4 py-1.5 bg-amber-600 text-white text-sm font-black rounded-full uppercase">Level {charData.level} {charData.class?.name}</span>
+                  <span className="px-4 py-1.5 bg-stone-700 text-stone-200 text-sm font-black rounded-full uppercase">{charData.race?.name}</span>
+                  <span className="px-4 py-1.5 bg-stone-700 text-stone-200 text-sm font-black rounded-full uppercase">{charData.background?.name}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Combat stats bar */}
+            <div className="grid grid-cols-2 md:grid-cols-4 bg-stone-950/50 p-6 divide-x divide-stone-800">
+              <StatBlock label="Armor Class" val={10 + calculateModifier(finalStats.dex)} sub="10 + DEX" />
+              <StatBlock label="Initiative" val={calculateModifier(finalStats.dex)} sub="DEX Mod" />
+              <StatBlock label="Max HP" val={hp} sub={`d${charData.class?.hd} + CON`} />
+              <StatBlock label="Proficiency" val="+2" sub="Level 1 Bonus" />
+            </div>
+
+            {/* Main content */}
+            <div className="p-8 md:p-12 grid grid-cols-1 md:grid-cols-12 gap-12">
+              {/* Left col: Scores */}
+              <div className="md:col-span-4 space-y-4">
+                <h3 className="text-xs font-black text-stone-500 uppercase tracking-[0.3em] mb-6">Core Statistics</h3>
+                {Object.entries(finalStats).map(([stat, val]) => (
+                  <div key={stat} className="flex items-center justify-between p-4 bg-stone-950/50 rounded-2xl border border-stone-800 hover:border-amber-500/30 transition-colors">
+                    <div>
+                      <div className="text-[10px] font-black uppercase text-stone-500">{stat}</div>
+                      <div className="text-lg font-bold text-stone-300">{val}</div>
+                    </div>
+                    <div className="text-2xl font-black text-amber-500">
+                      {calculateModifier(val) >= 0 ? `+${calculateModifier(val)}` : calculateModifier(val)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Right col: Details */}
+              <div className="md:col-span-8 space-y-8">
+                <section>
+                  <h3 className="text-xs font-black text-stone-500 uppercase tracking-[0.3em] mb-4">Class Features & Skills</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-6 bg-stone-800/30 rounded-3xl border border-stone-800">
+                      <div className="flex items-center gap-2 text-amber-500 mb-3">
+                        <Sparkles size={18} /> <span className="font-bold uppercase text-xs">Skill Proficiencies</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {[...(charData.class?.skills || []), ...(charData.background?.bonus?.split(', ') || [])].map(skill => (
+                          <span key={skill} className="px-3 py-1 bg-stone-900 rounded-lg text-xs border border-stone-700 text-stone-300">{skill}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="p-6 bg-stone-800/30 rounded-3xl border border-stone-800">
+                      <div className="flex items-center gap-2 text-amber-500 mb-3">
+                        <Scroll size={18} /> <span className="font-bold uppercase text-xs">Standard Equipment</span>
+                      </div>
+                      <p className="text-sm text-stone-400">Includes primary weapon, traveler's clothes, explorer's pack, and 10gp.</p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="bg-stone-950 p-8 rounded-[32px] border border-stone-800">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-amber-600 rounded-xl text-white"><Book size={20}/></div>
+                    <h3 className="text-xl font-bold text-white">Your Legend</h3>
+                  </div>
+                  <p className="text-stone-400 leading-relaxed italic">
+                    "From the origin of a <strong>{charData.background?.name}</strong>, {charData.name} stepped forth into the world. As a <strong>{charData.race?.name} {charData.class?.name}</strong>, they wield the strength of {finalStats.str} and the resolve of {finalStats.con}. Their journey begins at level 1, bound for greatness."
+                  </p>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-stone-950 text-stone-200">
+      {currentStep === 'DASHBOARD' && renderDashboard()}
+      {currentStep === 'IDENTITY' && renderIdentity()}
+      {currentStep === 'RACE' && renderRace()}
+      {currentStep === 'CLASS' && renderClass()}
+      {currentStep === 'ABILITIES' && renderAbilities()}
+      {currentStep === 'REVIEW' && renderReview()}
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-in { animation: 0.5s ease-out forwards; }
+        .fade-in { animation-name: fade-in; }
+        .slide-in-from-bottom-4 { animation-name: slide-up; }
+      `}} />
+    </div>
+  );
+};
+
+const StatBlock = ({ label, val, sub }) => (
+  <div className="p-6 text-center">
+    <div className="text-[10px] font-black uppercase text-stone-500 tracking-widest mb-1">{label}</div>
+    <div className="text-3xl font-black text-white">{val}</div>
+    <div className="text-[9px] text-stone-600 font-bold uppercase">{sub}</div>
+  </div>
+);
+
+export default App;
+
+```
