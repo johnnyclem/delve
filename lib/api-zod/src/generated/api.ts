@@ -44,6 +44,66 @@ export const GetStorageObjectParams = zod.object({
 });
 
 /**
+ * @summary Full-text search the SRD reference content
+ */
+
+export const searchRulesQueryLimitMax = 50;
+
+export const SearchRulesQueryParams = zod.object({
+  q: zod.coerce.string().min(1),
+  edition: zod.enum(["2014", "2024"]).optional(),
+  kind: zod.coerce.string().optional(),
+  limit: zod.coerce.number().min(1).max(searchRulesQueryLimitMax).optional(),
+});
+
+export const SearchRulesResponse = zod.object({
+  edition: zod.enum(["2014", "2024"]),
+  query: zod.string(),
+  hits: zod.array(
+    zod.object({
+      id: zod.number(),
+      edition: zod.enum(["2014", "2024"]),
+      entityKind: zod.string(),
+      entitySlug: zod.string(),
+      section: zod.string().nullish(),
+      title: zod.string(),
+      snippet: zod
+        .string()
+        .describe("Plaintext excerpt with the matched terms."),
+      sourceUrl: zod.string().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Look up a single SRD reference entity by kind and slug
+ */
+export const GetRuleParams = zod.object({
+  kind: zod.coerce.string(),
+  slug: zod.coerce.string(),
+});
+
+export const GetRuleQueryParams = zod.object({
+  edition: zod.enum(["2014", "2024"]).optional(),
+});
+
+export const GetRuleResponse = zod.object({
+  edition: zod.enum(["2014", "2024"]),
+  entityKind: zod.string(),
+  entitySlug: zod.string(),
+  title: zod.string(),
+  sourceUrl: zod.string().nullish(),
+  chunks: zod.array(
+    zod.object({
+      id: zod.number(),
+      section: zod.string().nullish(),
+      title: zod.string(),
+      bodyMd: zod.string(),
+    }),
+  ),
+});
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
@@ -87,6 +147,9 @@ export const GetCampaignResponse = zod.object({
     .describe(
       "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
     ),
+  defaultEdition: zod
+    .enum(["2014", "2024"])
+    .describe("Default SRD edition used by rules lookup and AI features."),
   createdAt: zod.coerce.date(),
 });
 
@@ -123,6 +186,10 @@ export const UpdateCampaignBody = zod.object({
     .describe(
       "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
     ),
+  defaultEdition: zod
+    .enum(["2014", "2024"])
+    .optional()
+    .describe("Default SRD edition for rules lookup and AI features."),
 });
 
 export const updateCampaignResponseHomebrewRulesProficiencyBonusByLevelMin = 20;
@@ -158,6 +225,9 @@ export const UpdateCampaignResponse = zod.object({
     .describe(
       "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
     ),
+  defaultEdition: zod
+    .enum(["2014", "2024"])
+    .describe("Default SRD edition used by rules lookup and AI features."),
   createdAt: zod.coerce.date(),
 });
 
@@ -203,6 +273,9 @@ export const GetDashboardResponse = zod.object({
       .describe(
         "DM-managed overrides for standard 5e mechanics. Empty object means the\ncampaign uses standard 5e rules.\n",
       ),
+    defaultEdition: zod
+      .enum(["2014", "2024"])
+      .describe("Default SRD edition used by rules lookup and AI features."),
     createdAt: zod.coerce.date(),
   }),
   nextEvent: zod

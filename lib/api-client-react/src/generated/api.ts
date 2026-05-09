@@ -35,6 +35,7 @@ import type {
   ErrorResponse,
   EventInviteLog,
   GeneratedRecap,
+  GetRuleParams,
   HealthStatus,
   Map,
   MapSummary,
@@ -48,6 +49,9 @@ import type {
   ResendNotificationResult,
   RollDiceBody,
   Rsvp,
+  RuleEntity,
+  RuleSearchResponse,
+  SearchRulesParams,
   SessionLog,
   SuccessResponse,
   UpdateCampaignBody,
@@ -325,6 +329,204 @@ export function useGetStorageObject<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetStorageObjectQueryOptions(objectPath, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Full-text search the SRD reference content
+ */
+export const getSearchRulesUrl = (params: SearchRulesParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/rules/search?${stringifiedParams}`
+    : `/api/rules/search`;
+};
+
+export const searchRules = async (
+  params: SearchRulesParams,
+  options?: RequestInit,
+): Promise<RuleSearchResponse> => {
+  return customFetch<RuleSearchResponse>(getSearchRulesUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getSearchRulesQueryKey = (params?: SearchRulesParams) => {
+  return [`/api/rules/search`, ...(params ? [params] : [])] as const;
+};
+
+export const getSearchRulesQueryOptions = <
+  TData = Awaited<ReturnType<typeof searchRules>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: SearchRulesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getSearchRulesQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof searchRules>>> = ({
+    signal,
+  }) => searchRules(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof searchRules>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type SearchRulesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof searchRules>>
+>;
+export type SearchRulesQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Full-text search the SRD reference content
+ */
+
+export function useSearchRules<
+  TData = Awaited<ReturnType<typeof searchRules>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params: SearchRulesParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof searchRules>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getSearchRulesQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Look up a single SRD reference entity by kind and slug
+ */
+export const getGetRuleUrl = (
+  kind: string,
+  slug: string,
+  params?: GetRuleParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/rules/${kind}/${slug}?${stringifiedParams}`
+    : `/api/rules/${kind}/${slug}`;
+};
+
+export const getRule = async (
+  kind: string,
+  slug: string,
+  params?: GetRuleParams,
+  options?: RequestInit,
+): Promise<RuleEntity> => {
+  return customFetch<RuleEntity>(getGetRuleUrl(kind, slug, params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRuleQueryKey = (
+  kind: string,
+  slug: string,
+  params?: GetRuleParams,
+) => {
+  return [`/api/rules/${kind}/${slug}`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetRuleQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRule>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  kind: string,
+  slug: string,
+  params?: GetRuleParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getRule>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetRuleQueryKey(kind, slug, params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRule>>> = ({
+    signal,
+  }) => getRule(kind, slug, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!(kind && slug),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getRule>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetRuleQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRule>>
+>;
+export type GetRuleQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Look up a single SRD reference entity by kind and slug
+ */
+
+export function useGetRule<
+  TData = Awaited<ReturnType<typeof getRule>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  kind: string,
+  slug: string,
+  params?: GetRuleParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getRule>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRuleQueryOptions(kind, slug, params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

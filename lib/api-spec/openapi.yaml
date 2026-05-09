@@ -27,6 +27,8 @@ tags:
     description: Dashboard summary
   - name: maps
     description: Battle maps with server-enforced fog of war
+  - name: rules
+    description: SRD reference lookup
   - name: Storage
     description: Object storage upload and serving endpoints.
 
@@ -111,6 +113,86 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /rules/search:
+    get:
+      operationId: searchRules
+      tags: [rules]
+      summary: Full-text search the SRD reference content
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+        - name: edition
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["2014", "2024"]
+        - name: kind
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        "200":
+          description: Matching reference chunks ordered by relevance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuleSearchResponse"
+        "400":
+          description: Missing or invalid query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /rules/{kind}/{slug}:
+    get:
+      operationId: getRule
+      tags: [rules]
+      summary: Look up a single SRD reference entity by kind and slug
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: edition
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["2014", "2024"]
+      responses:
+        "200":
+          description: Reference entity (one or more chunks)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuleEntity"
+        "404":
+          description: No matching entity in this edition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /healthz:
     get:
       operationId: healthCheck
@@ -1098,6 +1180,10 @@ components:
           description: IANA time-zone identifier (e.g. "America/New_York"). Defaults to "UTC".
         homebrewRules:
           $ref: "#/components/schemas/CampaignHomebrewRules"
+        defaultEdition:
+          type: string
+          enum: ["2014", "2024"]
+          description: Default SRD edition used by rules lookup and AI features.
         createdAt:
           type: string
           format: date-time
@@ -1107,6 +1193,7 @@ components:
         - dmUserId
         - timezone
         - homebrewRules
+        - defaultEdition
         - createdAt
 
     CampaignHomebrewRules:
@@ -1140,6 +1227,10 @@ components:
           description: IANA time-zone identifier (e.g. "America/Los_Angeles").
         homebrewRules:
           $ref: "#/components/schemas/CampaignHomebrewRules"
+        defaultEdition:
+          type: string
+          enum: ["2014", "2024"]
+          description: Default SRD edition for rules lookup and AI features.
 
     CampaignMember:
       type: object
@@ -2114,6 +2205,93 @@ components:
         - short
         - medium
         - long
+
+    RuleSearchHit:
+      type: object
+      properties:
+        id:
+          type: integer
+        edition:
+          type: string
+          enum: ["2014", "2024"]
+        entityKind:
+          type: string
+        entitySlug:
+          type: string
+        section:
+          type: ["string", "null"]
+        title:
+          type: string
+        snippet:
+          type: string
+          description: Plaintext excerpt with the matched terms.
+        sourceUrl:
+          type: ["string", "null"]
+      required:
+        - id
+        - edition
+        - entityKind
+        - entitySlug
+        - title
+        - snippet
+
+    RuleSearchResponse:
+      type: object
+      properties:
+        edition:
+          type: string
+          enum: ["2014", "2024"]
+        query:
+          type: string
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuleSearchHit"
+      required:
+        - edition
+        - query
+        - hits
+
+    RuleChunk:
+      type: object
+      properties:
+        id:
+          type: integer
+        section:
+          type: ["string", "null"]
+        title:
+          type: string
+        bodyMd:
+          type: string
+      required:
+        - id
+        - title
+        - bodyMd
+
+    RuleEntity:
+      type: object
+      properties:
+        edition:
+          type: string
+          enum: ["2014", "2024"]
+        entityKind:
+          type: string
+        entitySlug:
+          type: string
+        title:
+          type: string
+        sourceUrl:
+          type: ["string", "null"]
+        chunks:
+          type: array
+          items:
+            $ref: "#/components/schemas/RuleChunk"
+      required:
+        - edition
+        - entityKind
+        - entitySlug
+        - title
+        - chunks
 
     UpdateNotificationPrefsBody:
       type: object

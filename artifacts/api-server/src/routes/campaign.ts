@@ -25,10 +25,18 @@ router.patch("/campaign", requireAuth, async (req, res): Promise<void> => {
   }
 
   const updates: Record<string, unknown> = {};
-  const { timezone, homebrewRules } = (req.body ?? {}) as {
+  const { timezone, homebrewRules, defaultEdition } = (req.body ?? {}) as {
     timezone?: unknown;
     homebrewRules?: unknown;
+    defaultEdition?: unknown;
   };
+  if (defaultEdition !== undefined) {
+    if (defaultEdition !== "2014" && defaultEdition !== "2024") {
+      res.status(400).json({ error: "defaultEdition must be '2014' or '2024'" });
+      return;
+    }
+    updates.defaultEdition = defaultEdition;
+  }
   if (timezone !== undefined) {
     if (typeof timezone !== "string" || !isValidTimeZone(timezone)) {
       res.status(400).json({ error: "Invalid IANA timezone identifier" });

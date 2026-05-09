@@ -29,6 +29,17 @@ export interface ErrorResponse {
 }
 
 /**
+ * Default SRD edition used by rules lookup and AI features.
+ */
+export type CampaignDefaultEdition =
+  (typeof CampaignDefaultEdition)[keyof typeof CampaignDefaultEdition];
+
+export const CampaignDefaultEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+/**
  * DM-managed overrides for standard 5e mechanics. Empty object means the
 campaign uses standard 5e rules.
 
@@ -58,13 +69,28 @@ export interface Campaign {
   /** IANA time-zone identifier (e.g. "America/New_York"). Defaults to "UTC". */
   timezone: string;
   homebrewRules: CampaignHomebrewRules;
+  /** Default SRD edition used by rules lookup and AI features. */
+  defaultEdition: CampaignDefaultEdition;
   createdAt: string;
 }
+
+/**
+ * Default SRD edition for rules lookup and AI features.
+ */
+export type UpdateCampaignBodyDefaultEdition =
+  (typeof UpdateCampaignBodyDefaultEdition)[keyof typeof UpdateCampaignBodyDefaultEdition];
+
+export const UpdateCampaignBodyDefaultEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
 
 export interface UpdateCampaignBody {
   /** IANA time-zone identifier (e.g. "America/Los_Angeles"). */
   timezone?: string;
   homebrewRules?: CampaignHomebrewRules;
+  /** Default SRD edition for rules lookup and AI features. */
+  defaultEdition?: UpdateCampaignBodyDefaultEdition;
 }
 
 export type CampaignMemberRole =
@@ -647,6 +673,68 @@ export interface DashboardSummary {
   sessionTrend: SessionTrendPoint[];
 }
 
+export type RuleSearchHitEdition =
+  (typeof RuleSearchHitEdition)[keyof typeof RuleSearchHitEdition];
+
+export const RuleSearchHitEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export interface RuleSearchHit {
+  id: number;
+  edition: RuleSearchHitEdition;
+  entityKind: string;
+  entitySlug: string;
+  /** @nullable */
+  section?: string | null;
+  title: string;
+  /** Plaintext excerpt with the matched terms. */
+  snippet: string;
+  /** @nullable */
+  sourceUrl?: string | null;
+}
+
+export type RuleSearchResponseEdition =
+  (typeof RuleSearchResponseEdition)[keyof typeof RuleSearchResponseEdition];
+
+export const RuleSearchResponseEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export interface RuleSearchResponse {
+  edition: RuleSearchResponseEdition;
+  query: string;
+  hits: RuleSearchHit[];
+}
+
+export interface RuleChunk {
+  id: number;
+  /** @nullable */
+  section?: string | null;
+  title: string;
+  bodyMd: string;
+}
+
+export type RuleEntityEdition =
+  (typeof RuleEntityEdition)[keyof typeof RuleEntityEdition];
+
+export const RuleEntityEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export interface RuleEntity {
+  edition: RuleEntityEdition;
+  entityKind: string;
+  entitySlug: string;
+  title: string;
+  /** @nullable */
+  sourceUrl?: string | null;
+  chunks: RuleChunk[];
+}
+
 export interface UpdateNotificationPrefsBody {
   emailNotifications?: boolean;
   /**
@@ -769,6 +857,40 @@ export interface UpdateMapBody {
   /** @maxItems 50 */
   tokens?: MapToken[];
 }
+
+export type SearchRulesParams = {
+  /**
+   * @minLength 1
+   */
+  q: string;
+  edition?: SearchRulesEdition;
+  kind?: string;
+  /**
+   * @minimum 1
+   * @maximum 50
+   */
+  limit?: number;
+};
+
+export type SearchRulesEdition =
+  (typeof SearchRulesEdition)[keyof typeof SearchRulesEdition];
+
+export const SearchRulesEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export type GetRuleParams = {
+  edition?: GetRuleEdition;
+};
+
+export type GetRuleEdition =
+  (typeof GetRuleEdition)[keyof typeof GetRuleEdition];
+
+export const GetRuleEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
 
 export type DeleteEventParams = {
   series?: boolean;

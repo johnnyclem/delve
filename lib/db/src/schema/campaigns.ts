@@ -28,6 +28,9 @@ export const campaignsTable = pgTable("campaigns", {
   // DM-managed overrides for standard 5e mechanics. See
   // `CampaignHomebrewRules` for the supported shape.
   homebrewRules: jsonb("homebrew_rules").$type<CampaignHomebrewRules>().notNull().default({}),
+  // Default SRD edition for rules lookup / RAG within this campaign. Either
+  // '2014' (Player's Handbook 5.1 / 2014) or '2024' (5.2 / 2024).
+  defaultEdition: text("default_edition").notNull().default("2024").$type<"2014" | "2024">(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

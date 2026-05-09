@@ -5,10 +5,22 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "srd:setup": "tsx ./src/srd/setup.ts",
+    "srd:extract": "tsx ./src/srd/extract.ts",
+    "srd:ingest": "tsx ./src/srd/ingest.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@workspace/db": "workspace:*",
+    "@workspace/integrations-openai-ai-server": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "openai": "^6.27.0",
+    "p-limit": "^7.3.0",
+    "turndown": "^7.2.2"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/turndown": "^5.0.5",
     "tsx": "catalog:"
   }
 }

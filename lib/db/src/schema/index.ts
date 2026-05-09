@@ -9,3 +9,4 @@ export * from "./recap_views";
 export * from "./notification_logs";
 export * from "./maps";
 export * from "./npcs";
+export * from "./reference_chunks";
