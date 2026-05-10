@@ -1,5 +1,6 @@
 import { pgTable, text, serial, timestamp, integer, index } from "drizzle-orm/pg-core";
 import { campaignsTable } from "./campaigns";
+import { charactersTable } from "./characters";
 
 export const chatThreadsTable = pgTable("chat_threads", {
   id: serial("id").primaryKey(),
@@ -7,6 +8,7 @@ export const chatThreadsTable = pgTable("chat_threads", {
   userId: text("user_id").notNull(),
   title: text("title").notNull().default("New conversation"),
   summary: text("summary"),
+  speakingAsCharacterId: integer("speaking_as_character_id").references(() => charactersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [

@@ -350,6 +350,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Character"
 
+  /characters/speakable:
+    get:
+      operationId: listSpeakableCharacters
+      tags: [characters]
+      summary: List characters the current user can "speak as" in chat (own active characters; DM gets all)
+      responses:
+        "200":
+          description: Speakable characters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpeakableCharacter"
+
   /characters/{id}:
     get:
       operationId: getCharacter
@@ -3122,6 +3137,9 @@ components:
         conversationId:
           type: ["integer", "null"]
           description: Existing thread ID to continue. If omitted or null, a new thread is created.
+        speakingAsCharacterId:
+          type: ["integer", "null"]
+          description: Character to speak as on this turn. Persisted on the thread for future turns. Server re-validates ownership (or DM override) every turn.
 
     HomebrewRule:
       type: object
@@ -3234,7 +3252,7 @@ components:
       properties:
         source:
           type: string
-          enum: [srd-2014, srd-2024, campaign, homebrew]
+          enum: [srd-2014, srd-2024, campaign, homebrew, character]
         entityKind:
           type: string
         entityName:
@@ -3281,6 +3299,9 @@ components:
           type: integer
         title:
           type: string
+        speakingAsCharacterId:
+          type: ["integer", "null"]
+          description: Character the user has chosen to speak as on this thread, if any.
         createdAt:
           type: string
           format: date-time
@@ -3296,7 +3317,30 @@ components:
           type: string
           minLength: 1
           maxLength: 200
-      required: [title]
+        speakingAsCharacterId:
+          type: ["integer", "null"]
+          description: Set the character the user is speaking as on this thread, or null to clear.
+
+    SpeakableCharacter:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        race:
+          type: string
+        class:
+          type: string
+        level:
+          type: integer
+        portraitUrl:
+          type: ["string", "null"]
+        ownerUserId:
+          type: string
+        ownerDisplayName:
+          type: string
+      required: [id, name, race, class, level, ownerUserId, ownerDisplayName]
 
     ChatThreadMessage:
       type: object

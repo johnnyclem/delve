@@ -5,6 +5,7 @@ import {
   campaignsTable,
   chatThreadsTable,
   chatMessagesTable,
+  charactersTable,
   type SrdEdition,
 } from "@workspace/db";
 import { and, asc, desc, eq } from "drizzle-orm";
@@ -33,13 +34,16 @@ const MAX_MESSAGE_LEN = 2000;
 const HISTORY_VERBATIM_TURNS = 6;
 const SUMMARIZE_AFTER_TURNS = HISTORY_VERBATIM_TURNS + 4;
 
+const speakingAsField = z.union([z.number().int().positive(), z.null()]).optional();
+
 const chatBody = z.object({
   message: z.string().min(1).max(MAX_MESSAGE_LEN),
   conversationId: z.number().int().positive().nullish(),
+  speakingAsCharacterId: speakingAsField,
 });
 
 interface Citation {
-  source: "srd-2014" | "srd-2024" | "campaign" | "homebrew";
+  source: "srd-2014" | "srd-2024" | "campaign" | "homebrew" | "character";
   entityKind: string;
   entityName: string;
   chunkId: number;
@@ -47,15 +51,135 @@ interface Citation {
   sourceUrl?: string | null;
 }
 
+interface MeBlock {
+  contextLines: string[];
+  citation: Citation;
+}
+
+function summariseSheetForChat(char: typeof charactersTable.$inferSelect): MeBlock {
+  const sheet = (char.sheetJson ?? {}) as Record<string, unknown>;
+  const num = (k: string): number | null => {
+    const v = sheet[k];
+    return typeof v === "number" ? v : null;
+  };
+  const arrStr = (k: string, cap = 24): string[] => {
+    const v = sheet[k];
+    if (!Array.isArray(v)) return [];
+    return v.filter((x) => typeof x === "string").slice(0, cap) as string[];
+  };
+
+  const lines: string[] = [];
+  lines.push(`[ME] CHARACTER — ${char.name}`);
+  lines.push(`Race: ${char.race} · Class: ${char.class} · Level: ${char.level}`);
+  const bg = typeof sheet.background === "string" ? sheet.background : null;
+  if (bg) lines.push(`Background: ${bg}`);
+
+  const hp = `${num("currentHp") ?? "?"} / ${num("maxHp") ?? "?"}`;
+  const ac = num("armorClass");
+  const speed = num("speed");
+  const pb = num("proficiencyBonus");
+  lines.push(
+    `HP: ${hp}${ac !== null ? ` · AC: ${ac}` : ""}${speed !== null ? ` · Speed: ${speed}` : ""}${pb !== null ? ` · Prof Bonus: +${pb}` : ""}`,
+  );
+
+  const abilities = ["strength", "dexterity", "constitution", "intelligence", "wisdom", "charisma"]
+    .map((a) => {
+      const v = num(a);
+      return v !== null ? `${a.slice(0, 3).toUpperCase()} ${v}` : null;
+    })
+    .filter((s): s is string => s !== null);
+  if (abilities.length > 0) lines.push(`Abilities: ${abilities.join(", ")}`);
+
+  const saves = arrStr("savingThrows");
+  if (saves.length > 0) lines.push(`Proficient saves: ${saves.join(", ")}`);
+  const skills = arrStr("skills");
+  if (skills.length > 0) lines.push(`Proficient skills: ${skills.join(", ")}`);
+
+  const cantrips = arrStr("cantrips");
+  if (cantrips.length > 0) lines.push(`Cantrips known: ${cantrips.join(", ")}`);
+
+  const spells = sheet.spells;
+  if (Array.isArray(spells) && spells.length > 0) {
+    const formatted = spells
+      .slice(0, 40)
+      .map((s) => {
+        if (!s || typeof s !== "object") return null;
+        const obj = s as Record<string, unknown>;
+        const nm = typeof obj.name === "string" ? obj.name : null;
+        if (!nm) return null;
+        const lvl = typeof obj.level === "number" ? obj.level : null;
+        const prep = obj.prepared === true ? " (prepared)" : "";
+        return `${nm}${lvl !== null ? ` [L${lvl}]` : ""}${prep}`;
+      })
+      .filter((s): s is string => s !== null);
+    if (formatted.length > 0) lines.push(`Spells: ${formatted.join(", ")}`);
+  }
+
+  const slots = sheet.spellSlots;
+  if (slots && typeof slots === "object" && !Array.isArray(slots)) {
+    const slotLines = Object.entries(slots as Record<string, unknown>)
+      .map(([lvl, v]) => {
+        if (!v || typeof v !== "object") return null;
+        const o = v as Record<string, unknown>;
+        const total = typeof o.total === "number" ? o.total : null;
+        const used = typeof o.used === "number" ? o.used : null;
+        if (total === null) return null;
+        return `L${lvl}: ${total - (used ?? 0)}/${total}`;
+      })
+      .filter((s): s is string => s !== null);
+    if (slotLines.length > 0) lines.push(`Spell slots (remaining/total): ${slotLines.join(", ")}`);
+  }
+
+  const feats = arrStr("feats");
+  if (feats.length > 0) lines.push(`Feats: ${feats.join(", ")}`);
+
+  const inventory = arrStr("inventory", 30);
+  if (inventory.length > 0) lines.push(`Inventory: ${inventory.join(", ")}`);
+
+  const attacks = sheet.attacks;
+  if (Array.isArray(attacks) && attacks.length > 0) {
+    const fmt = attacks
+      .slice(0, 12)
+      .map((a) => {
+        if (!a || typeof a !== "object") return null;
+        const o = a as Record<string, unknown>;
+        const nm = typeof o.name === "string" ? o.name : null;
+        if (!nm) return null;
+        const bonus = typeof o.bonus === "number" ? `+${o.bonus} to hit` : null;
+        const dmg = typeof o.damage === "string" ? o.damage : null;
+        return [nm, bonus, dmg].filter(Boolean).join(", ");
+      })
+      .filter((s): s is string => s !== null);
+    if (fmt.length > 0) lines.push(`Attacks: ${fmt.join(" · ")}`);
+  }
+
+  return {
+    contextLines: lines,
+    citation: {
+      source: "character",
+      entityKind: "character",
+      entityName: char.name,
+      chunkId: char.id,
+    },
+  };
+}
+
 function buildContextBlock(
   refHits: ReferenceHit[],
   campHits: CampaignHit[],
   homeHits: HomebrewHit[],
   isDmRequester: boolean,
+  meBlock: MeBlock | null,
 ): { context: string; citations: Citation[] } {
   const lines: string[] = [];
   const citations: Citation[] = [];
   let cursor = 1;
+
+  if (meBlock) {
+    lines.push("## You — the asking user's character (use when the question is personal: \"I\", \"my\", \"me\")");
+    lines.push(meBlock.contextLines.join("\n") + "\n");
+    citations.push(meBlock.citation);
+  }
 
   if (homeHits.length > 0) {
     lines.push("## House rules (override SRD when they conflict)");
@@ -121,6 +245,8 @@ Rules for answering:
 - When campaign-specific context ([C#]) and SRD context ([R#]) both apply, prefer the campaign-specific information (the DM has authored it for this world).
 - If no house rule applies, follow the SRD reference normally.
 - Cite your sources inline using the bracket tags shown in the context (e.g., [C1], [R2]). Use multiple citations when synthesizing across sources.
+- If a [ME] block is present, the user is asking from the perspective of that character. When the question is personal ("I", "my", "me", "our"), prefer the [ME] block — answer concretely from that sheet (name them, list their actual cantrips/spells/HP/feats, etc.) and cite [ME]. Combine with [R#] for rules mechanics when useful.
+- If no [ME] block is present and the user asks a personal question, say you don't know which character is asking and suggest they pick one from the "Speaking as" menu.
 - The user may ask follow-up questions that refer back to earlier turns ("her sister", "the same place", etc.). Use the prior conversation to resolve those references.
 - Be concise. Use markdown for structure when helpful.`;
 
@@ -163,6 +289,7 @@ router.get("/chat/threads", requireAuth, requireCampaignMember, async (req, res)
     .select({
       id: chatThreadsTable.id,
       title: chatThreadsTable.title,
+      speakingAsCharacterId: chatThreadsTable.speakingAsCharacterId,
       createdAt: chatThreadsTable.createdAt,
       updatedAt: chatThreadsTable.updatedAt,
     })
@@ -206,6 +333,7 @@ router.get("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, 
     thread: {
       id: thread.id,
       title: thread.title,
+      speakingAsCharacterId: thread.speakingAsCharacterId,
       createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
     },
@@ -213,9 +341,15 @@ router.get("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, 
   });
 });
 
-const updateThreadBody = z.object({
-  title: z.string().trim().min(1).max(200),
-});
+const updateThreadBody = z
+  .object({
+    title: z.string().trim().min(1).max(200).optional(),
+    speakingAsCharacterId: speakingAsField,
+  })
+  .refine(
+    (d) => d.title !== undefined || d.speakingAsCharacterId !== undefined,
+    { message: "At least one of title or speakingAsCharacterId is required" },
+  );
 
 router.patch("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
@@ -230,9 +364,29 @@ router.patch("/chat/threads/:id", requireAuth, requireCampaignMember, async (req
     res.status(400).json({ error: parsed.error.message });
     return;
   }
+
+  // If a character is being assigned, validate it before persisting.
+  if (typeof parsed.data.speakingAsCharacterId === "number") {
+    const validated = await resolveSpeakingAsCharacter(
+      parsed.data.speakingAsCharacterId,
+      campaignId,
+      userId,
+    );
+    if (!validated) {
+      res.status(403).json({ error: "Cannot speak as that character" });
+      return;
+    }
+  }
+
+  const updateSet: Record<string, unknown> = { updatedAt: new Date() };
+  if (parsed.data.title !== undefined) updateSet.title = parsed.data.title;
+  if (parsed.data.speakingAsCharacterId !== undefined) {
+    updateSet.speakingAsCharacterId = parsed.data.speakingAsCharacterId;
+  }
+
   const [updated] = await db
     .update(chatThreadsTable)
-    .set({ title: parsed.data.title, updatedAt: new Date() })
+    .set(updateSet)
     .where(and(
       eq(chatThreadsTable.id, id),
       eq(chatThreadsTable.campaignId, campaignId),
@@ -241,6 +395,7 @@ router.patch("/chat/threads/:id", requireAuth, requireCampaignMember, async (req
     .returning({
       id: chatThreadsTable.id,
       title: chatThreadsTable.title,
+      speakingAsCharacterId: chatThreadsTable.speakingAsCharacterId,
       createdAt: chatThreadsTable.createdAt,
       updatedAt: chatThreadsTable.updatedAt,
     });
@@ -250,6 +405,31 @@ router.patch("/chat/threads/:id", requireAuth, requireCampaignMember, async (req
   }
   res.json(updated);
 });
+
+/**
+ * Validate that `userId` is allowed to speak as `characterId` in `campaignId`,
+ * and return the row if so. Allowed when (a) the character is owned by the
+ * user, or (b) the user is the campaign DM. Always re-checked server-side so
+ * a transferred or deleted character degrades gracefully.
+ */
+async function resolveSpeakingAsCharacter(
+  characterId: number,
+  campaignId: number,
+  userId: string,
+): Promise<typeof charactersTable.$inferSelect | null> {
+  const [row] = await db
+    .select()
+    .from(charactersTable)
+    .where(and(
+      eq(charactersTable.id, characterId),
+      eq(charactersTable.campaignId, campaignId),
+      eq(charactersTable.isActive, true),
+    ));
+  if (!row) return null;
+  if (row.ownerUserId === userId) return row;
+  const dm = await isDm(campaignId, userId);
+  return dm ? row : null;
+}
 
 router.delete("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
@@ -294,6 +474,7 @@ async function prepareChatRequest(
   req: Request,
   message: string,
   conversationId: number | null | undefined,
+  bodySpeakingAs: number | null | undefined,
 ): Promise<PrepareResult> {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
@@ -308,6 +489,7 @@ async function prepareChatRequest(
 
   let threadId: number;
   let threadSummary: string | null = null;
+  let threadSpeakingAs: number | null = null;
   if (conversationId) {
     const [existing] = await db
       .select()
@@ -322,6 +504,7 @@ async function prepareChatRequest(
     }
     threadId = existing.id;
     threadSummary = existing.summary;
+    threadSpeakingAs = existing.speakingAsCharacterId ?? null;
   } else {
     const [created] = await db
       .insert(chatThreadsTable)
@@ -329,6 +512,47 @@ async function prepareChatRequest(
       .returning();
     threadId = created.id;
   }
+
+  // Resolve & persist any explicit speaking-as choice from this turn's body.
+  // undefined → no change; null → clear; positive int → validate then set.
+  if (bodySpeakingAs !== undefined && bodySpeakingAs !== threadSpeakingAs) {
+    if (bodySpeakingAs === null) {
+      await db
+        .update(chatThreadsTable)
+        .set({ speakingAsCharacterId: null })
+        .where(eq(chatThreadsTable.id, threadId));
+      threadSpeakingAs = null;
+    } else {
+      const validated = await resolveSpeakingAsCharacter(bodySpeakingAs, campaignId, userId);
+      if (!validated) {
+        return { ok: false, status: 403, error: "Cannot speak as that character" };
+      }
+      await db
+        .update(chatThreadsTable)
+        .set({ speakingAsCharacterId: bodySpeakingAs })
+        .where(eq(chatThreadsTable.id, threadId));
+      threadSpeakingAs = bodySpeakingAs;
+    }
+  }
+
+  // Resolve which character (if any) is in scope for this turn.
+  // Precedence: thread.speakingAsCharacterId (re-validated) > non-DM auto-pick
+  // when the user owns exactly one active character > none.
+  let activeCharacter: typeof charactersTable.$inferSelect | null = null;
+  if (threadSpeakingAs !== null) {
+    activeCharacter = await resolveSpeakingAsCharacter(threadSpeakingAs, campaignId, userId);
+  } else if (!dmRequester) {
+    const myChars = await db
+      .select()
+      .from(charactersTable)
+      .where(and(
+        eq(charactersTable.campaignId, campaignId),
+        eq(charactersTable.ownerUserId, userId),
+        eq(charactersTable.isActive, true),
+      ));
+    if (myChars.length === 1) activeCharacter = myChars[0];
+  }
+  const meBlock = activeCharacter ? summariseSheetForChat(activeCharacter) : null;
 
   const priorMessages = await db
     .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
@@ -362,6 +586,7 @@ async function prepareChatRequest(
     campHits,
     homeHits,
     dmRequester,
+    meBlock,
   );
 
   const contextBlock = context
@@ -439,7 +664,12 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
   }
 
   const message = parsed.data.message.trim();
-  const result = await prepareChatRequest(req, message, parsed.data.conversationId);
+  const result = await prepareChatRequest(
+    req,
+    message,
+    parsed.data.conversationId,
+    parsed.data.speakingAsCharacterId,
+  );
   if (!result.ok) {
     res.status(result.status).json({ error: result.error });
     return;
@@ -505,7 +735,12 @@ router.post(
 
     let result: PrepareResult;
     try {
-      result = await prepareChatRequest(req, message, parsed.data.conversationId);
+      result = await prepareChatRequest(
+        req,
+        message,
+        parsed.data.conversationId,
+        parsed.data.speakingAsCharacterId,
+      );
     } catch (err) {
       logger.error({ err }, "[chat/stream] retrieval failed");
       writeSseEvent(res, {

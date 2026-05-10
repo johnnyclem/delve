@@ -84,6 +84,39 @@ router.get("/characters", requireAuth, requireCampaignMember, async (req, res): 
   res.json(result);
 });
 
+router.get("/characters/speakable", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+  const userIsDm = await isDm(campaignId, userId);
+
+  const baseWhere = userIsDm
+    ? and(eq(charactersTable.campaignId, campaignId), eq(charactersTable.isActive, true))
+    : and(
+        eq(charactersTable.campaignId, campaignId),
+        eq(charactersTable.isActive, true),
+        eq(charactersTable.ownerUserId, userId),
+      );
+
+  const chars = await db.select().from(charactersTable).where(baseWhere);
+  const members = await db.select().from(campaignMembersTable).where(eq(campaignMembersTable.campaignId, campaignId));
+
+  const result = chars.map((c) => {
+    const owner = members.find((m) => m.userId === c.ownerUserId);
+    return {
+      id: c.id,
+      name: c.name,
+      race: c.race,
+      class: c.class,
+      level: c.level,
+      portraitUrl: c.portraitUrl,
+      ownerUserId: c.ownerUserId,
+      ownerDisplayName: owner?.displayName ?? "Unknown",
+    };
+  });
+
+  res.json(result);
+});
+
 router.get("/characters/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);

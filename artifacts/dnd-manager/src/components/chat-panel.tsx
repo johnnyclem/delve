@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, History, Pencil, Check, X } from "lucide-react";
+import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, History, Pencil, Check, X, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useGetMyMembership,
   useListChatThreads,
+  useListSpeakableCharacters,
   getChatThread,
   deleteChatThread,
   updateChatThread,
@@ -50,9 +51,12 @@ function renderAnswer(md: string): string {
 function CitationBadge({ citation, index, isDm }: { citation: ChatCitation; index: number; isDm: boolean }) {
   const isCampaign = citation.source === "campaign";
   const isHomebrew = citation.source === "homebrew";
-  const prefix = isHomebrew ? "H" : isCampaign ? "C" : "R";
+  const isCharacter = citation.source === "character";
+  const prefix = isCharacter ? "M" : isHomebrew ? "H" : isCampaign ? "C" : "R";
   const tag = `${prefix}${index + 1}`;
-  const label = isHomebrew
+  const label = isCharacter
+    ? "My character"
+    : isHomebrew
     ? "House Rule"
     : citation.source === "srd-2014"
     ? "SRD 2014"
@@ -68,7 +72,9 @@ function CitationBadge({ citation, index, isDm }: { citation: ChatCitation; inde
       target={citation.sourceUrl ? "_blank" : undefined}
       rel="noreferrer"
       className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs ${
-        isHomebrew
+        isCharacter
+          ? "border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200"
+          : isHomebrew
           ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
           : isCampaign
           ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
@@ -77,7 +83,9 @@ function CitationBadge({ citation, index, isDm }: { citation: ChatCitation; inde
       data-testid={`chat-citation-${tag}`}
     >
       <span className="font-mono text-[10px] opacity-80">[{tag}]</span>
-      {isHomebrew ? (
+      {isCharacter ? (
+        <User className="h-3 w-3" />
+      ) : isHomebrew ? (
         <Scroll className="h-3 w-3" />
       ) : isCampaign ? (
         <Sparkles className="h-3 w-3" />
@@ -110,6 +118,7 @@ export default function ChatPanel() {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [speakingAsId, setSpeakingAsId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -118,9 +127,11 @@ export default function ChatPanel() {
   const queryClient = useQueryClient();
   const { data: membership } = useGetMyMembership();
   const isDm = membership?.role === "dm";
+  const myUserId = membership?.userId;
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const { data: threads = [] } = useListChatThreads();
+  const { data: speakable = [] } = useListSpeakableCharacters();
   const sortedThreads = useMemo<ChatThread[]>(
     () => [...threads].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
     [threads],
@@ -132,11 +143,22 @@ export default function ChatPanel() {
     }
   }, [turns]);
 
+  // For brand-new conversations, default the picker to the user's sole own character (if any).
+  useEffect(() => {
+    if (conversationId !== null) return;
+    if (speakingAsId !== null) return;
+    const own = speakable.filter((c) => c.ownerUserId === myUserId);
+    if (own.length === 1) setSpeakingAsId(own[0].id);
+  }, [speakable, conversationId, speakingAsId, myUserId]);
+
   const startNewConversation = () => {
     setConversationId(null);
     setTurns([]);
     setInput("");
     setHistoryOpen(false);
+    // Default: if exactly one own character is speakable, pre-select it.
+    const own = speakable.filter((c) => c.ownerUserId === myUserId);
+    setSpeakingAsId(own.length === 1 ? own[0].id : null);
   };
 
   const loadThread = async (threadId: number) => {
@@ -174,6 +196,7 @@ export default function ChatPanel() {
       }
       setTurns(loaded);
       setConversationId(threadId);
+      setSpeakingAsId(detail.thread.speakingAsCharacterId ?? null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load conversation";
       setTurns([{ id: `err-${Date.now()}`, question: "", answer: null, citations: [], edition: null, error: msg, loading: false }]);
@@ -313,7 +336,7 @@ export default function ChatPanel() {
           "Content-Type": "application/json",
           Accept: "text/event-stream",
         },
-        body: JSON.stringify({ message, conversationId }),
+        body: JSON.stringify({ message, conversationId, speakingAsCharacterId: speakingAsId }),
       });
 
       if (!response.ok || !response.body) {
@@ -585,6 +608,58 @@ export default function ChatPanel() {
           ))}
         </AnimatePresence>
       </div>
+
+      {speakable.length > 0 && (
+        <div
+          className="rounded-2xl glass-panel px-3 py-2 flex items-center gap-2 shrink-0 text-xs text-muted-foreground"
+          data-testid="chat-speaking-as"
+        >
+          <User className="h-3.5 w-3.5 text-fuchsia-300" />
+          <span>Speaking as</span>
+          <select
+            value={speakingAsId ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              const nextId = v === "" ? null : Number(v);
+              setSpeakingAsId(nextId);
+              // If we're inside an existing thread, persist the choice right away so
+              // it sticks even if the user navigates away before sending a new message.
+              if (conversationId !== null) {
+                void updateChatThread(conversationId, { speakingAsCharacterId: nextId })
+                  .then(() =>
+                    queryClient.invalidateQueries({
+                      queryKey: getGetChatThreadQueryKey(conversationId),
+                    }),
+                  )
+                  .catch(() => {
+                    /* best-effort; the next /chat call will also persist. */
+                  });
+              }
+            }}
+            className="bg-background/40 border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-fuchsia-400/50"
+            data-testid="chat-speaking-as-select"
+          >
+            <option value="">No one (rules-only)</option>
+            {speakable.map((c) => {
+              const isOwn = c.ownerUserId === myUserId;
+              const meta = [c.race, c.class].filter(Boolean).join(" ");
+              return (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                  {meta ? ` — ${meta}` : ""}
+                  {c.level ? ` (lvl ${c.level})` : ""}
+                  {!isOwn ? ` · ${c.ownerDisplayName}` : ""}
+                </option>
+              );
+            })}
+          </select>
+          {speakingAsId !== null && (
+            <span className="text-[10px] opacity-70">
+              Personal questions (HP, spells, inventory) will use this sheet.
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="rounded-2xl glass-panel p-3 flex gap-2 items-end shrink-0">
         <Textarea

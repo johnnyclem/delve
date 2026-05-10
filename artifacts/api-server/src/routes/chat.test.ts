@@ -60,6 +60,7 @@ vi.mock("@workspace/db", () => ({
     userId: "threads.userId",
     title: "threads.title",
     summary: "threads.summary",
+    speakingAsCharacterId: "threads.speakingAsCharacterId",
     createdAt: "threads.createdAt",
     updatedAt: "threads.updatedAt",
   },
@@ -69,6 +70,12 @@ vi.mock("@workspace/db", () => ({
     role: "messages.role",
     content: "messages.content",
     createdAt: "messages.createdAt",
+  },
+  charactersTable: {
+    id: "characters.id",
+    campaignId: "characters.campaignId",
+    ownerUserId: "characters.ownerUserId",
+    isActive: "characters.isActive",
   },
   campaignsTable: { id: "campaigns.id", defaultEdition: "campaigns.defaultEdition" },
 }));
@@ -152,7 +159,9 @@ describe("POST /chat thread lifecycle", () => {
     // campaign edition lookup
     selectQueue.push([{ defaultEdition: "2024" }]);
     // insert thread .returning() -> created row
-    insertQueue.push([{ id: 100, summary: null }]);
+    insertQueue.push([{ id: 100, summary: null, speakingAsCharacterId: null }]);
+    // auto-pick character lookup -> the user owns 0 active chars
+    selectQueue.push([]);
     // priorMessages lookup -> empty
     selectQueue.push([]);
 
@@ -180,11 +189,14 @@ describe("POST /chat thread lifecycle", () => {
       {
         id: 100,
         summary: null,
+        speakingAsCharacterId: null,
         campaignId: TEST_CAMPAIGN_ID,
         userId: TEST_USER_ID,
         title: "Earlier topic",
       },
     ]);
+    // auto-pick character lookup -> none
+    selectQueue.push([]);
     // priorMessages
     selectQueue.push([
       { role: "user", content: "first" },
@@ -352,11 +364,14 @@ describe("POST /chat history summarization", () => {
       {
         id: 100,
         summary: null,
+        speakingAsCharacterId: null,
         campaignId: TEST_CAMPAIGN_ID,
         userId: TEST_USER_ID,
         title: "Long thread",
       },
     ]);
+    // auto-pick character lookup -> none
+    selectQueue.push([]);
     selectQueue.push(prior);
 
     openaiCreate
@@ -396,11 +411,14 @@ describe("POST /chat history summarization", () => {
       {
         id: 100,
         summary: null,
+        speakingAsCharacterId: null,
         campaignId: TEST_CAMPAIGN_ID,
         userId: TEST_USER_ID,
         title: "Short thread",
       },
     ]);
+    // auto-pick character lookup -> none
+    selectQueue.push([]);
     selectQueue.push(prior);
 
     const res = await request(buildApp())
@@ -411,5 +429,169 @@ describe("POST /chat history summarization", () => {
     expect(openaiCreate).toHaveBeenCalledTimes(1);
     // Only the updatedAt bump.
     expect(updateCallCount).toBe(1);
+  });
+});
+
+function lastSystemAndUserMessages(): { system: string; user: string } {
+  const call = openaiCreate.mock.calls[0][0] as {
+    messages: Array<{ role: string; content: string }>;
+  };
+  const system = call.messages.find((m) => m.role === "system")?.content ?? "";
+  const user = [...call.messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  return { system, user };
+}
+
+describe("POST /chat speaking-as character context", () => {
+  const SHEET = {
+    strength: 8, dexterity: 14, constitution: 12,
+    intelligence: 18, wisdom: 10, charisma: 12,
+    maxHp: 30, currentHp: 27, armorClass: 14, speed: 30, proficiencyBonus: 3,
+    cantrips: ["Fire Bolt", "Mage Hand", "Prestidigitation"],
+    spells: [{ name: "Magic Missile", level: 1, prepared: true }],
+    spellSlots: { "1": { total: 4, used: 1 } },
+    feats: ["War Caster"],
+    background: "Sage",
+    savingThrows: ["intelligence", "wisdom"],
+    skills: ["arcana", "history"],
+  };
+
+  it("auto-picks the user's character when they own exactly one (new thread)", async () => {
+    selectQueue.push([{ defaultEdition: "2024" }]);
+    insertQueue.push([{ id: 200, summary: null, speakingAsCharacterId: null }]);
+    // auto-pick lookup -> exactly one active character owned by the user
+    selectQueue.push([
+      {
+        id: 7, campaignId: TEST_CAMPAIGN_ID, ownerUserId: TEST_USER_ID,
+        name: "Aria", race: "Elf", class: "Wizard", level: 5,
+        sheetJson: SHEET, isActive: true,
+      },
+    ]);
+    selectQueue.push([]); // priorMessages
+
+    const res = await request(buildApp())
+      .post("/chat")
+      .send({ message: "What cantrips do I have?" });
+
+    expect(res.status).toBe(200);
+    const { user } = lastSystemAndUserMessages();
+    expect(user).toContain("[ME]");
+    expect(user).toContain("Aria");
+    expect(user).toContain("Fire Bolt");
+    // The picked character must surface as a citation entry.
+    expect(res.body.citations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: "character", entityName: "Aria", chunkId: 7 }),
+      ]),
+    );
+  });
+
+  it("does not auto-pick when the user owns zero or multiple active characters", async () => {
+    selectQueue.push([{ defaultEdition: "2024" }]);
+    insertQueue.push([{ id: 201, summary: null, speakingAsCharacterId: null }]);
+    // 2 active chars -> auto-pick disabled
+    selectQueue.push([
+      { id: 7, campaignId: TEST_CAMPAIGN_ID, ownerUserId: TEST_USER_ID, name: "A", race: "Elf", class: "Wizard", level: 1, sheetJson: SHEET, isActive: true },
+      { id: 8, campaignId: TEST_CAMPAIGN_ID, ownerUserId: TEST_USER_ID, name: "B", race: "Human", class: "Fighter", level: 1, sheetJson: SHEET, isActive: true },
+    ]);
+    selectQueue.push([]); // priorMessages
+
+    const res = await request(buildApp())
+      .post("/chat")
+      .send({ message: "What cantrips do I have?" });
+
+    expect(res.status).toBe(200);
+    const { user } = lastSystemAndUserMessages();
+    expect(user).not.toContain("[ME]");
+    expect(res.body.citations.find((c: { source: string }) => c.source === "character")).toBeUndefined();
+  });
+
+  it("accepts an explicit speakingAsCharacterId when the character belongs to the user", async () => {
+    selectQueue.push([{ defaultEdition: "2024" }]);
+    selectQueue.push([
+      { id: 100, summary: null, speakingAsCharacterId: null, campaignId: TEST_CAMPAIGN_ID, userId: TEST_USER_ID, title: "T" },
+    ]);
+    // resolveSpeakingAsCharacter validation lookup
+    selectQueue.push([
+      { id: 7, campaignId: TEST_CAMPAIGN_ID, ownerUserId: TEST_USER_ID, name: "Aria", race: "Elf", class: "Wizard", level: 5, sheetJson: SHEET, isActive: true },
+    ]);
+    updateQueue.push([]); // persist speakingAs on thread
+    // re-fetch active character for the [ME] block
+    selectQueue.push([
+      { id: 7, campaignId: TEST_CAMPAIGN_ID, ownerUserId: TEST_USER_ID, name: "Aria", race: "Elf", class: "Wizard", level: 5, sheetJson: SHEET, isActive: true },
+    ]);
+    selectQueue.push([]); // priorMessages
+
+    const res = await request(buildApp())
+      .post("/chat")
+      .send({ message: "What spells do I have prepared?", conversationId: 100, speakingAsCharacterId: 7 });
+
+    expect(res.status).toBe(200);
+    const { user } = lastSystemAndUserMessages();
+    expect(user).toContain("[ME]");
+    expect(user).toContain("Magic Missile");
+  });
+
+  it("rejects an explicit speakingAsCharacterId when the character does not belong to the user", async () => {
+    selectQueue.push([{ defaultEdition: "2024" }]);
+    selectQueue.push([
+      { id: 100, summary: null, speakingAsCharacterId: null, campaignId: TEST_CAMPAIGN_ID, userId: TEST_USER_ID, title: "T" },
+    ]);
+    // validation lookup -> char belongs to someone else
+    selectQueue.push([
+      { id: 9, campaignId: TEST_CAMPAIGN_ID, ownerUserId: OTHER_USER_ID, name: "Foreign", race: "Orc", class: "Barb", level: 3, sheetJson: SHEET, isActive: true },
+    ]);
+
+    const res = await request(buildApp())
+      .post("/chat")
+      .send({ message: "Hi", conversationId: 100, speakingAsCharacterId: 9 });
+
+    expect(res.status).toBe(403);
+    expect(openaiCreate).not.toHaveBeenCalled();
+  });
+
+  it("lets the DM speak as any party member's character", async () => {
+    currentIsDm = true;
+    selectQueue.push([{ defaultEdition: "2024" }]);
+    selectQueue.push([
+      { id: 100, summary: null, speakingAsCharacterId: null, campaignId: TEST_CAMPAIGN_ID, userId: TEST_USER_ID, title: "T" },
+    ]);
+    // validation lookup -> char belongs to a player; DM override applies
+    selectQueue.push([
+      { id: 9, campaignId: TEST_CAMPAIGN_ID, ownerUserId: OTHER_USER_ID, name: "Bramble", race: "Halfling", class: "Rogue", level: 4, sheetJson: SHEET, isActive: true },
+    ]);
+    updateQueue.push([]);
+    // re-fetch for [ME] block
+    selectQueue.push([
+      { id: 9, campaignId: TEST_CAMPAIGN_ID, ownerUserId: OTHER_USER_ID, name: "Bramble", race: "Halfling", class: "Rogue", level: 4, sheetJson: SHEET, isActive: true },
+    ]);
+    selectQueue.push([]); // priorMessages
+
+    const res = await request(buildApp())
+      .post("/chat")
+      .send({ message: "What is Bramble's AC?", conversationId: 100, speakingAsCharacterId: 9 });
+
+    expect(res.status).toBe(200);
+    const { user } = lastSystemAndUserMessages();
+    expect(user).toContain("[ME]");
+    expect(user).toContain("Bramble");
+  });
+
+  it("degrades gracefully (no [ME] block, no 500) when the persisted speaking-as character has been deleted", async () => {
+    selectQueue.push([{ defaultEdition: "2024" }]);
+    selectQueue.push([
+      { id: 100, summary: null, speakingAsCharacterId: 42, campaignId: TEST_CAMPAIGN_ID, userId: TEST_USER_ID, title: "T" },
+    ]);
+    // resolveSpeakingAsCharacter for the active-character lookup -> deleted/missing
+    selectQueue.push([]);
+    selectQueue.push([]); // priorMessages
+
+    const res = await request(buildApp())
+      .post("/chat")
+      .send({ message: "Anything?", conversationId: 100 });
+
+    expect(res.status).toBe(200);
+    const { user } = lastSystemAndUserMessages();
+    expect(user).not.toContain("[ME]");
+    expect(res.body.citations.find((c: { source: string }) => c.source === "character")).toBeUndefined();
   });
 });

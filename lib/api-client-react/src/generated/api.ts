@@ -66,6 +66,7 @@ import type {
   RuleSearchResponse,
   SearchRulesParams,
   SessionLog,
+  SpeakableCharacter,
   SuccessResponse,
   UpdateCampaignBody,
   UpdateCharacterBody,
@@ -1257,6 +1258,82 @@ export const useCreateCharacter = <
 > => {
   return useMutation(getCreateCharacterMutationOptions(options));
 };
+
+/**
+ * @summary List characters the current user can "speak as" in chat (own active characters; DM gets all)
+ */
+export const getListSpeakableCharactersUrl = () => {
+  return `/api/characters/speakable`;
+};
+
+export const listSpeakableCharacters = async (
+  options?: RequestInit,
+): Promise<SpeakableCharacter[]> => {
+  return customFetch<SpeakableCharacter[]>(getListSpeakableCharactersUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListSpeakableCharactersQueryKey = () => {
+  return [`/api/characters/speakable`] as const;
+};
+
+export const getListSpeakableCharactersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listSpeakableCharacters>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSpeakableCharacters>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListSpeakableCharactersQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listSpeakableCharacters>>
+  > = ({ signal }) => listSpeakableCharacters({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listSpeakableCharacters>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListSpeakableCharactersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listSpeakableCharacters>>
+>;
+export type ListSpeakableCharactersQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List characters the current user can "speak as" in chat (own active characters; DM gets all)
+ */
+
+export function useListSpeakableCharacters<
+  TData = Awaited<ReturnType<typeof listSpeakableCharacters>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listSpeakableCharacters>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListSpeakableCharactersQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get a character by ID

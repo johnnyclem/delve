@@ -764,6 +764,23 @@ export const CreateCharacterBody = zod.object({
 });
 
 /**
+ * @summary List characters the current user can "speak as" in chat (own active characters; DM gets all)
+ */
+export const ListSpeakableCharactersResponseItem = zod.object({
+  id: zod.number(),
+  name: zod.string(),
+  race: zod.string(),
+  class: zod.string(),
+  level: zod.number(),
+  portraitUrl: zod.string().nullish(),
+  ownerUserId: zod.string(),
+  ownerDisplayName: zod.string(),
+});
+export const ListSpeakableCharactersResponse = zod.array(
+  ListSpeakableCharactersResponseItem,
+);
+
+/**
  * @summary Get a character by ID
  */
 export const GetCharacterParams = zod.object({
@@ -2492,13 +2509,25 @@ export const PostChatBody = zod.object({
     .describe(
       "Existing thread ID to continue. If omitted or null, a new thread is created.",
     ),
+  speakingAsCharacterId: zod
+    .number()
+    .nullish()
+    .describe(
+      "Character to speak as on this turn. Persisted on the thread for future turns. Server re-validates ownership (or DM override) every turn.",
+    ),
 });
 
 export const PostChatResponse = zod.object({
   answer: zod.string(),
   citations: zod.array(
     zod.object({
-      source: zod.enum(["srd-2014", "srd-2024", "campaign", "homebrew"]),
+      source: zod.enum([
+        "srd-2014",
+        "srd-2024",
+        "campaign",
+        "homebrew",
+        "character",
+      ]),
       entityKind: zod.string(),
       entityName: zod.string(),
       chunkId: zod.number(),
@@ -2523,6 +2552,12 @@ export const PostChatResponse = zod.object({
 export const ListChatThreadsResponseItem = zod.object({
   id: zod.number(),
   title: zod.string(),
+  speakingAsCharacterId: zod
+    .number()
+    .nullish()
+    .describe(
+      "Character the user has chosen to speak as on this thread, if any.",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });
@@ -2539,6 +2574,12 @@ export const GetChatThreadResponse = zod.object({
   thread: zod.object({
     id: zod.number(),
     title: zod.string(),
+    speakingAsCharacterId: zod
+      .number()
+      .nullish()
+      .describe(
+        "Character the user has chosen to speak as on this thread, if any.",
+      ),
     createdAt: zod.coerce.date(),
     updatedAt: zod.coerce.date(),
   }),
@@ -2562,12 +2603,24 @@ export const UpdateChatThreadParams = zod.object({
 export const updateChatThreadBodyTitleMax = 200;
 
 export const UpdateChatThreadBody = zod.object({
-  title: zod.string().min(1).max(updateChatThreadBodyTitleMax),
+  title: zod.string().min(1).max(updateChatThreadBodyTitleMax).optional(),
+  speakingAsCharacterId: zod
+    .number()
+    .nullish()
+    .describe(
+      "Set the character the user is speaking as on this thread, or null to clear.",
+    ),
 });
 
 export const UpdateChatThreadResponse = zod.object({
   id: zod.number(),
   title: zod.string(),
+  speakingAsCharacterId: zod
+    .number()
+    .nullish()
+    .describe(
+      "Character the user has chosen to speak as on this thread, if any.",
+    ),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
 });

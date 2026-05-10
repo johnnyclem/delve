@@ -978,6 +978,11 @@ export interface ChatRequest {
    * @nullable
    */
   conversationId?: number | null;
+  /**
+   * Character to speak as on this turn. Persisted on the thread for future turns. Server re-validates ownership (or DM override) every turn.
+   * @nullable
+   */
+  speakingAsCharacterId?: number | null;
 }
 
 export interface HomebrewRule {
@@ -1050,6 +1055,7 @@ export const ChatCitationSource = {
   "srd-2024": "srd-2024",
   campaign: "campaign",
   homebrew: "homebrew",
+  character: "character",
 } as const;
 
 /**
@@ -1094,6 +1100,11 @@ export interface ChatResponse {
 export interface ChatThread {
   id: number;
   title: string;
+  /**
+   * Character the user has chosen to speak as on this thread, if any.
+   * @nullable
+   */
+  speakingAsCharacterId?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -1103,7 +1114,24 @@ export interface UpdateChatThreadBody {
    * @minLength 1
    * @maxLength 200
    */
-  title: string;
+  title?: string;
+  /**
+   * Set the character the user is speaking as on this thread, or null to clear.
+   * @nullable
+   */
+  speakingAsCharacterId?: number | null;
+}
+
+export interface SpeakableCharacter {
+  id: number;
+  name: string;
+  race: string;
+  class: string;
+  level: number;
+  /** @nullable */
+  portraitUrl?: string | null;
+  ownerUserId: string;
+  ownerDisplayName: string;
 }
 
 export type ChatThreadMessageRole =
