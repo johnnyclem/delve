@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { ScanlineOverlay } from "@/components/ui/scanline-overlay";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk, useUser } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
@@ -189,6 +190,7 @@ function ClerkProviderWithRoutes() {
             <Route component={NotFound} />
           </Switch>
           <Toaster />
+          <ScanlineOverlay />
         </TooltipProvider>
       </QueryClientProvider>
     </ClerkProvider>

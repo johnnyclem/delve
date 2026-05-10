@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw, Anchor } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw, Anchor } from "@/components/ui/pixel-icons";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

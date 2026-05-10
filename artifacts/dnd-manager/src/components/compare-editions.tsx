@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactElement } from "react";
-import { GitCompare, Search, Loader2, ArrowLeftRight } from "lucide-react";
+import { GitCompare, Search, ArrowLeftRight } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { Input } from "@/components/ui/input";
 import { useSearchRules, useGetRule } from "@workspace/api-client-react";
 
@@ -177,7 +178,7 @@ export default function CompareEditionsPanel() {
 
       {searching && (
         <div className="flex items-center gap-2 text-muted-foreground text-sm" data-testid="text-compare-loading">
-          <Loader2 className="h-4 w-4 animate-spin" /> Searching…
+          <PixelD20Loader className="h-4 w-4" /> Searching…
         </div>
       )}
 
@@ -243,7 +244,7 @@ export default function CompareEditionsPanel() {
               </div>
               {left.isFetching && (
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                  <PixelD20Loader className="h-4 w-4" /> Loading…
                 </div>
               )}
               {leftMissing && (
@@ -269,7 +270,7 @@ export default function CompareEditionsPanel() {
               </div>
               {right.isFetching && (
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                  <PixelD20Loader className="h-4 w-4" /> Loading…
                 </div>
               )}
               {rightMissing && (

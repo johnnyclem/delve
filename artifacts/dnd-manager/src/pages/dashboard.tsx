@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useUser } from "@clerk/react";
 import {
-  BookOpen, Dice5, Calendar, ScrollText,
+  Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
   LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, MoreHorizontal, Swords, Skull
-} from "lucide-react";
+} from "@/components/ui/pixel-icons";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Search, Loader2 } from "lucide-react";
+import { BookOpen, Search } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -184,7 +185,7 @@ export default function RulesLookupPanel() {
 
       {searching && (
         <div className="flex items-center gap-2 text-muted-foreground text-sm" data-testid="text-rules-loading">
-          <Loader2 className="h-4 w-4 animate-spin" /> Searching...
+          <PixelD20Loader className="h-4 w-4" /> Searching...
         </div>
       )}
       {searchError && (
@@ -248,7 +249,7 @@ export default function RulesLookupPanel() {
                         <div className="border-t border-[rgba(255,255,255,0.06)] p-4 bg-[rgba(255,255,255,0.02)]">
                           {loadingEntity && (
                             <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                              <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+                              <PixelD20Loader className="h-4 w-4" /> Loading...
                             </div>
                           )}
                           {!loadingEntity && expandedEntity && (

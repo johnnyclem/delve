@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Loader2, Sparkles } from "lucide-react";
+import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Sparkles } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { EntityNameWithAsk } from "@/components/ask-popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -902,7 +903,7 @@ function EntityForm({ mode, initialKind, entity, onCancel, onSaved }: EntityForm
           Cancel
         </Button>
         <Button onClick={handleSave} disabled={saving} data-testid="button-save">
-          {saving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+          {saving && <PixelD20Loader className="h-4 w-4 mr-1" />}
           {mode === "create" ? "Create" : "Save"}
         </Button>
       </div>

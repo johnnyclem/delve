@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Tent, Home, Mountain, Map as MapIcon, Trash2, Plus, ChevronLeft, Loader2 } from "lucide-react";
+import { Tent, Home, Mountain, Map as MapIcon, Trash2, Plus, ChevronLeft } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -143,7 +144,7 @@ export default function MapsPage() {
                 disabled={createMap.isPending}
                 data-testid="button-create-map"
               >
-                {createMap.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {createMap.isPending && <PixelD20Loader className="h-4 w-4 mr-2" />}
                 Create map
               </Button>
             </div>

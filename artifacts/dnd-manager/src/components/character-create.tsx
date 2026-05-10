@@ -3,7 +3,7 @@ import {
   ArrowLeft, ArrowRight, Sparkles, Plus, X, Dices, Wand2, RotateCcw, Lock,
   ChevronDown, ChevronRight, Heart, Shield, Zap, Award, Flame,
   Axe, Music, Cross, Leaf, Sword, Hand, ShieldCheck, Target, VenetianMask, Eye,
-} from "lucide-react";
+} from "@/components/ui/pixel-icons";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning } from "lucide-react";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1221,7 +1222,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
                 <Button variant="ghost" size="sm" onClick={() => { if (isDirty && !confirm("Discard unsaved changes?")) return; clearDraft(); setManualSaveConflict(null); setEditingNotes(false); }}>Cancel</Button>
                 {autosaveStatus === "saving" && (
                   <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="autosave-status">
-                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <PixelD20Loader className="h-3 w-3" />
                     Auto-saving...
                   </span>
                 )}
@@ -1377,7 +1378,7 @@ function NotificationStatus({ sessionId }: { sessionId: number }) {
               data-testid="button-resend-all-failed"
             >
               {resendAll.isPending ? (
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                <PixelD20Loader className="h-3 w-3 mr-1" />
               ) : (
                 <Send className="h-3 w-3 mr-1" />
               )}
@@ -1393,7 +1394,7 @@ function NotificationStatus({ sessionId }: { sessionId: number }) {
             data-testid="button-refresh-notifications"
             title="Refresh"
           >
-            <Loader2 className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            <PixelD20Loader className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>
@@ -1438,7 +1439,7 @@ function NotificationStatus({ sessionId }: { sessionId: number }) {
                     data-testid={`button-resend-${log.id}`}
                   >
                     {resendOne.isPending && resendOne.variables?.logId === log.id ? (
-                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      <PixelD20Loader className="h-3 w-3 mr-1" />
                     ) : (
                       <Send className="h-3 w-3 mr-1" />
                     )}

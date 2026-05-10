@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Mic, Square, Pause, Play, Loader2, X } from "lucide-react";
+import { Mic, Square, Pause, Play, X } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAudioRecorder, formatElapsed, type RecordedChunk } from "@/hooks/use-audio-recorder";
@@ -110,7 +111,7 @@ export function VoiceRecordButton({ onTranscribed, disabled }: Props) {
   if (transcribing) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="status-transcribing">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <PixelD20Loader className="h-3.5 w-3.5" />
         Transcribing…
       </span>
     );

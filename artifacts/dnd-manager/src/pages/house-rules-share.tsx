@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
-import { Printer, Loader2, Scroll } from "lucide-react";
+import { Printer, Scroll } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { useGetPublicHouseRules, type PublicHouseRulesView } from "@workspace/api-client-react";
 
 function escapeHtml(s: string): string {
@@ -86,7 +87,7 @@ export default function HouseRulesSharePage() {
 
         {isLoading && (
           <div className="flex items-center gap-2 text-zinc-500 text-sm" data-testid="text-share-loading">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading house rules…
+            <PixelD20Loader className="h-4 w-4" /> Loading house rules…
           </div>
         )}
 

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ChevronsUpDown, Globe } from "lucide-react";
+import { Check, ChevronsUpDown, Globe } from "@/components/ui/pixel-icons";
 import { cn } from "@/lib/utils";
 import {
   Command,

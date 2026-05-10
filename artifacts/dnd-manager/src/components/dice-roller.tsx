@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dice5 } from "lucide-react";
+import { Dice5 } from "@/components/ui/pixel-icons";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, History, Pencil, Check, X, User } from "lucide-react";
+import { MessageSquare, Send, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, History, Pencil, Check, X, User } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -502,7 +503,7 @@ export default function ChatPanel({ initialConversationId }: { initialConversati
                           data-testid={`chat-history-rename-save-${t.id}`}
                         >
                           {renameSubmitting ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <PixelD20Loader className="h-3.5 w-3.5" />
                           ) : (
                             <Check className="h-3.5 w-3.5" />
                           )}
@@ -551,7 +552,7 @@ export default function ChatPanel({ initialConversationId }: { initialConversati
       <div ref={scrollRef} className="flex-1 overflow-auto space-y-6 pr-1" data-testid="chat-scroll">
         {loadingThread && (
           <div className="flex items-center gap-2 text-muted-foreground text-sm justify-center py-6">
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <PixelD20Loader className="h-4 w-4" />
             Loading conversation…
           </div>
         )}
@@ -585,7 +586,7 @@ export default function ChatPanel({ initialConversationId }: { initialConversati
                       className="flex items-center gap-2 text-muted-foreground text-sm"
                       data-testid="chat-loading"
                     >
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <PixelD20Loader className="h-4 w-4" />
                       Searching the archives…
                     </div>
                   )}
@@ -736,7 +737,7 @@ export default function ChatPanel({ initialConversationId }: { initialConversati
           disabled={submitting || !input.trim()}
           data-testid="chat-send"
         >
-          {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          {submitting ? <PixelD20Loader className="h-4 w-4" /> : <Send className="h-4 w-4" />}
         </Button>
       </div>
     </div>

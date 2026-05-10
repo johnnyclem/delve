@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Scroll, Plus, Pencil, Trash2, Loader2, EyeOff, Share2, Copy, ExternalLink, RefreshCw, Printer } from "lucide-react";
+import { Scroll, Plus, Pencil, Trash2, EyeOff, Share2, Copy, ExternalLink, RefreshCw, Printer } from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,7 +84,7 @@ function RuleEditor({ initial, busy, onCancel, onSave, testIdPrefix }: RuleEdito
           disabled={!canSave}
           data-testid={`${testIdPrefix}-save`}
         >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+          {busy ? <PixelD20Loader className="h-4 w-4" /> : "Save"}
         </Button>
       </div>
     </div>
@@ -249,7 +250,7 @@ export default function HomebrewPanel() {
           </div>
           {(shareLoading || createShareMut.isPending) && !shareUrl ? (
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
-              <Loader2 className="h-4 w-4 animate-spin" /> Preparing link…
+              <PixelD20Loader className="h-4 w-4" /> Preparing link…
             </div>
           ) : shareUrl ? (
             <div className="space-y-2">
@@ -314,7 +315,7 @@ export default function HomebrewPanel() {
 
       {isLoading && (
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          <PixelD20Loader className="h-4 w-4" /> Loading…
         </div>
       )}
       {error && (

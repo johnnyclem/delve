@@ -17,7 +17,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Users, UserPlus, X, Star, Plus, GripVertical } from "lucide-react";
+import { Users, UserPlus, X, Star, Plus, GripVertical } from "@/components/ui/pixel-icons";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {

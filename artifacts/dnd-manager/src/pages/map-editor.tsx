@@ -8,11 +8,11 @@ import {
   MousePointer2,
   Users,
   Trash2,
-  Loader2,
   Tent,
   Home,
   Mountain,
-} from "lucide-react";
+} from "@/components/ui/pixel-icons";
+import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -272,8 +272,8 @@ export default function MapEditorPage() {
 
   if (isLoading || !local) {
     return (
-      <div className="dark min-h-[100dvh] bg-background text-foreground p-8 flex items-center gap-2">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
+      <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground p-8 flex items-center gap-2">
+        <PixelD20Loader className="h-4 w-4" /> Loading map…
       </div>
     );
   }

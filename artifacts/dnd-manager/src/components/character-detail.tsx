@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check, ChevronDown, History, Sparkles, Dice5, Plus } from "lucide-react";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check, ChevronDown, History, Sparkles, Dice5, Plus } from "@/components/ui/pixel-icons";
 import LevelUpModal from "@/components/level-up-modal";
 import { Button } from "@/components/ui/button";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership, useGetCampaign } from "@workspace/api-client-react";

@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle } from "@/components/ui/pixel-icons";
 import { Button } from "@/components/ui/button";
 
 export default function NotFound() {

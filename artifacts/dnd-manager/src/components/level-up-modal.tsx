@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Dice5, Sparkles, ArrowRight, Check, AlertTriangle } from "lucide-react";
+import { Dice5, Sparkles, ArrowRight, Check, AlertTriangle } from "@/components/ui/pixel-icons";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +30,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Check as CheckIcon, ChevronsUpDown } from "lucide-react";
+import { Check as CheckIcon, ChevronsUpDown } from "@/components/ui/pixel-icons";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";

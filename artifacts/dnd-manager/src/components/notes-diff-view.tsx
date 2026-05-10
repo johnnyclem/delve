@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check } from "@/components/ui/pixel-icons";
 import { Button } from "@/components/ui/button";
 
 type DiffOp = "equal" | "add" | "remove";

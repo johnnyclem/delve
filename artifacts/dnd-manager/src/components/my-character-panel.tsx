@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useUser } from "@clerk/react";
-import { BookOpen, Plus } from "lucide-react";
+import { BookOpen, Plus } from "@/components/ui/pixel-icons";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useListCharacters } from "@workspace/api-client-react";

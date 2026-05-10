@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen, ChevronRight, Plus, User } from "lucide-react";
+import { BookOpen, ChevronRight, Plus, User } from "@/components/ui/pixel-icons";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useListCharacters } from "@workspace/api-client-react";
