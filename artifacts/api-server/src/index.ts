@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startInviteRetryScheduler } from "./lib/email";
+import { runSchemaHealthCheck } from "./lib/schemaHealthCheck";
 
 const rawPort = process.env["PORT"];
 
@@ -16,12 +17,22 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
+async function bootstrap() {
+  try {
+    await runSchemaHealthCheck();
+  } catch (err) {
+    logger.error({ err }, "Schema health check failed to run");
   }
 
-  logger.info({ port }, "Server listening");
-  startInviteRetryScheduler();
-});
+  app.listen(port, (err) => {
+    if (err) {
+      logger.error({ err }, "Error listening on port");
+      process.exit(1);
+    }
+
+    logger.info({ port }, "Server listening");
+    startInviteRetryScheduler();
+  });
+}
+
+void bootstrap();
