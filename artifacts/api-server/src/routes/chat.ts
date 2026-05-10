@@ -247,8 +247,8 @@ Rules for answering:
 - When campaign-specific context ([C#]) and SRD context ([R#]) both apply, prefer the campaign-specific information (the DM has authored it for this world).
 - If no house rule applies, follow the SRD reference normally.
 - Cite your sources inline using the bracket tags shown in the context (e.g., [C1], [R2]). Use multiple citations when synthesizing across sources.
-- If a [ME] block is present, the user is asking from the perspective of that character. When the question is personal ("I", "my", "me", "our"), prefer the [ME] block — answer concretely from that sheet (name them, list their actual cantrips/spells/HP/feats, etc.) and cite [ME]. Combine with [R#] for rules mechanics when useful.
-- If no [ME] block is present and the user asks a personal question, say you don't know which character is asking and suggest they pick one from the "Speaking as" menu.
+- If a CHARACTER block tagged [M#] is present, the user is asking from the perspective of that character. When the question is personal ("I", "my", "me", "our"), prefer the [M#] block — answer concretely from that sheet (name them, list their actual cantrips/spells/HP/feats, etc.) and cite the [M#] tag. Combine with [R#] for rules mechanics when useful.
+- If no [M#] block is present and the user asks a personal question, say you don't know which character is asking and suggest they pick one from the "Speaking as" menu.
 - The user may ask follow-up questions that refer back to earlier turns ("her sister", "the same place", etc.). Use the prior conversation to resolve those references.
 - Be concise. Use markdown for structure when helpful.`;
 
