@@ -143,22 +143,26 @@ export default function ChatPanel() {
     }
   }, [turns]);
 
-  // For brand-new conversations, default the picker to the user's sole own character (if any).
+  // For brand-new conversations, default the picker to the user's sole own character
+  // (players only — DMs default to "nobody" so their meta-questions aren't accidentally
+  // answered as a single PC).
   useEffect(() => {
     if (conversationId !== null) return;
     if (speakingAsId !== null) return;
+    if (isDm) return;
     const own = speakable.filter((c) => c.ownerUserId === myUserId);
     if (own.length === 1) setSpeakingAsId(own[0].id);
-  }, [speakable, conversationId, speakingAsId, myUserId]);
+  }, [speakable, conversationId, speakingAsId, myUserId, isDm]);
 
   const startNewConversation = () => {
     setConversationId(null);
     setTurns([]);
     setInput("");
     setHistoryOpen(false);
-    // Default: if exactly one own character is speakable, pre-select it.
+    // Default: if exactly one own character is speakable AND the caller is a
+    // player, pre-select it. DMs default to "nobody".
     const own = speakable.filter((c) => c.ownerUserId === myUserId);
-    setSpeakingAsId(own.length === 1 ? own[0].id : null);
+    setSpeakingAsId(!isDm && own.length === 1 ? own[0].id : null);
   };
 
   const loadThread = async (threadId: number) => {
@@ -609,57 +613,96 @@ export default function ChatPanel() {
         </AnimatePresence>
       </div>
 
-      {speakable.length > 0 && (
-        <div
-          className="rounded-2xl glass-panel px-3 py-2 flex items-center gap-2 shrink-0 text-xs text-muted-foreground"
-          data-testid="chat-speaking-as"
-        >
-          <User className="h-3.5 w-3.5 text-fuchsia-300" />
-          <span>Speaking as</span>
-          <select
-            value={speakingAsId ?? ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              const nextId = v === "" ? null : Number(v);
-              setSpeakingAsId(nextId);
-              // If we're inside an existing thread, persist the choice right away so
-              // it sticks even if the user navigates away before sending a new message.
-              if (conversationId !== null) {
-                void updateChatThread(conversationId, { speakingAsCharacterId: nextId })
-                  .then(() =>
-                    queryClient.invalidateQueries({
-                      queryKey: getGetChatThreadQueryKey(conversationId),
-                    }),
-                  )
-                  .catch(() => {
-                    /* best-effort; the next /chat call will also persist. */
-                  });
-              }
-            }}
-            className="bg-background/40 border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-fuchsia-400/50"
-            data-testid="chat-speaking-as-select"
+      {(() => {
+        const ownChars = speakable.filter((c) => c.ownerUserId === myUserId);
+        // A player with exactly one own character and no DM-view options gets a
+        // static label (no dropdown chrome) — auto-pick is unambiguous.
+        const isStaticSinglePlayer =
+          !isDm && ownChars.length === 1 && speakable.length === 1;
+        const persistOnChange = (nextId: number | null) => {
+          setSpeakingAsId(nextId);
+          if (conversationId !== null) {
+            void updateChatThread(conversationId, { speakingAsCharacterId: nextId })
+              .then(() =>
+                queryClient.invalidateQueries({
+                  queryKey: getGetChatThreadQueryKey(conversationId),
+                }),
+              )
+              .catch(() => {
+                /* best-effort; the next /chat call will also persist. */
+              });
+          }
+        };
+        const fmtChar = (c: (typeof speakable)[number]): string => {
+          const meta = [c.race, c.class].filter(Boolean).join(" ");
+          const isOwn = c.ownerUserId === myUserId;
+          return `${c.name}${meta ? ` — ${meta}` : ""}${c.level ? ` (lvl ${c.level})` : ""}${
+            !isOwn ? ` · ${c.ownerDisplayName}` : ""
+          }`;
+        };
+
+        if (isStaticSinglePlayer) {
+          const sole = ownChars[0];
+          return (
+            <div
+              className="rounded-2xl glass-panel px-3 py-2 flex items-center gap-2 shrink-0 text-xs text-muted-foreground"
+              data-testid="chat-speaking-as"
+            >
+              <User className="h-3.5 w-3.5 text-fuchsia-300" />
+              <span>Speaking as</span>
+              <span
+                className="font-medium text-foreground"
+                data-testid="chat-speaking-as-static"
+              >
+                {fmtChar(sole)}
+              </span>
+              <span className="text-[10px] opacity-70">
+                Personal questions will use this sheet.
+              </span>
+            </div>
+          );
+        }
+
+        return (
+          <div
+            className="rounded-2xl glass-panel px-3 py-2 flex items-center gap-2 shrink-0 text-xs text-muted-foreground"
+            data-testid="chat-speaking-as"
           >
-            <option value="">No one (rules-only)</option>
-            {speakable.map((c) => {
-              const isOwn = c.ownerUserId === myUserId;
-              const meta = [c.race, c.class].filter(Boolean).join(" ");
-              return (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {meta ? ` — ${meta}` : ""}
-                  {c.level ? ` (lvl ${c.level})` : ""}
-                  {!isOwn ? ` · ${c.ownerDisplayName}` : ""}
-                </option>
-              );
-            })}
-          </select>
-          {speakingAsId !== null && (
-            <span className="text-[10px] opacity-70">
-              Personal questions (HP, spells, inventory) will use this sheet.
-            </span>
-          )}
-        </div>
-      )}
+            <User className="h-3.5 w-3.5 text-fuchsia-300" />
+            <span>Speaking as</span>
+            {speakable.length === 0 ? (
+              <span
+                className="font-medium text-foreground"
+                data-testid="chat-speaking-as-static"
+              >
+                nobody
+              </span>
+            ) : (
+              <select
+                value={speakingAsId ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  persistOnChange(v === "" ? null : Number(v));
+                }}
+                className="bg-background/40 border border-[rgba(255,255,255,0.1)] rounded px-2 py-1 text-foreground text-xs focus:outline-none focus:ring-1 focus:ring-fuchsia-400/50"
+                data-testid="chat-speaking-as-select"
+              >
+                <option value="">nobody (rules-only)</option>
+                {speakable.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {fmtChar(c)}
+                  </option>
+                ))}
+              </select>
+            )}
+            {speakingAsId !== null && speakable.length > 0 && (
+              <span className="text-[10px] opacity-70">
+                Personal questions (HP, spells, inventory) will use this sheet.
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="rounded-2xl glass-panel p-3 flex gap-2 items-end shrink-0">
         <Textarea
