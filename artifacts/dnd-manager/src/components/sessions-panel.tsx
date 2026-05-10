@@ -497,8 +497,16 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
-  const isRecapStale = !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt));
   const recapStatus = s?.recapStatus ?? "idle";
+  // With auto-trigger, an 'idle' status means the recap is up-to-date with the
+  // current notes (the runner only flips to 'idle' after persisting the latest
+  // notes hash). Only fall back to the timestamp-based heuristic when status
+  // is missing/unknown — this avoids false "stale" warnings from non-notes
+  // edits like title or session-number changes.
+  const isRecapStale =
+    recapStatus !== "idle" && recapStatus !== "pending" && recapStatus !== "running" && recapStatus !== "error"
+      ? !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt))
+      : false;
 
   const handleSaveSessionNumber = useCallback(() => {
     if (!s || draftSessionNumber < 1 || draftSessionNumber === s.sessionNumber) {
