@@ -255,7 +255,7 @@ export default function MapEditorPage() {
 
   if (!validId) {
     return (
-      <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground p-8">
+      <div className="dark min-h-[100dvh] bg-background text-foreground p-8">
         <p className="text-sm text-muted-foreground">Invalid map id.</p>
       </div>
     );
@@ -263,7 +263,7 @@ export default function MapEditorPage() {
 
   if (error) {
     return (
-      <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground p-8 space-y-3">
+      <div className="dark min-h-[100dvh] bg-background text-foreground p-8 space-y-3">
         <p className="text-sm text-red-400">Could not load this map.</p>
         <Button variant="outline" onClick={() => setLocation("/maps")}>Back to maps</Button>
       </div>
@@ -272,7 +272,7 @@ export default function MapEditorPage() {
 
   if (isLoading || !local) {
     return (
-      <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground p-8 flex items-center gap-2">
+      <div className="dark min-h-[100dvh] bg-background text-foreground p-8 flex items-center gap-2">
         <Loader2 className="h-4 w-4 animate-spin" /> Loading map…
       </div>
     );
@@ -282,15 +282,15 @@ export default function MapEditorPage() {
 
   return (
     <div
-      className="dark h-[100dvh] bg-[#09090B] text-foreground flex flex-col overflow-hidden"
+      className="dark h-[100dvh] bg-background text-foreground flex flex-col overflow-hidden"
       data-testid="page-map-editor"
     >
-      <header className="h-14 border-b border-[rgba(255,255,255,0.06)] bg-[#09090B] px-4 flex items-center justify-between shrink-0">
+      <header className="h-14 border-b border-border/60 bg-sidebar bg-dither-surface px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <Button variant="ghost" size="sm" onClick={() => setLocation("/maps")} data-testid="button-back-to-maps">
             <ChevronLeft className="h-4 w-4 mr-1" /> Back
           </Button>
-          <div className="h-6 w-px bg-[rgba(255,255,255,0.08)]" />
+          <div className="h-6 w-px bg-border" />
           <TypeIcon className="h-4 w-4 text-primary shrink-0" />
           {isDm ? (
             <Input
@@ -301,7 +301,7 @@ export default function MapEditorPage() {
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
               maxLength={80}
-              className="h-8 w-56 bg-transparent border-transparent focus-visible:border-[rgba(255,255,255,0.12)]"
+              className="h-8 w-56 bg-transparent border-transparent focus-visible:border-border"
               data-testid="input-map-name"
             />
           ) : (
@@ -331,10 +331,10 @@ export default function MapEditorPage() {
       <div className="flex-1 flex overflow-hidden">
         {isDm && !previewAsPlayer && (
           <aside
-            className="w-72 border-r border-[rgba(255,255,255,0.06)] bg-[#09090B] flex flex-col shrink-0"
+            className="w-72 border-r border-border/60 bg-sidebar bg-dither-surface flex flex-col shrink-0"
             data-testid="aside-tools"
           >
-            <div className="flex border-b border-[rgba(255,255,255,0.06)]">
+            <div className="flex border-b border-border/60">
               <button
                 onClick={() => setActiveTab("tools")}
                 className={`flex-1 p-3 flex justify-center text-sm ${
@@ -387,7 +387,7 @@ export default function MapEditorPage() {
                             className={`flex items-center gap-2 p-2 rounded border-2 transition-colors ${
                               active
                                 ? "border-primary bg-primary/10"
-                                : "border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)]"
+                                : "border-border bg-muted/60"
                             }`}
                           >
                             <span className="text-lg">{p.emoji}</span>
@@ -423,7 +423,7 @@ export default function MapEditorPage() {
                                 setTool("token");
                               }}
                               data-testid={`token-pick-${g.id}-${i}`}
-                              className={`h-10 flex items-center justify-center text-xl rounded bg-[rgba(255,255,255,0.04)] border-2 transition-all ${
+                              className={`h-10 flex items-center justify-center text-xl rounded bg-muted/60 border-2 transition-all ${
                                 active ? "border-primary scale-105" : "border-transparent"
                               }`}
                             >
@@ -442,7 +442,7 @@ export default function MapEditorPage() {
                       {local.tokens.map((t) => (
                         <div
                           key={t.id}
-                          className="flex items-center justify-between p-2 bg-[rgba(255,255,255,0.04)] rounded text-xs"
+                          className="flex items-center justify-between p-2 bg-muted/60 rounded text-xs"
                           data-testid={`token-row-${t.id}`}
                         >
                           <span className="flex items-center gap-2">
@@ -467,9 +467,9 @@ export default function MapEditorPage() {
           </aside>
         )}
 
-        <main className="flex-1 bg-[#09090B] p-4 md:p-8 overflow-auto flex items-start justify-center">
+        <main className="flex-1 bg-background p-4 md:p-8 overflow-auto flex items-start justify-center">
           <div
-            className="grid p-2 rounded-lg bg-[rgba(255,255,255,0.02)] border border-[rgba(255,255,255,0.06)]"
+            className="grid p-2 rounded-lg bg-muted/40 border border-border/60"
             style={{
               gridTemplateColumns: `repeat(${local.cols}, 44px)`,
               gridTemplateRows: `repeat(${local.rows}, 44px)`,
@@ -554,7 +554,7 @@ function ToolButton({
       onClick={onClick}
       data-testid={testId}
       className={`flex items-center gap-2 px-3 py-2 rounded text-[10px] font-bold uppercase transition-colors ${
-        active ? "bg-primary text-primary-foreground" : "bg-[rgba(255,255,255,0.04)] text-muted-foreground border border-[rgba(255,255,255,0.08)]"
+        active ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground border border-border"
       }`}
     >
       {icon}

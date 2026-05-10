@@ -734,7 +734,7 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
               <img
                 src={portraitSrc}
                 alt={`${char.name} portrait`}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover [image-rendering:auto]"
                 onError={(e) => {
                   // Fallback gracefully when the URL is unreachable.
                   (e.currentTarget as HTMLImageElement).style.display = "none";

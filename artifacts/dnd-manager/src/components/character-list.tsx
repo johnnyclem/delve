@@ -49,7 +49,7 @@ function CharacterPortraitThumb({ url, name }: { url: string | null | undefined;
         src={src}
         alt={`${name} portrait`}
         loading="lazy"
-        className="h-14 w-14 rounded-xl object-cover shrink-0 border border-[rgba(255,255,255,0.08)]"
+        className="h-14 w-14 rounded-xl object-cover shrink-0 border border-[rgba(255,255,255,0.08)] [image-rendering:auto]"
         data-testid="img-character-thumb"
       />
     );

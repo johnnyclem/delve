@@ -41,41 +41,41 @@ const clerkAppearance = {
     logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
   },
   variables: {
-    colorPrimary: "hsl(270, 100%, 60%)",
-    colorForeground: "#ededed",
-    colorMutedForeground: "#737373",
-    colorDanger: "#ef4444",
-    colorBackground: "#09090B",
-    colorInput: "rgba(255,255,255,0.06)",
-    colorInputForeground: "#ededed",
-    colorNeutral: "rgba(255,255,255,0.08)",
+    colorPrimary: "hsl(45, 84%, 63%)",
+    colorForeground: "hsl(255, 100%, 94%)",
+    colorMutedForeground: "hsl(249, 32%, 70%)",
+    colorDanger: "hsl(348, 70%, 56%)",
+    colorBackground: "hsl(240, 43%, 6%)",
+    colorInput: "hsl(247, 35%, 18%)",
+    colorInputForeground: "hsl(255, 100%, 94%)",
+    colorNeutral: "hsl(250, 27%, 27%)",
     fontFamily: "'Inter', system-ui, sans-serif",
-    borderRadius: "0.75rem",
+    borderRadius: "2px",
   },
   elements: {
     rootBox: "w-full flex justify-center",
-    cardBox: "glass-panel rounded-2xl w-[440px] max-w-full overflow-hidden",
+    cardBox: "glass-panel w-[440px] max-w-full overflow-hidden",
     card: "!shadow-none !border-0 !bg-transparent !rounded-none",
     footer: "!shadow-none !border-0 !bg-transparent !rounded-none",
-    headerTitle: "text-foreground font-semibold",
+    headerTitle: "text-foreground font-display",
     headerSubtitle: "text-muted-foreground",
     socialButtonsBlockButtonText: "text-foreground",
-    formFieldLabel: "text-[rgba(255,255,255,0.7)]",
-    footerActionLink: "text-primary hover:text-[hsl(270,100%,70%)]",
+    formFieldLabel: "text-foreground/80",
+    footerActionLink: "text-primary hover:text-[hsl(45,84%,75%)]",
     footerActionText: "text-muted-foreground",
     dividerText: "text-muted-foreground",
     identityPreviewEditButton: "text-primary",
     formFieldSuccessText: "text-emerald-400",
     alertText: "text-foreground",
     logoBox: "mb-4",
-    logoImage: "h-10 w-10",
-    socialButtonsBlockButton: "border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.08)]",
-    formButtonPrimary: "bg-primary hover:bg-[hsl(270,100%,50%)] text-white",
-    formFieldInput: "bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.08)] text-foreground",
+    logoImage: "h-10 w-10 pixelated",
+    socialButtonsBlockButton: "border-border bg-input hover:bg-muted",
+    formButtonPrimary: "bg-primary text-primary-foreground hover:bg-[hsl(45,84%,55%)]",
+    formFieldInput: "bg-input border-border text-foreground",
     footerAction: "justify-center",
-    dividerLine: "bg-[rgba(255,255,255,0.08)]",
-    alert: "bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.08)]",
-    otpCodeFieldInput: "bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.08)] text-foreground",
+    dividerLine: "bg-border",
+    alert: "bg-input border-border",
+    otpCodeFieldInput: "bg-input border-border text-foreground",
     formFieldRow: "mb-1",
     main: "gap-4",
   },
@@ -83,7 +83,7 @@ const clerkAppearance = {
 
 function SignInPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090B] px-4" data-testid="page-sign-in">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4" data-testid="page-sign-in">
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
     </div>
   );
@@ -91,7 +91,7 @@ function SignInPage() {
 
 function SignUpPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-[#09090B] px-4" data-testid="page-sign-up">
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4" data-testid="page-sign-up">
       <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
     </div>
   );

@@ -71,8 +71,8 @@ export default function MapsPage() {
   const typeIcon = (t: string) => MAP_TYPES.find((m) => m.id === t)?.icon ?? MapIcon;
 
   return (
-    <div className="dark min-h-[100dvh] bg-[#09090B] text-foreground" data-testid="page-maps">
-      <header className="border-b border-[rgba(255,255,255,0.06)] px-4 md:px-8 py-4 flex items-center justify-between">
+    <div className="dark min-h-[100dvh] bg-background text-foreground" data-testid="page-maps">
+      <header className="border-b border-border/60 px-4 md:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -83,7 +83,7 @@ export default function MapsPage() {
             <ChevronLeft className="h-4 w-4 mr-1" />
             Back
           </Button>
-          <div className="h-6 w-px bg-[rgba(255,255,255,0.08)]" />
+          <div className="h-6 w-px bg-border" />
           <h1 className="text-lg font-semibold tracking-tight">Maps</h1>
         </div>
         {isDm && (
@@ -114,7 +114,7 @@ export default function MapsPage() {
                       className={`text-left p-4 rounded-xl border transition-colors ${
                         active
                           ? "border-primary bg-primary/10"
-                          : "border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)] hover:bg-[rgba(255,255,255,0.06)]"
+                          : "border-border bg-muted/60 hover:bg-muted/80"
                       }`}
                     >
                       <div className="flex items-center gap-3 mb-2">
@@ -177,7 +177,7 @@ export default function MapsPage() {
                     data-testid={`map-card-${m.id}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-10 w-10 rounded-lg bg-[rgba(255,255,255,0.06)] flex items-center justify-center text-primary shrink-0">
+                      <div className="h-10 w-10 rounded-lg bg-muted/80 flex items-center justify-center text-primary shrink-0">
                         <Icon className="h-5 w-5" />
                       </div>
                       <div className="min-w-0">
@@ -190,7 +190,7 @@ export default function MapsPage() {
                     {isDm && (
                       <button
                         onClick={(e) => handleDelete(e, m.id)}
-                        className="p-2 rounded-md text-muted-foreground hover:text-red-400 hover:bg-[rgba(255,255,255,0.04)] opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="p-2 rounded-md text-muted-foreground hover:text-red-400 hover:bg-muted/60 opacity-0 group-hover:opacity-100 transition-opacity"
                         title="Delete map"
                         data-testid={`button-delete-map-${m.id}`}
                       >

@@ -177,10 +177,10 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="dark min-h-[100dvh] bg-[#09090B] flex" data-testid="page-dashboard">
-      <aside className="hidden md:flex flex-col w-64 border-r border-[rgba(255,255,255,0.06)] bg-[#09090B] p-4 shrink-0">
+    <div className="dark min-h-[100dvh] bg-background flex" data-testid="page-dashboard">
+      <aside className="hidden md:flex flex-col w-64 border-r border-border/60 bg-sidebar bg-dither-surface p-4 shrink-0">
         <div className="flex items-center gap-2 mb-8 px-2">
-          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Delve" className="h-8 w-8" />
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Delve" className="h-8 w-8 pixelated" />
           <span className="text-base font-semibold text-foreground tracking-tight">Delve</span>
         </div>
         <nav className="flex-1 space-y-1">
@@ -194,7 +194,7 @@ export default function DashboardPage() {
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 activeTab === item.id
                   ? "glass-panel text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-[rgba(255,255,255,0.04)]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
               }`}
             >
               <item.icon className="h-4 w-4" />
@@ -216,7 +216,7 @@ export default function DashboardPage() {
             </motion.button>
           ))}
         </nav>
-        <div className="border-t border-[rgba(255,255,255,0.06)] pt-4 mt-4">
+        <div className="border-t border-border/60 pt-4 mt-4">
           <div className="flex items-center gap-3 px-2 mb-3">
             <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-semibold">
               {user?.firstName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ?? "?"}
@@ -227,7 +227,7 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-          <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors" data-testid="label-email-notifications">
+          <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/60 cursor-pointer transition-colors" data-testid="label-email-notifications">
             <span className="flex items-center gap-2 text-sm text-muted-foreground">
               <Mail className="h-4 w-4" />
               Recap emails
@@ -239,7 +239,7 @@ export default function DashboardPage() {
               data-testid="switch-email-notifications"
             />
           </label>
-          <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors" data-testid="label-timezone">
+          <label className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors" data-testid="label-timezone">
             <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
               <Globe className="h-4 w-4" />
               Your timezone
@@ -260,9 +260,9 @@ export default function DashboardPage() {
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-[rgba(255,255,255,0.06)] bg-[#09090B]/95 backdrop-blur-sm sticky top-0 z-40">
+        <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border/60 bg-sidebar bg-dither-surface sticky top-0 z-40">
           <div className="flex items-center gap-2">
-            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Delve" className="h-7 w-7" />
+            <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Delve" className="h-7 w-7 pixelated" />
             <span className="text-sm font-semibold text-foreground tracking-tight">Delve</span>
           </div>
           <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => setMobileMenuOpen(!mobileMenuOpen)} data-testid="button-mobile-menu" className="text-foreground p-1">
@@ -271,7 +271,7 @@ export default function DashboardPage() {
         </header>
 
         {mobileMenuOpen && (
-          <div className="md:hidden absolute top-14 left-0 right-0 bg-[#09090B] border-b border-[rgba(255,255,255,0.06)] z-30 p-3 space-y-1 backdrop-blur-xl">
+          <div className="md:hidden absolute top-14 left-0 right-0 bg-sidebar bg-dither-surface border-b border-border/60 z-30 p-3 space-y-1">
             {navItems.map((item) => (
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -282,7 +282,7 @@ export default function DashboardPage() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === item.id
                     ? "glass-panel text-foreground"
-                    : "text-muted-foreground hover:bg-[rgba(255,255,255,0.04)]"
+                    : "text-muted-foreground hover:bg-muted/60"
                 }`}
               >
                 <item.icon className="h-4 w-4" />
@@ -303,7 +303,7 @@ export default function DashboardPage() {
                 )}
               </motion.button>
             ))}
-            <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors mt-2">
+            <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/60 cursor-pointer transition-colors mt-2">
               <span className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Mail className="h-4 w-4" />
                 Recap emails
@@ -314,7 +314,7 @@ export default function DashboardPage() {
                 disabled={updateNotificationPrefs.isPending}
               />
             </label>
-            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors">
+            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors">
               <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
                 <Globe className="h-4 w-4" />
                 Your timezone
@@ -439,10 +439,10 @@ function JoinCampaignPage() {
   };
 
   return (
-    <div className="dark min-h-[100dvh] bg-[#09090B] flex items-center justify-center px-4 py-8" data-testid="page-join">
+    <div className="dark min-h-[100dvh] bg-background flex items-center justify-center px-4 py-8" data-testid="page-join">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
-          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Delve" className="h-16 w-16 mx-auto mb-4" />
+          <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Delve" className="h-16 w-16 mx-auto mb-4 pixelated" />
           <h1 className="text-3xl font-semibold text-foreground">Join the Campaign</h1>
           <p className="text-muted-foreground mt-2">Enter the invite code from your DM, or use an admin token to start as DM.</p>
         </div>
@@ -504,7 +504,7 @@ function JoinCampaignPage() {
 function SessionTrendTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#18181B] px-3 py-2 shadow-xl">
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 shadow-xl">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-semibold text-foreground font-mono tabular-nums">
         {payload[0].value} {payload[0].value === 1 ? "session" : "sessions"}

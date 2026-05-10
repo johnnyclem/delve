@@ -6,7 +6,7 @@ export default function NotFound() {
   const [, setLocation] = useLocation();
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center bg-[#09090B] px-4" data-testid="page-not-found">
+    <div className="min-h-[100dvh] flex items-center justify-center bg-background px-4" data-testid="page-not-found">
       <div className="text-center">
         <AlertCircle className="h-12 w-12 text-primary mx-auto mb-4" />
         <h1 className="text-3xl font-semibold text-foreground mb-2">Lost in the Void</h1>
