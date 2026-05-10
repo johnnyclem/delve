@@ -219,7 +219,19 @@ function CreateSession({ onBack, onCreated }: { onBack: () => void; onCreated: (
 }
 
 function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
-  const { data: session, isLoading } = useGetSession(id, { query: { queryKey: getGetSessionQueryKey(id) } });
+  const { data: session, isLoading } = useGetSession(id, {
+    query: {
+      queryKey: getGetSessionQueryKey(id),
+      // Poll while a recap is being auto-generated so the FE picks up the
+      // transition from "pending" -> "running" -> "idle"/"error" without
+      // requiring the DM to refresh.
+      refetchInterval: (q) => {
+        const data = q.state.data as SessionLog | undefined;
+        const status = data?.recapStatus;
+        return status === "pending" || status === "running" ? 5000 : false;
+      },
+    },
+  });
   const { data: membership } = useGetMyMembership();
   const generateRecap = useGenerateRecap();
   const notifyRecap = useNotifyRecap();
@@ -486,6 +498,8 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
   const isRecapStale = !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt));
+  const recapStatus = s?.recapStatus ?? "idle";
+  const recapAuto = recapStatus === "pending" || recapStatus === "running";
 
   const handleSaveSessionNumber = useCallback(() => {
     if (!s || draftSessionNumber < 1 || draftSessionNumber === s.sessionNumber) {
@@ -924,11 +938,14 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
               AI Recap
             </h3>
             <div className="flex items-center gap-3 flex-wrap">
-              {isDm && isRecapStale && (
-                <span className="flex items-center gap-1 text-xs text-amber-400">
-                  <AlertTriangle className="h-3 w-3" />
-                  Notes updated since last recap
-                </span>
+              {isDm && (
+                <RecapStatusBadge
+                  status={recapStatus}
+                  error={s.recapError ?? null}
+                  isStale={isRecapStale}
+                  manualPending={generateRecap.isPending}
+                  onRetry={handleGenerateRecap}
+                />
               )}
               {isDm && (
                 s.notifiedAt && !isRecapStale ? (
@@ -974,10 +991,33 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
               {isDirty && <span className="text-xs text-amber-400">(unsaved)</span>}
             </h3>
             <div className="flex items-center gap-2">
+              {!editingNotes && s.rawNotesMd && !s.recapMd && (
+                <RecapStatusBadge
+                  status={recapStatus}
+                  error={s.recapError ?? null}
+                  isStale={false}
+                  manualPending={generateRecap.isPending}
+                  onRetry={handleGenerateRecap}
+                />
+              )}
               {!editingNotes && s.rawNotesMd && (
-                <Button size="sm" variant="outline" onClick={handleGenerateRecap} disabled={generateRecap.isPending} data-testid="button-generate-recap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGenerateRecap}
+                  disabled={generateRecap.isPending || recapAuto}
+                  data-testid="button-generate-recap"
+                >
                   <Sparkles className="h-4 w-4 mr-1" />
-                  {generateRecap.isPending ? "Generating..." : s.recapMd ? "Regenerate Recap" : "Generate Recap"}
+                  {generateRecap.isPending
+                    ? "Generating..."
+                    : recapStatus === "running"
+                      ? "Auto-generating…"
+                      : recapStatus === "pending"
+                        ? "Generate now"
+                        : s.recapMd
+                          ? "Regenerate Recap"
+                          : "Generate Recap"}
                 </Button>
               )}
               {!editingNotes && (
@@ -1332,4 +1372,66 @@ function markdownToHtml(md: string): string {
     .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
     .replace(/\n\n/g, "</p><p>")
     .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
+}
+
+function RecapStatusBadge({
+  status,
+  error,
+  isStale,
+  manualPending,
+  onRetry,
+}: {
+  status: "idle" | "pending" | "running" | "error" | string;
+  error: string | null;
+  isStale: boolean;
+  manualPending: boolean;
+  onRetry: () => void;
+}) {
+  if (status === "running" || manualPending) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-primary" data-testid="text-recap-status" data-status="running">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Recap regenerating…
+      </span>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground" data-testid="text-recap-status" data-status="pending">
+        <Clock className="h-3 w-3" />
+        Auto-recap scheduled…
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span className="flex items-center gap-2 text-xs text-rose-400" data-testid="text-recap-status" data-status="error">
+        <AlertTriangle className="h-3 w-3" />
+        Recap failed{error ? `: ${error}` : ""}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-6 px-2 text-xs text-rose-300 hover:text-rose-200"
+          onClick={onRetry}
+          data-testid="button-recap-retry"
+        >
+          Retry
+        </Button>
+      </span>
+    );
+  }
+  if (isStale) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-amber-400" data-testid="text-recap-status" data-status="stale">
+        <AlertTriangle className="h-3 w-3" />
+        Notes updated since last recap
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 text-xs text-emerald-400/80" data-testid="text-recap-status" data-status="idle">
+      <CheckCircle2 className="h-3 w-3" />
+      Recap up to date
+    </span>
+  );
 }

@@ -2162,6 +2162,13 @@ components:
           oneOf:
             - $ref: "#/components/schemas/SessionAttendees"
             - type: "null"
+        recapStatus:
+          type: string
+          enum: [idle, pending, running, error]
+          description: Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`).
+        recapError:
+          type: ["string", "null"]
+          description: Error message from the most recent failed recap generation attempt, if any.
         hasNewRecap:
           type: boolean
         recapWordCount:

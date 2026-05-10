@@ -8,13 +8,8 @@ import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
 import { sendRecapNotifications, buildRecipientContext, sendRecapEmailToRecipient } from "../lib/email";
 import { logger } from "../lib/logger";
-import {
-  RECAP_MODEL,
-  RECAP_TEMPERATURE,
-  RECAP_MAX_TOKENS,
-  RECAP_SYSTEM_PROMPT,
-  buildRecapUserPrompt,
-} from "../lib/recap-prompt";
+import { RECAP_MODEL } from "../lib/recap-prompt";
+import { runRecapNow, scheduleRecap, shouldScheduleRecap } from "../lib/recap-runner";
 
 const router: IRouter = Router();
 
@@ -161,35 +156,6 @@ async function validateAttendees(
     }
   }
   return null;
-}
-
-/**
- * Build the recap-prompt attendees list from a session row by looking up the
- * referenced PC and NPC names. Quick-tag NPC names come straight from the
- * stored attendees blob.
- */
-async function buildAttendeesForRecap(
-  attendees: SessionAttendees | null | undefined,
-  campaignId: number,
-): Promise<{ kind: "pc" | "npc"; name: string }[]> {
-  if (!attendees) return [];
-  const out: { kind: "pc" | "npc"; name: string }[] = [];
-  if (attendees.characterIds.length > 0) {
-    const chars = await db
-      .select({ id: charactersTable.id, name: charactersTable.name })
-      .from(charactersTable)
-      .where(
-        and(
-          eq(charactersTable.campaignId, campaignId),
-          inArray(charactersTable.id, attendees.characterIds),
-        ),
-      );
-    for (const c of chars) out.push({ kind: "pc", name: c.name });
-  }
-  for (const npc of attendees.npcs) {
-    out.push({ kind: "npc", name: npc.name });
-  }
-  return out;
 }
 
 router.get("/sessions", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
@@ -384,6 +350,24 @@ router.patch("/sessions/:id", requireAuth, requireCampaignMember, async (req, re
     return;
   }
 
+  // Auto-schedule a debounced recap regeneration when the DM's notes have
+  // meaningfully changed since the last recap. Empty notes never trigger.
+  if (
+    parsed.data.rawNotesMd !== undefined &&
+    shouldScheduleRecap(updated.rawNotesMd, updated.recapNotesHash)
+  ) {
+    scheduleRecap(id, campaignId);
+    // Reflect "pending" immediately in the response so the FE can render the
+    // status without waiting for the next poll.
+    const [stamped] = await db
+      .update(sessionLogsTable)
+      .set({ recapStatus: "pending", recapError: null })
+      .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)))
+      .returning();
+    res.json(stamped ?? updated);
+    return;
+  }
+
   res.json(updated);
 });
 
@@ -403,52 +387,22 @@ router.post("/sessions/:id/generate-recap", requireAuth, requireCampaignMember, 
     return;
   }
 
-  const [session] = await db
-    .select()
-    .from(sessionLogsTable)
-    .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
-
-  if (!session) {
-    res.status(404).json({ error: "Session not found" });
-    return;
-  }
-
-  if (!session.rawNotesMd) {
-    res.status(400).json({ error: "No raw notes to generate recap from" });
-    return;
-  }
-
-  let openai;
   try {
-    openai = (await import("@workspace/integrations-openai-ai-server")).openai;
-  } catch {
-    res.status(503).json({ error: "AI service is not configured" });
-    return;
+    const recap = await runRecapNow(id, campaignId);
+    res.json({ recap, model: RECAP_MODEL });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to generate recap";
+    if (message === "Session not found") {
+      res.status(404).json({ error: message });
+    } else if (message === "No raw notes to generate recap from") {
+      res.status(400).json({ error: message });
+    } else if (message === "AI service is not configured") {
+      res.status(503).json({ error: message });
+    } else {
+      logger.error({ err, id, campaignId }, "Manual recap generation failed");
+      res.status(502).json({ error: "Failed to generate recap" });
+    }
   }
-
-  const recapAttendees = await buildAttendeesForRecap(session.attendees, campaignId);
-  const completion = await openai.chat.completions.create({
-    model: RECAP_MODEL,
-    max_completion_tokens: RECAP_MAX_TOKENS,
-    temperature: RECAP_TEMPERATURE,
-    messages: [
-      { role: "system", content: RECAP_SYSTEM_PROMPT },
-      { role: "user", content: buildRecapUserPrompt(session.sessionNumber, session.title, session.rawNotesMd, recapAttendees) },
-    ],
-  });
-
-  const recap = completion.choices[0]?.message?.content ?? "";
-
-  await db
-    .update(sessionLogsTable)
-    .set({ recapMd: recap, generatedAt: new Date(), notifiedAt: null })
-    .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
-
-  await db
-    .delete(recapViewsTable)
-    .where(eq(recapViewsTable.sessionLogId, id));
-
-  res.json({ recap, model: RECAP_MODEL });
 });
 
 router.post("/sessions/:id/notify-recap", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {

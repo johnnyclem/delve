@@ -351,6 +351,18 @@ export const GetDashboardResponse = zod.object({
           zod.null(),
         ])
         .optional(),
+      recapStatus: zod
+        .enum(["idle", "pending", "running", "error"])
+        .optional()
+        .describe(
+          "Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`).",
+        ),
+      recapError: zod
+        .string()
+        .nullish()
+        .describe(
+          "Error message from the most recent failed recap generation attempt, if any.",
+        ),
       hasNewRecap: zod.boolean().optional(),
       recapWordCount: zod
         .number()
@@ -1275,6 +1287,18 @@ export const ListSessionsResponseItem = zod.object({
       zod.null(),
     ])
     .optional(),
+  recapStatus: zod
+    .enum(["idle", "pending", "running", "error"])
+    .optional()
+    .describe(
+      "Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`).",
+    ),
+  recapError: zod
+    .string()
+    .nullish()
+    .describe(
+      "Error message from the most recent failed recap generation attempt, if any.",
+    ),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()
@@ -1341,6 +1365,18 @@ export const GetSessionResponse = zod.object({
       zod.null(),
     ])
     .optional(),
+  recapStatus: zod
+    .enum(["idle", "pending", "running", "error"])
+    .optional()
+    .describe(
+      "Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`).",
+    ),
+  recapError: zod
+    .string()
+    .nullish()
+    .describe(
+      "Error message from the most recent failed recap generation attempt, if any.",
+    ),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()
@@ -1410,6 +1446,18 @@ export const UpdateSessionResponse = zod.object({
       zod.null(),
     ])
     .optional(),
+  recapStatus: zod
+    .enum(["idle", "pending", "running", "error"])
+    .optional()
+    .describe(
+      "Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`).",
+    ),
+  recapError: zod
+    .string()
+    .nullish()
+    .describe(
+      "Error message from the most recent failed recap generation attempt, if any.",
+    ),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()
@@ -1566,6 +1614,18 @@ export const GetLatestRecapResponse = zod.object({
       zod.null(),
     ])
     .optional(),
+  recapStatus: zod
+    .enum(["idle", "pending", "running", "error"])
+    .optional()
+    .describe(
+      "Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`).",
+    ),
+  recapError: zod
+    .string()
+    .nullish()
+    .describe(
+      "Error message from the most recent failed recap generation attempt, if any.",
+    ),
   hasNewRecap: zod.boolean().optional(),
   recapWordCount: zod
     .number()

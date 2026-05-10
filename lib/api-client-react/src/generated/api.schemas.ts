@@ -304,6 +304,19 @@ export interface SessionAttendees {
   npcs: SessionAttendeesNpcsItem[];
 }
 
+/**
+ * Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`).
+ */
+export type SessionLogRecapStatus =
+  (typeof SessionLogRecapStatus)[keyof typeof SessionLogRecapStatus];
+
+export const SessionLogRecapStatus = {
+  idle: "idle",
+  pending: "pending",
+  running: "running",
+  error: "error",
+} as const;
+
 export interface SessionLog {
   id: number;
   campaignId: number;
@@ -320,6 +333,13 @@ export interface SessionLog {
   /** @nullable */
   notifiedAt?: string | null;
   attendees?: SessionAttendees | null;
+  /** Status of recap generation. `pending` = debounce timer scheduled, `running` = LLM call in flight, `error` = last attempt failed (see `recapError`). */
+  recapStatus?: SessionLogRecapStatus;
+  /**
+   * Error message from the most recent failed recap generation attempt, if any.
+   * @nullable
+   */
+  recapError?: string | null;
   hasNewRecap?: boolean;
   /** Word count of the recap text, or 0 if no recap exists. */
   recapWordCount?: number;
