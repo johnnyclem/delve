@@ -948,6 +948,31 @@ export interface UpdateEntityBody {
   data?: UpdateEntityBodyData;
 }
 
+export type SeedWorldSummaryAdded = {
+  npc: number;
+  mob_encounter: number;
+};
+
+/**
+ * Counts of starter entries that already existed (idempotent skip).
+ */
+export type SeedWorldSummarySkipped = {
+  npc: number;
+  mob_encounter: number;
+};
+
+/**
+ * Result of seeding a campaign with curated SRD starter content.
+ */
+export interface SeedWorldSummary {
+  added: SeedWorldSummaryAdded;
+  /** Counts of starter entries that already existed (idempotent skip). */
+  skipped: SeedWorldSummarySkipped;
+  /** SRD slugs the seeder expected but couldn't find in `reference_chunks`. */
+  missing: string[];
+  bestiaryAvailable: boolean;
+}
+
 export type EntityAuditEntryAction =
   (typeof EntityAuditEntryAction)[keyof typeof EntityAuditEntryAction];
 

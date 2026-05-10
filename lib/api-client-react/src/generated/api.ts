@@ -65,6 +65,7 @@ import type {
   RuleEntity,
   RuleSearchResponse,
   SearchRulesParams,
+  SeedWorldSummary,
   SessionLog,
   SpeakableCharacter,
   SuccessResponse,
@@ -4689,6 +4690,87 @@ export const useUnrevealEntity = <
   TContext
 > => {
   return useMutation(getUnrevealEntityMutationOptions(options));
+};
+
+/**
+ * @summary Seed (or top-up) this campaign's world with starter NPCs and mob encounters drawn from the SRD bestiary (DM only). Idempotent — entries that already exist are left untouched.
+ */
+export const getSeedWorldFromSrdUrl = () => {
+  return `/api/entities/seed-srd`;
+};
+
+export const seedWorldFromSrd = async (
+  options?: RequestInit,
+): Promise<SeedWorldSummary> => {
+  return customFetch<SeedWorldSummary>(getSeedWorldFromSrdUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getSeedWorldFromSrdMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof seedWorldFromSrd>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof seedWorldFromSrd>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["seedWorldFromSrd"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof seedWorldFromSrd>>,
+    void
+  > = () => {
+    return seedWorldFromSrd(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type SeedWorldFromSrdMutationResult = NonNullable<
+  Awaited<ReturnType<typeof seedWorldFromSrd>>
+>;
+
+export type SeedWorldFromSrdMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Seed (or top-up) this campaign's world with starter NPCs and mob encounters drawn from the SRD bestiary (DM only). Idempotent — entries that already exist are left untouched.
+ */
+export const useSeedWorldFromSrd = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof seedWorldFromSrd>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof seedWorldFromSrd>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getSeedWorldFromSrdMutationOptions(options));
 };
 
 /**

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Loader2 } from "lucide-react";
+import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +23,7 @@ import {
   useUnrevealEntity,
   useGetEntityAudit,
   useGetMyMembership,
+  useSeedWorldFromSrd,
 } from "@workspace/api-client-react";
 import type { CampaignEntity, EntityKind, EntityAuditEntry } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -163,6 +164,7 @@ export default function WorldPanel() {
               ))}
             </SelectContent>
           </Select>
+          {isDm && <SeedSrdButton onSeeded={() => refetch()} />}
           {isDm && (
             <CreateMenu onPick={(kind) => setView({ mode: "create", kind })} />
           )}
@@ -208,6 +210,75 @@ export default function WorldPanel() {
         </div>
       )}
     </div>
+  );
+}
+
+function SeedSrdButton({ onSeeded }: { onSeeded: () => void }) {
+  const seed = useSeedWorldFromSrd();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const handleClick = () => {
+    if (
+      !confirm(
+        "Add a curated set of starter NPCs and mob encounters from the SRD bestiary?\n\nEntries that already exist will be left untouched. All seeded content stays hidden from players until you reveal it.",
+      )
+    ) {
+      return;
+    }
+    seed.mutate(undefined, {
+      onSuccess: (summary) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/entities"] });
+        onSeeded();
+        const addedTotal = summary.added.npc + summary.added.mob_encounter;
+        const skippedTotal = summary.skipped.npc + summary.skipped.mob_encounter;
+        if (addedTotal === 0 && skippedTotal > 0) {
+          toast({
+            title: "Already seeded",
+            description: `All ${skippedTotal} starter entries are already in your world.`,
+          });
+        } else {
+          toast({
+            title: "Starter content added",
+            description: `Added ${summary.added.npc} NPC${summary.added.npc === 1 ? "" : "s"} and ${summary.added.mob_encounter} mob encounter${summary.added.mob_encounter === 1 ? "" : "s"}${
+              skippedTotal > 0 ? `; ${skippedTotal} already existed.` : "."
+            }`,
+          });
+        }
+      },
+      onError: (err: unknown) => {
+        const e = err as { status?: number; message?: string } | Error;
+        const status = (e as { status?: number }).status;
+        const message = (e as Error).message ?? "Failed to seed starter content";
+        if (status === 409) {
+          toast({
+            title: "SRD bestiary not ready",
+            description:
+              "Run the SRD ingestion script (`pnpm --filter @workspace/scripts run srd:ingest-api`) to enable starter content.",
+            variant: "destructive",
+          });
+        } else {
+          toast({ title: "Failed", description: message, variant: "destructive" });
+        }
+      },
+    });
+  };
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleClick}
+      disabled={seed.isPending}
+      data-testid="button-seed-srd"
+    >
+      {seed.isPending ? (
+        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+      ) : (
+        <Sparkles className="h-4 w-4 mr-1" />
+      )}
+      Add starter content from SRD
+    </Button>
   );
 }
 

@@ -2339,6 +2339,32 @@ export const UnrevealEntityResponse = zod.object({
 });
 
 /**
+ * @summary Seed (or top-up) this campaign's world with starter NPCs and mob encounters drawn from the SRD bestiary (DM only). Idempotent — entries that already exist are left untouched.
+ */
+export const SeedWorldFromSrdResponse = zod
+  .object({
+    added: zod.object({
+      npc: zod.number(),
+      mob_encounter: zod.number(),
+    }),
+    skipped: zod
+      .object({
+        npc: zod.number(),
+        mob_encounter: zod.number(),
+      })
+      .describe(
+        "Counts of starter entries that already existed (idempotent skip).",
+      ),
+    missing: zod
+      .array(zod.string())
+      .describe(
+        "SRD slugs the seeder expected but couldn't find in `reference_chunks`.",
+      ),
+    bestiaryAvailable: zod.boolean(),
+  })
+  .describe("Result of seeding a campaign with curated SRD starter content.");
+
+/**
  * @summary Audit timeline of reveal/edit actions for an entity (DM only)
  */
 export const GetEntityAuditParams = zod.object({

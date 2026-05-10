@@ -13,10 +13,20 @@ import { z } from "zod";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { syncEntityChunks } from "../lib/entityEmbeddings";
+import { seedCampaignWorldFromSrd } from "../lib/seedWorld";
 
 const router: IRouter = Router();
 
 // ---------- Per-kind data validators ----------
+
+// SRD provenance fields are populated by the world seeder so DMs can jump
+// from a starter entity back to the source bestiary stat block. They are
+// allowed (but not required) on any seeded kind.
+const srdRefFields = {
+  srdSlug: z.string().max(120).optional(),
+  srdEdition: z.enum(["2014", "2024"]).optional(),
+  srdChunkId: z.number().int().positive().optional(),
+} as const;
 
 const npcData = z
   .object({
@@ -25,6 +35,7 @@ const npcData = z
     location: z.string().max(120).optional(),
     faction: z.string().max(120).optional(),
     disposition: z.enum(["friendly", "neutral", "hostile", "unknown"]).optional(),
+    ...srdRefFields,
   })
   .strict();
 
@@ -55,6 +66,7 @@ const mobEncounterData = z
     cr: z.string().max(20).optional(),
     count: z.number().int().min(1).max(99).optional(),
     creatureType: z.string().max(80).optional(),
+    ...srdRefFields,
   })
   .strict();
 
@@ -564,6 +576,26 @@ router.get("/entities/:id/audit", requireAuth, requireCampaignMember, async (req
       at: new Date(r.at).toISOString(),
     })),
   );
+});
+
+router.post("/entities/seed-srd", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+
+  if (!(await isDm(campaignId, userId))) {
+    res.status(403).json({ error: "Only the DM can seed starter content" });
+    return;
+  }
+
+  const summary = await seedCampaignWorldFromSrd(campaignId);
+  if (!summary.bestiaryAvailable) {
+    res.status(409).json({
+      error: "SRD bestiary has not been ingested yet. Run `pnpm --filter @workspace/scripts run srd:ingest-api` to populate it.",
+      bestiaryAvailable: false,
+    });
+    return;
+  }
+  res.json(summary);
 });
 
 export default router;

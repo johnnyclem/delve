@@ -1293,6 +1293,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/CampaignEntity"
 
+  /entities/seed-srd:
+    post:
+      operationId: seedWorldFromSrd
+      tags: [entities]
+      summary: Seed (or top-up) this campaign's world with starter NPCs and mob encounters drawn from the SRD bestiary (DM only). Idempotent — entries that already exist are left untouched.
+      responses:
+        "200":
+          description: Seed summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeedWorldSummary"
+        "403":
+          description: Not authorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: SRD bestiary not ingested
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /entities/{id}/audit:
     get:
       operationId: getEntityAudit
@@ -3072,6 +3097,36 @@ components:
         data:
           type: object
           additionalProperties: true
+
+    SeedWorldSummary:
+      type: object
+      description: Result of seeding a campaign with curated SRD starter content.
+      properties:
+        added:
+          type: object
+          properties:
+            npc:
+              type: integer
+            mob_encounter:
+              type: integer
+          required: [npc, mob_encounter]
+        skipped:
+          type: object
+          description: Counts of starter entries that already existed (idempotent skip).
+          properties:
+            npc:
+              type: integer
+            mob_encounter:
+              type: integer
+          required: [npc, mob_encounter]
+        missing:
+          type: array
+          description: SRD slugs the seeder expected but couldn't find in `reference_chunks`.
+          items:
+            type: string
+        bestiaryAvailable:
+          type: boolean
+      required: [added, skipped, missing, bestiaryAvailable]
 
     EntityAuditEntry:
       type: object

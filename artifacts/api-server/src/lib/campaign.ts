@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { db, campaignsTable, campaignMembersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
+import { seedCampaignWorldFromSrd } from "./seedWorld";
+import { logger } from "./logger";
 
 let cachedCampaignId: number | null = null;
 
@@ -23,6 +25,33 @@ export async function getOrCreateCampaign(): Promise<number> {
     .returning();
 
   cachedCampaignId = created.id;
+
+  // Seed brand-new campaigns with curated SRD starter content so DMs aren't
+  // staring at an empty World panel. Failures here must not break campaign
+  // creation; they're already logged inside the seeder, but we wrap with a
+  // belt-and-suspenders try/catch.
+  try {
+    const summary = await seedCampaignWorldFromSrd(created.id);
+    if (summary.bestiaryAvailable) {
+      logger.info(
+        {
+          campaignId: created.id,
+          added: summary.added,
+          skipped: summary.skipped,
+          missing: summary.missing.length,
+        },
+        "[campaign] seeded starter SRD content",
+      );
+    } else {
+      logger.warn(
+        { campaignId: created.id },
+        "[campaign] SRD bestiary not ingested — skipping starter seed",
+      );
+    }
+  } catch (err) {
+    logger.error({ err, campaignId: created.id }, "[campaign] starter seed failed");
+  }
+
   return created.id;
 }
 
