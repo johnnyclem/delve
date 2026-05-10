@@ -14,6 +14,8 @@ import {
 } from "@workspace/api-client-react";
 import type { MapSummary } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { TriadTabBar, TRIAD_INTENDED_GROUP_KEY } from "@/components/triad-tab-bar";
+import type { TriadGroup } from "@/components/triad-tab-bar";
 
 const MAP_TYPES = [
   { id: "dungeon" as const, label: "Dungeon", icon: Tent, blurb: "Stone, walls, water, pits" },
@@ -34,6 +36,14 @@ export default function MapsPage() {
   const [name, setName] = useState("");
   const [chosenType, setChosenType] = useState<"dungeon" | "town" | "world">("dungeon");
   const [showCreate, setShowCreate] = useState(false);
+
+  const handleTriadNav = (group: TriadGroup) => {
+    if (group === "table") return;
+    try {
+      localStorage.setItem(TRIAD_INTENDED_GROUP_KEY, group);
+    } catch { /* ignore */ }
+    setLocation("/dashboard");
+  };
 
   const handleCreate = () => {
     const trimmed = name.trim() || `Untitled ${chosenType}`;
@@ -72,7 +82,7 @@ export default function MapsPage() {
   const typeIcon = (t: string) => MAP_TYPES.find((m) => m.id === t)?.icon ?? MapIcon;
 
   return (
-    <div className="dark min-h-[100dvh] bg-background text-foreground" data-testid="page-maps">
+    <div className="dark min-h-[100dvh] bg-background text-foreground flex flex-col" data-testid="page-maps">
       <header className="border-b border-border/60 px-4 md:px-8 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button
@@ -95,7 +105,7 @@ export default function MapsPage() {
         )}
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 md:px-8 py-8 space-y-8">
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 md:px-8 py-8 space-y-8" style={{ paddingBottom: "calc(4.5rem + env(safe-area-inset-bottom, 0px))" }}>
         {showCreate && isDm && (
           <section className="glass-panel rounded-2xl p-6 space-y-5" data-testid="section-create-map">
             <div>
@@ -164,7 +174,7 @@ export default function MapsPage() {
             <div className="glass-panel rounded-2xl p-12 text-center text-muted-foreground" data-testid="text-no-maps">
               <MapIcon className="h-10 w-10 mx-auto mb-3 opacity-40" />
               <p className="text-sm">No maps yet.</p>
-              {isDm && <p className="text-xs mt-1 opacity-70">Click “New map” to create your first.</p>}
+              {isDm && <p className="text-xs mt-1 opacity-70">Click "New map" to create your first.</p>}
             </div>
           ) : (
             <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" data-testid="list-maps">
@@ -205,6 +215,8 @@ export default function MapsPage() {
           )}
         </section>
       </main>
+
+      <TriadTabBar activeGroup="table" onSelect={handleTriadNav} />
     </div>
   );
 }
