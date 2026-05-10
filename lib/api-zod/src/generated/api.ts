@@ -1322,12 +1322,17 @@ export const UpdateCharacterResponse = zod.object({
 /**
  * @summary List all NPCs in the campaign roster
  */
+export const listNpcsResponseRelationshipTagsDefault = [];
+
 export const ListNpcsResponseItem = zod.object({
   id: zod.number(),
   campaignId: zod.number(),
   name: zod.string(),
   shortNote: zod.string().nullish(),
   avatarUrl: zod.string().nullish(),
+  relationshipTags: zod
+    .array(zod.string())
+    .default(listNpcsResponseRelationshipTagsDefault),
   createdByUserId: zod.string(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -1341,6 +1346,37 @@ export const CreateNpcBody = zod.object({
   name: zod.string(),
   shortNote: zod.string().nullish(),
   avatarUrl: zod.string().nullish(),
+  relationshipTags: zod.array(zod.string()).optional(),
+});
+
+/**
+ * @summary Update an NPC in the campaign roster (DM only)
+ */
+export const UpdateNpcParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const UpdateNpcBody = zod.object({
+  name: zod.string().optional(),
+  shortNote: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+  relationshipTags: zod.array(zod.string()).optional(),
+});
+
+export const updateNpcResponseRelationshipTagsDefault = [];
+
+export const UpdateNpcResponse = zod.object({
+  id: zod.number(),
+  campaignId: zod.number(),
+  name: zod.string(),
+  shortNote: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+  relationshipTags: zod
+    .array(zod.string())
+    .default(updateNpcResponseRelationshipTagsDefault),
+  createdByUserId: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
 });
 
 /**

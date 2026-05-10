@@ -10,6 +10,7 @@ type Result = unknown;
 const selectQueue: Result[] = [];
 const insertQueue: Result[] = [];
 const deleteQueue: Result[] = [];
+const updateQueue: Result[] = [];
 
 function chainable(resultPromise: () => Promise<Result>) {
   const obj: Record<string, unknown> = {};
@@ -36,6 +37,10 @@ const mockDb = {
   },
   delete: () => {
     const next = deleteQueue.shift();
+    return chainable(() => Promise.resolve(next ?? []));
+  },
+  update: () => {
+    const next = updateQueue.shift();
     return chainable(() => Promise.resolve(next ?? []));
   },
 };
@@ -89,6 +94,7 @@ beforeEach(() => {
   selectQueue.length = 0;
   insertQueue.length = 0;
   deleteQueue.length = 0;
+  updateQueue.length = 0;
 });
 
 function primeMemberOnly(member: typeof dmMember | typeof playerMember) {
@@ -207,5 +213,71 @@ describe("DELETE /npcs/:id", () => {
 
     const res = await request(buildApp()).delete("/npcs/not-a-number");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("PATCH /npcs/:id", () => {
+  it("updates relationship tags for the DM and returns the row", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+    const updated = {
+      id: 7,
+      campaignId: TEST_CAMPAIGN_ID,
+      name: "Brogg",
+      shortNote: null,
+      avatarUrl: null,
+      relationshipTags: ["Hostile", "Mysterious"],
+      createdByUserId: TEST_DM_ID,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    updateQueue.push([updated]);
+
+    const res = await request(buildApp())
+      .patch("/npcs/7")
+      .send({ relationshipTags: ["Hostile", "Mysterious"] });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ id: 7, relationshipTags: ["Hostile", "Mysterious"] });
+  });
+
+  it("rejects players with 403", async () => {
+    currentUserId = TEST_PLAYER_ID;
+    primeAuth(playerMember);
+
+    const res = await request(buildApp())
+      .patch("/npcs/7")
+      .send({ relationshipTags: ["Ally"] });
+    expect(res.status).toBe(403);
+    expect(updateQueue).toHaveLength(0);
+  });
+
+  it("returns 404 when the NPC doesn't belong to this campaign", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+    updateQueue.push([]);
+
+    const res = await request(buildApp())
+      .patch("/npcs/9999")
+      .send({ relationshipTags: ["Ally"] });
+    expect(res.status).toBe(404);
+  });
+
+  it("rejects invalid id with 400", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+
+    const res = await request(buildApp())
+      .patch("/npcs/not-a-number")
+      .send({ relationshipTags: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects empty patch body with 400", async () => {
+    currentUserId = TEST_DM_ID;
+    primeAuth(dmMember);
+
+    const res = await request(buildApp()).patch("/npcs/7").send({});
+    expect(res.status).toBe(400);
+    expect(updateQueue).toHaveLength(0);
   });
 });

@@ -545,6 +545,29 @@ paths:
                 $ref: "#/components/schemas/Npc"
 
   /npcs/{id}:
+    patch:
+      operationId: updateNpc
+      tags: [npcs]
+      summary: Update an NPC in the campaign roster (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateNpcBody"
+      responses:
+        "200":
+          description: Updated NPC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Npc"
     delete:
       operationId: deleteNpc
       tags: [npcs]
@@ -2193,6 +2216,11 @@ components:
           type: ["string", "null"]
         avatarUrl:
           type: ["string", "null"]
+        relationshipTags:
+          type: array
+          items:
+            type: string
+          default: []
         createdByUserId:
           type: string
         createdAt:
@@ -2205,6 +2233,7 @@ components:
         - id
         - campaignId
         - name
+        - relationshipTags
         - createdByUserId
         - createdAt
         - updatedAt
@@ -2218,8 +2247,26 @@ components:
           type: ["string", "null"]
         avatarUrl:
           type: ["string", "null"]
+        relationshipTags:
+          type: array
+          items:
+            type: string
       required:
         - name
+
+    UpdateNpcBody:
+      type: object
+      properties:
+        name:
+          type: string
+        shortNote:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        relationshipTags:
+          type: array
+          items:
+            type: string
 
     SessionAttendees:
       type: object

@@ -9,6 +9,7 @@ export const npcsTable = pgTable("npcs", {
   name: text("name").notNull(),
   shortNote: text("short_note"),
   avatarUrl: text("avatar_url"),
+  relationshipTags: text("relationship_tags").array().notNull().default([]),
   createdByUserId: text("created_by_user_id").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

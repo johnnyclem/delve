@@ -283,6 +283,7 @@ export interface Npc {
   shortNote?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
+  relationshipTags: string[];
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
@@ -294,6 +295,16 @@ export interface CreateNpcBody {
   shortNote?: string | null;
   /** @nullable */
   avatarUrl?: string | null;
+  relationshipTags?: string[];
+}
+
+export interface UpdateNpcBody {
+  name?: string;
+  /** @nullable */
+  shortNote?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  relationshipTags?: string[];
 }
 
 export type SessionAttendeesNpcsItem = {

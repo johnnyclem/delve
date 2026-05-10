@@ -81,6 +81,7 @@ import type {
   UpdateHomebrewRuleBody,
   UpdateMapBody,
   UpdateNotificationPrefsBody,
+  UpdateNpcBody,
   UpdateSessionBody,
   UploadUrlRequest,
   UploadUrlResponse,
@@ -1854,6 +1855,93 @@ export const useCreateNpc = <
   TContext
 > => {
   return useMutation(getCreateNpcMutationOptions(options));
+};
+
+/**
+ * @summary Update an NPC in the campaign roster (DM only)
+ */
+export const getUpdateNpcUrl = (id: number) => {
+  return `/api/npcs/${id}`;
+};
+
+export const updateNpc = async (
+  id: number,
+  updateNpcBody: UpdateNpcBody,
+  options?: RequestInit,
+): Promise<Npc> => {
+  return customFetch<Npc>(getUpdateNpcUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateNpcBody),
+  });
+};
+
+export const getUpdateNpcMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNpc>>,
+    TError,
+    { id: number; data: BodyType<UpdateNpcBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateNpc>>,
+  TError,
+  { id: number; data: BodyType<UpdateNpcBody> },
+  TContext
+> => {
+  const mutationKey = ["updateNpc"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateNpc>>,
+    { id: number; data: BodyType<UpdateNpcBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateNpc(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateNpcMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateNpc>>
+>;
+export type UpdateNpcMutationBody = BodyType<UpdateNpcBody>;
+export type UpdateNpcMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Update an NPC in the campaign roster (DM only)
+ */
+export const useUpdateNpc = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNpc>>,
+    TError,
+    { id: number; data: BodyType<UpdateNpcBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateNpc>>,
+  TError,
+  { id: number; data: BodyType<UpdateNpcBody> },
+  TContext
+> => {
+  return useMutation(getUpdateNpcMutationOptions(options));
 };
 
 /**

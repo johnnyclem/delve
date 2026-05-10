@@ -13,6 +13,7 @@ describe("fillCharacterSheetPdf", () => {
       level: 3,
       sheetJson: {},
       portraitUrl: null,
+      relationshipTags: [],
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),

@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
 import TimezoneCombobox from "@/components/timezone-combobox";
 import CharacterListPanel from "@/components/character-list";
+import NpcsPanel from "@/components/npcs-panel";
 import MyCharacterPanel from "@/components/my-character-panel";
 import SessionsPanel from "@/components/sessions-panel";
 import CalendarPanel from "@/components/calendar-panel";
@@ -32,7 +33,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { ChatNavContext } from "@/contexts/chat-nav-context";
 
-type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules" | "bestiary" | "chat" | "homebrew" | "compare";
+type NavId = "my-character" | "overview" | "characters" | "npcs" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules" | "bestiary" | "chat" | "homebrew" | "compare";
 
 interface NavItem {
   id: NavId;
@@ -49,6 +50,7 @@ function buildNavItems(opts: { showMyCharacter: boolean; isDm: boolean }): NavIt
   items.push(
     { id: "overview", label: "Overview", icon: Shield },
     { id: "characters", label: "Characters", icon: BookOpen },
+    { id: "npcs", label: "NPCs", icon: Users },
     { id: "sessions", label: "Sessions", icon: ScrollText },
     { id: "calendar", label: "Schedule", icon: Calendar },
     { id: "maps", label: "Maps", icon: MapIcon },
@@ -326,6 +328,7 @@ export default function DashboardPage() {
             <MyCharacterPanel onNavigateToCharacters={() => setActiveTab("characters")} />
           )}
           {activeTab === "characters" && <CharacterListPanel />}
+          {activeTab === "npcs" && <NpcsPanel />}
           {activeTab === "sessions" && <SessionsPanel />}
           {activeTab === "calendar" && (
             <CalendarPanel
