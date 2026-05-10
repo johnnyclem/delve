@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Loader2, Sparkles } from "lucide-react";
+import { EntityNameWithAsk } from "@/components/ask-popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -364,7 +365,13 @@ function EntityCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <h4 className="font-semibold text-foreground truncate">{entity.name}</h4>
+          <h4 className="font-semibold text-foreground truncate">
+            <EntityNameWithAsk
+              entity={{ name: entity.name, entityType: "campaign_entity", entityId: entity.id, entityKind: entity.kind }}
+            >
+              {entity.name}
+            </EntityNameWithAsk>
+          </h4>
           {entity.publicMd && (
             <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{entity.publicMd}</p>
           )}
@@ -506,7 +513,13 @@ function EntityDetail({
 
       <div className="rounded-2xl glass-panel p-6 space-y-4">
         <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-2xl font-semibold text-foreground">{entity.name}</h2>
+          <h2 className="text-2xl font-semibold text-foreground">
+            <EntityNameWithAsk
+              entity={{ name: entity.name, entityType: "campaign_entity", entityId: entity.id, entityKind: entity.kind }}
+            >
+              {entity.name}
+            </EntityNameWithAsk>
+          </h2>
           <span className="text-xs uppercase tracking-wide text-muted-foreground">{KIND_SINGULAR[entity.kind]}</span>
         </div>
         {isDm && (

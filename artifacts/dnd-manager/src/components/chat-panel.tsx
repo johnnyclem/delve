@@ -113,11 +113,11 @@ function formatThreadTimestamp(d: string): string {
     : dt.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
-export default function ChatPanel() {
+export default function ChatPanel({ initialConversationId }: { initialConversationId?: number | null }) {
   const [input, setInput] = useState("");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [conversationId, setConversationId] = useState<number | null>(null);
+  const [conversationId, setConversationId] = useState<number | null>(initialConversationId ?? null);
   const [speakingAsId, setSpeakingAsId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
@@ -142,6 +142,13 @@ export default function ChatPanel() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [turns]);
+
+  // Auto-load the thread when opened via "Continue in chat" from the ask popover
+  useEffect(() => {
+    if (!initialConversationId) return;
+    loadThread(initialConversationId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // For brand-new conversations, default the picker to the user's sole own character
   // (players only — DMs default to "nobody" so their meta-questions aren't accidentally

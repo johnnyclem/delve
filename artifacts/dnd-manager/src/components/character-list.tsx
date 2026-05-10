@@ -7,6 +7,7 @@ import type { Character } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import CharacterCreateForm from "./character-create";
 import CharacterDetail from "./character-detail";
+import { EntityNameWithAsk } from "@/components/ask-popover";
 
 const TAG_COLOR_MAP: Record<string, string> = {
   Friendly: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
@@ -118,7 +119,13 @@ function CharacterGrid({ onSelect, onCreate }: { onSelect: (id: number) => void;
               <div className="flex items-center gap-4">
                 <CharacterPortraitThumb url={char.portraitUrl} name={char.name} />
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground truncate">{char.name}</h3>
+                  <h3 className="font-semibold text-foreground truncate">
+                    <EntityNameWithAsk
+                      entity={{ name: char.name, entityType: "character", entityId: char.id, entityKind: "character" }}
+                    >
+                      {char.name}
+                    </EntityNameWithAsk>
+                  </h3>
                   <p className="text-sm text-muted-foreground">
                     Level <span className="font-mono tabular-nums">{char.level}</span> {char.race} {char.class}
                   </p>

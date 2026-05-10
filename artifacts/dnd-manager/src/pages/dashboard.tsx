@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useUser } from "@clerk/react";
 import {
   BookOpen, Dice5, Calendar, ScrollText,
@@ -30,6 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AnimatedBorder } from "@/components/ui/animated-border";
 import { useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { ChatNavContext } from "@/contexts/chat-nav-context";
 
 type NavId = "my-character" | "overview" | "characters" | "sessions" | "calendar" | "maps" | "world" | "dice" | "rules" | "bestiary" | "chat" | "homebrew" | "compare";
 
@@ -95,6 +96,15 @@ export default function DashboardPage() {
     }
     setActiveTabState(next);
   };
+  const [chatInitConversationId, setChatInitConversationId] = useState<number | null>(null);
+  const openWithConversation = useCallback(
+    (id: number | null) => {
+      setChatInitConversationId(id);
+      setHasAutoLanded(true);
+      setActiveTabState("chat");
+    },
+    [],
+  );
   const [calendarDeepLink, setCalendarDeepLink] = useState<{ eventId: number; scrollToDelivery?: boolean } | null>(null);
   // Clear the deep-link when the user navigates away from Calendar so that a later
   // return to the Calendar tab shows the list view rather than auto-reopening the
@@ -194,6 +204,7 @@ export default function DashboardPage() {
   }
 
   return (
+    <ChatNavContext.Provider value={{ openWithConversation }}>
     <div className="dark min-h-[100dvh] bg-background flex" data-testid="page-dashboard">
       <aside className="hidden md:flex flex-col w-64 border-r border-border/60 bg-sidebar bg-dither-surface p-4 shrink-0">
         <div className="flex items-center gap-2 mb-8 px-2">
@@ -327,7 +338,12 @@ export default function DashboardPage() {
           {activeTab === "rules" && <RulesLookupPanel />}
           {activeTab === "bestiary" && <BestiaryPanel />}
           {activeTab === "world" && <WorldPanel />}
-          {activeTab === "chat" && <ChatPanel />}
+          {activeTab === "chat" && (
+            <ChatPanel
+              key={chatInitConversationId ?? "new"}
+              initialConversationId={chatInitConversationId}
+            />
+          )}
           {activeTab === "homebrew" && <HomebrewPanel />}
           {activeTab === "compare" && isDm && <CompareEditionsPanel />}
         </main>
@@ -347,7 +363,7 @@ export default function DashboardPage() {
 
         {/* Mobile "More" sheet */}
         <Sheet open={mobileMoreOpen} onOpenChange={setMobileMoreOpen}>
-          <SheetContent side="bottom" className="bg-[#09090B] border-[rgba(255,255,255,0.06)] rounded-t-2xl px-4" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }} data-testid="sheet-mobile-more">
+          <SheetContent side="bottom" className="bg-background border-border/60 rounded-t-2xl px-4" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }} data-testid="sheet-mobile-more">
             <SheetHeader className="mb-4">
               <SheetTitle className="text-foreground text-base">Menu</SheetTitle>
             </SheetHeader>
@@ -362,7 +378,7 @@ export default function DashboardPage() {
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     activeTab === item.id
                       ? "glass-panel text-foreground"
-                      : "text-muted-foreground hover:bg-[rgba(255,255,255,0.04)]"
+                      : "text-muted-foreground hover:bg-muted/60"
                   }`}
                 >
                   <item.icon className="h-4 w-4" />
@@ -384,9 +400,9 @@ export default function DashboardPage() {
                 </motion.button>
               ))}
             </div>
-            <div className="border-t border-[rgba(255,255,255,0.06)] mt-4 pt-4 space-y-1">
+            <div className="border-t border-border/60 mt-4 pt-4 space-y-1">
               {isDm && (
-                <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors" data-testid="label-dm-mode-mobile">
+                <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/60 cursor-pointer transition-colors" data-testid="label-dm-mode-mobile">
                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Swords className="h-4 w-4" />
                     DM Mode
@@ -398,7 +414,7 @@ export default function DashboardPage() {
                   />
                 </label>
               )}
-              <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors">
+              <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/60 cursor-pointer transition-colors">
                 <span className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Mail className="h-4 w-4" />
                   Recap emails
@@ -409,7 +425,7 @@ export default function DashboardPage() {
                   disabled={updateNotificationPrefs.isPending}
                 />
               </label>
-              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors">
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors">
                 <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
                   <Globe className="h-4 w-4" />
                   Your timezone
@@ -432,6 +448,7 @@ export default function DashboardPage() {
         </Sheet>
       </div>
     </div>
+    </ChatNavContext.Provider>
   );
 }
 
@@ -451,7 +468,7 @@ function MobileBottomTabBar({ navItems, primaryTabIds, activeTab, onSelect, onMo
 
   return (
     <nav
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090B]/95 backdrop-blur-sm border-t border-[rgba(255,255,255,0.06)]"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-sidebar/95 backdrop-blur-sm border-t border-border/60"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       data-testid="nav-mobile-tab-bar"
       aria-label="Primary navigation"

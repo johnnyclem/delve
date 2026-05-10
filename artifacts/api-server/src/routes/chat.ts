@@ -6,6 +6,7 @@ import {
   chatThreadsTable,
   chatMessagesTable,
   charactersTable,
+  campaignEntitiesTable,
   type SrdEdition,
 } from "@workspace/db";
 import { and, asc, desc, eq } from "drizzle-orm";
@@ -36,10 +37,17 @@ const SUMMARIZE_AFTER_TURNS = HISTORY_VERBATIM_TURNS + 4;
 
 const speakingAsField = z.union([z.number().int().positive(), z.null()]).optional();
 
+const primedContextSchema = z.object({
+  entityType: z.enum(["character", "campaign_entity"]),
+  entityId: z.number().int().positive(),
+  entityName: z.string().max(200),
+}).optional();
+
 const chatBody = z.object({
   message: z.string().min(1).max(MAX_MESSAGE_LEN),
   conversationId: z.number().int().positive().nullish(),
   speakingAsCharacterId: speakingAsField,
+  primedContext: primedContextSchema,
 });
 
 interface Citation {
@@ -164,16 +172,30 @@ function summariseSheetForChat(char: typeof charactersTable.$inferSelect): MeBlo
   };
 }
 
+interface PrimedEntityBlock {
+  lines: string[];
+  citation: Citation;
+}
+
 function buildContextBlock(
   refHits: ReferenceHit[],
   campHits: CampaignHit[],
   homeHits: HomebrewHit[],
   isDmRequester: boolean,
   meBlock: MeBlock | null,
+  primedEntityBlock: PrimedEntityBlock | null = null,
 ): { context: string; citations: Citation[] } {
   const lines: string[] = [];
   const citations: Citation[] = [];
   let cursor = 1;
+
+  if (primedEntityBlock) {
+    const tag = `[C${cursor}]`;
+    lines.push("## Focus entity (the user is asking specifically about this)");
+    lines.push(`${tag} ${primedEntityBlock.lines.join("\n")}\n`);
+    citations.push(primedEntityBlock.citation);
+    cursor += 1;
+  }
 
   if (meBlock) {
     const tag = `[M${cursor}]`;
@@ -472,11 +494,87 @@ type PrepareResult =
   | { ok: true; prepared: PreparedRequest }
   | { ok: false; status: number; error: string };
 
+type PrimedContextInput = {
+  entityType: "character" | "campaign_entity";
+  entityId: number;
+  entityName: string;
+} | undefined;
+
+async function resolvePrimedEntityBlock(
+  primedContext: PrimedContextInput,
+  campaignId: number,
+  userId: string,
+  dmRequester: boolean,
+): Promise<PrimedEntityBlock | null> {
+  if (!primedContext) return null;
+
+  if (primedContext.entityType === "character") {
+    const char = await resolveSpeakingAsCharacter(primedContext.entityId, campaignId, userId);
+    if (!char) return null;
+    const block = summariseSheetForChat(char);
+    return {
+      lines: [`CHARACTER — ${char.name}`, ...block.contextLines],
+      citation: {
+        source: "character",
+        entityKind: "character",
+        entityName: char.name,
+        chunkId: char.id,
+      },
+    };
+  }
+
+  if (primedContext.entityType === "campaign_entity") {
+    const [entity] = await db
+      .select()
+      .from(campaignEntitiesTable)
+      .where(
+        and(
+          eq(campaignEntitiesTable.id, primedContext.entityId),
+          eq(campaignEntitiesTable.campaignId, campaignId),
+        ),
+      );
+    if (!entity) return null;
+    if (!dmRequester && !entity.revealed) return null;
+
+    const entityLines: string[] = [];
+    entityLines.push(`${entity.kind.toUpperCase()} — ${entity.name}`);
+
+    const dataEntries = Object.entries((entity.data as Record<string, unknown>) ?? {});
+    for (const [key, val] of dataEntries) {
+      if (val !== null && val !== undefined && val !== "") {
+        entityLines.push(`${key}: ${String(val)}`);
+      }
+    }
+
+    if (entity.publicMd) {
+      entityLines.push(`Description: ${entity.publicMd}`);
+    }
+    if (dmRequester) {
+      if (entity.dmNotes) entityLines.push(`DM Notes: ${entity.dmNotes}`);
+      if (entity.secretMd) entityLines.push(`Secret Lore: ${entity.secretMd}`);
+      if (entity.trueMotivation) entityLines.push(`True Motivation: ${entity.trueMotivation}`);
+    }
+
+    return {
+      lines: entityLines,
+      citation: {
+        source: "campaign",
+        entityKind: entity.kind,
+        entityName: entity.name,
+        chunkId: entity.id,
+      },
+    };
+  }
+
+  return null;
+}
+
 async function prepareChatRequest(
   req: Request,
   message: string,
   conversationId: number | null | undefined,
   bodySpeakingAs: number | null | undefined,
+  primedContext?: PrimedContextInput,
 ): Promise<PrepareResult> {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
@@ -556,6 +654,13 @@ async function prepareChatRequest(
   }
   const meBlock = activeCharacter ? summariseSheetForChat(activeCharacter) : null;
 
+  const primedEntityBlock = await resolvePrimedEntityBlock(
+    primedContext,
+    campaignId,
+    userId,
+    dmRequester,
+  );
+
   const priorMessages = await db
     .select({ role: chatMessagesTable.role, content: chatMessagesTable.content })
     .from(chatMessagesTable)
@@ -564,20 +669,26 @@ async function prepareChatRequest(
 
   const verbatim = priorMessages.slice(-HISTORY_VERBATIM_TURNS);
 
-  const queryEmbedding = await embedQuery(message);
+  // Augment the retrieval query with the entity name so we surface more
+  // relevant context for that entity alongside the user's specific question.
+  const retrievalQuery = primedContext
+    ? `${primedContext.entityName} ${message}`.trim()
+    : message;
+
+  const queryEmbedding = await embedQuery(retrievalQuery);
 
   const [refHits, campHits, homeHits] = await Promise.all([
-    retrieveReference(message, queryEmbedding, edition).catch((err) => {
+    retrieveReference(retrievalQuery, queryEmbedding, edition).catch((err) => {
       logger.error({ err }, "[chat] reference retrieval failed");
       return [] as ReferenceHit[];
     }),
-    retrieveCampaign(message, queryEmbedding, campaignId, {
+    retrieveCampaign(retrievalQuery, queryEmbedding, campaignId, {
       isDm: dmRequester,
     }).catch((err) => {
       logger.error({ err }, "[chat] campaign retrieval failed");
       return [] as CampaignHit[];
     }),
-    retrieveHomebrew(message, queryEmbedding, campaignId).catch((err) => {
+    retrieveHomebrew(retrievalQuery, queryEmbedding, campaignId).catch((err) => {
       logger.error({ err }, "[chat] homebrew retrieval failed");
       return [] as HomebrewHit[];
     }),
@@ -589,6 +700,7 @@ async function prepareChatRequest(
     homeHits,
     dmRequester,
     meBlock,
+    primedEntityBlock,
   );
 
   const contextBlock = context
@@ -671,6 +783,7 @@ router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promi
     message,
     parsed.data.conversationId,
     parsed.data.speakingAsCharacterId,
+    parsed.data.primedContext,
   );
   if (!result.ok) {
     res.status(result.status).json({ error: result.error });
@@ -742,6 +855,7 @@ router.post(
         message,
         parsed.data.conversationId,
         parsed.data.speakingAsCharacterId,
+        parsed.data.primedContext,
       );
     } catch (err) {
       logger.error({ err }, "[chat/stream] retrieval failed");
