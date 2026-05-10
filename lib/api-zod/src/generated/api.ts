@@ -2553,6 +2553,26 @@ export const GetChatThreadResponse = zod.object({
 });
 
 /**
+ * @summary Rename one of the current user's chat threads
+ */
+export const UpdateChatThreadParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const updateChatThreadBodyTitleMax = 200;
+
+export const UpdateChatThreadBody = zod.object({
+  title: zod.string().min(1).max(updateChatThreadBodyTitleMax),
+});
+
+export const UpdateChatThreadResponse = zod.object({
+  id: zod.number(),
+  title: zod.string(),
+  createdAt: zod.coerce.date(),
+  updatedAt: zod.coerce.date(),
+});
+
+/**
  * @summary Delete one of the current user's chat threads
  */
 export const DeleteChatThreadParams = zod.object({

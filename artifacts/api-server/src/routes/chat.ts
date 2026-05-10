@@ -213,6 +213,44 @@ router.get("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, 
   });
 });
 
+const updateThreadBody = z.object({
+  title: z.string().trim().min(1).max(200),
+});
+
+router.patch("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const campaignId = await getOrCreateCampaign();
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(404).json({ error: "Thread not found" });
+    return;
+  }
+  const parsed = updateThreadBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const [updated] = await db
+    .update(chatThreadsTable)
+    .set({ title: parsed.data.title, updatedAt: new Date() })
+    .where(and(
+      eq(chatThreadsTable.id, id),
+      eq(chatThreadsTable.campaignId, campaignId),
+      eq(chatThreadsTable.userId, userId),
+    ))
+    .returning({
+      id: chatThreadsTable.id,
+      title: chatThreadsTable.title,
+      createdAt: chatThreadsTable.createdAt,
+      updatedAt: chatThreadsTable.updatedAt,
+    });
+  if (!updated) {
+    res.status(404).json({ error: "Thread not found" });
+    return;
+  }
+  res.json(updated);
+});
+
 router.delete("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();

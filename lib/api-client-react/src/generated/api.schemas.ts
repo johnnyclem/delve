@@ -1098,6 +1098,14 @@ export interface ChatThread {
   updatedAt: string;
 }
 
+export interface UpdateChatThreadBody {
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  title: string;
+}
+
 export type ChatThreadMessageRole =
   (typeof ChatThreadMessageRole)[keyof typeof ChatThreadMessageRole];
 

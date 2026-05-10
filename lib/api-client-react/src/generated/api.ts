@@ -69,6 +69,7 @@ import type {
   SuccessResponse,
   UpdateCampaignBody,
   UpdateCharacterBody,
+  UpdateChatThreadBody,
   UpdateEntityBody,
   UpdateEventBody,
   UpdateHomebrewRuleBody,
@@ -5617,6 +5618,93 @@ export function useGetChatThread<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Rename one of the current user's chat threads
+ */
+export const getUpdateChatThreadUrl = (id: number) => {
+  return `/api/chat/threads/${id}`;
+};
+
+export const updateChatThread = async (
+  id: number,
+  updateChatThreadBody: UpdateChatThreadBody,
+  options?: RequestInit,
+): Promise<ChatThread> => {
+  return customFetch<ChatThread>(getUpdateChatThreadUrl(id), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateChatThreadBody),
+  });
+};
+
+export const getUpdateChatThreadMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateChatThread>>,
+    TError,
+    { id: number; data: BodyType<UpdateChatThreadBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateChatThread>>,
+  TError,
+  { id: number; data: BodyType<UpdateChatThreadBody> },
+  TContext
+> => {
+  const mutationKey = ["updateChatThread"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateChatThread>>,
+    { id: number; data: BodyType<UpdateChatThreadBody> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return updateChatThread(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateChatThreadMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateChatThread>>
+>;
+export type UpdateChatThreadMutationBody = BodyType<UpdateChatThreadBody>;
+export type UpdateChatThreadMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Rename one of the current user's chat threads
+ */
+export const useUpdateChatThread = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateChatThread>>,
+    TError,
+    { id: number; data: BodyType<UpdateChatThreadBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateChatThread>>,
+  TError,
+  { id: number; data: BodyType<UpdateChatThreadBody> },
+  TContext
+> => {
+  return useMutation(getUpdateChatThreadMutationOptions(options));
+};
 
 /**
  * @summary Delete one of the current user's chat threads

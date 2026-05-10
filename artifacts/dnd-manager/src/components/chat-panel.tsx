@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, History } from "lucide-react";
+import { MessageSquare, Send, Loader2, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, History, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -8,6 +8,7 @@ import {
   useListChatThreads,
   getChatThread,
   deleteChatThread,
+  updateChatThread,
   getListChatThreadsQueryKey,
   getGetChatThreadQueryKey,
 } from "@workspace/api-client-react";
@@ -111,6 +112,9 @@ export default function ChatPanel() {
   const [conversationId, setConversationId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameSubmitting, setRenameSubmitting] = useState(false);
   const queryClient = useQueryClient();
   const { data: membership } = useGetMyMembership();
   const isDm = membership?.role === "dm";
@@ -175,6 +179,43 @@ export default function ChatPanel() {
       setTurns([{ id: `err-${Date.now()}`, question: "", answer: null, citations: [], edition: null, error: msg, loading: false }]);
     } finally {
       setLoadingThread(false);
+    }
+  };
+
+  const startRename = (thread: ChatThread, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRenamingId(thread.id);
+    setRenameValue(thread.title);
+  };
+
+  const cancelRename = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    e?.stopPropagation();
+    setRenamingId(null);
+    setRenameValue("");
+  };
+
+  const submitRename = async (threadId: number, e?: React.MouseEvent | React.KeyboardEvent) => {
+    e?.stopPropagation();
+    const trimmed = renameValue.trim();
+    if (!trimmed) {
+      cancelRename();
+      return;
+    }
+    const current = sortedThreads.find((t) => t.id === threadId);
+    if (current && trimmed === current.title) {
+      cancelRename();
+      return;
+    }
+    setRenameSubmitting(true);
+    try {
+      await updateChatThread(threadId, { title: trimmed });
+      await queryClient.invalidateQueries({ queryKey: getListChatThreadsQueryKey() });
+      setRenamingId(null);
+      setRenameValue("");
+    } catch {
+      // best-effort rename; leave editor open so user can retry.
+    } finally {
+      setRenameSubmitting(false);
     }
   };
 
@@ -375,31 +416,99 @@ export default function ChatPanel() {
             <p className="text-sm text-muted-foreground text-center py-4">No prior conversations yet.</p>
           ) : (
             <ul className="divide-y divide-[rgba(255,255,255,0.06)]">
-              {sortedThreads.map((t) => (
-                <li
-                  key={t.id}
-                  className={`flex items-center gap-2 px-2 py-2 cursor-pointer hover:bg-primary/10 rounded ${
-                    t.id === conversationId ? "bg-primary/10" : ""
-                  }`}
-                  onClick={() => loadThread(t.id)}
-                  data-testid={`chat-history-item-${t.id}`}
-                >
-                  <MessageSquare className="h-4 w-4 text-primary shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground truncate">{t.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{formatThreadTimestamp(t.updatedAt)}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteThread(t.id, e)}
-                    className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
-                    aria-label="Delete conversation"
-                    data-testid={`chat-history-delete-${t.id}`}
+              {sortedThreads.map((t) => {
+                const isRenaming = renamingId === t.id;
+                return (
+                  <li
+                    key={t.id}
+                    className={`flex items-center gap-2 px-2 py-2 rounded ${
+                      isRenaming ? "bg-primary/10" : "cursor-pointer hover:bg-primary/10"
+                    } ${t.id === conversationId && !isRenaming ? "bg-primary/10" : ""}`}
+                    onClick={() => {
+                      if (!isRenaming) loadThread(t.id);
+                    }}
+                    data-testid={`chat-history-item-${t.id}`}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </li>
-              ))}
+                    <MessageSquare className="h-4 w-4 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      {isRenaming ? (
+                        <input
+                          type="text"
+                          autoFocus
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void submitRename(t.id, e);
+                            } else if (e.key === "Escape") {
+                              e.preventDefault();
+                              cancelRename(e);
+                            }
+                          }}
+                          maxLength={200}
+                          disabled={renameSubmitting}
+                          className="w-full bg-background/40 border border-primary/40 rounded px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                          data-testid={`chat-history-rename-input-${t.id}`}
+                        />
+                      ) : (
+                        <p className="text-sm text-foreground truncate">{t.title}</p>
+                      )}
+                      <p className="text-[10px] text-muted-foreground">{formatThreadTimestamp(t.updatedAt)}</p>
+                    </div>
+                    {isRenaming ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => void submitRename(t.id, e)}
+                          disabled={renameSubmitting}
+                          className="p-1 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary disabled:opacity-50"
+                          aria-label="Save new name"
+                          data-testid={`chat-history-rename-save-${t.id}`}
+                        >
+                          {renameSubmitting ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => cancelRename(e)}
+                          disabled={renameSubmitting}
+                          className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive disabled:opacity-50"
+                          aria-label="Cancel rename"
+                          data-testid={`chat-history-rename-cancel-${t.id}`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => startRename(t, e)}
+                          className="p-1 rounded hover:bg-primary/20 text-muted-foreground hover:text-primary"
+                          aria-label="Rename conversation"
+                          data-testid={`chat-history-rename-${t.id}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteThread(t.id, e)}
+                          className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                          aria-label="Delete conversation"
+                          data-testid={`chat-history-delete-${t.id}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
