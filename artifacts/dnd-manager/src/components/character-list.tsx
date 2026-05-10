@@ -77,6 +77,21 @@ function CharacterPortraitThumb({ url, name }: { url: string | null | undefined;
 
 function CharacterGrid({ onSelect, onCreate }: { onSelect: (id: number) => void; onCreate: () => void }) {
   const { data: characters, isLoading } = useListCharacters();
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const allTags = Array.from(
+    new Set(((characters ?? []) as Character[]).flatMap((c) => c.relationshipTags ?? [])),
+  ).sort();
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
+  };
+
+  const filteredCharacters = ((characters ?? []) as Character[]).filter((char) => {
+    if (selectedTags.length === 0) return true;
+    const tags = char.relationshipTags ?? [];
+    return selectedTags.some((t) => tags.includes(t));
+  });
 
   return (
     <div className="space-y-6" data-testid="character-list-panel">
@@ -106,8 +121,56 @@ function CharacterGrid({ onSelect, onCreate }: { onSelect: (id: number) => void;
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(characters as Character[]).map((char) => (
+        <>
+          {allTags.length > 0 && (
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-testid="character-tag-filter-bar"
+            >
+              <span className="text-xs uppercase tracking-wide text-muted-foreground mr-1">
+                Filter by tag:
+              </span>
+              {allTags.map((tag) => {
+                const active = selectedTags.includes(tag);
+                const baseColor =
+                  TAG_COLOR_MAP[tag] ?? "bg-primary/15 text-primary/80 border-primary/30";
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleTag(tag)}
+                    aria-pressed={active}
+                    className={`inline-block rounded-full border px-2.5 py-0.5 text-xs font-medium leading-tight transition ${baseColor} ${
+                      active ? "ring-2 ring-primary/60" : "opacity-70 hover:opacity-100"
+                    }`}
+                    data-testid={`filter-tag-${tag}`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+              {selectedTags.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedTags([])}
+                  className="text-xs text-muted-foreground hover:text-foreground underline-offset-4 hover:underline ml-1"
+                  data-testid="filter-tag-clear"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
+          {filteredCharacters.length === 0 ? (
+            <div
+              className="rounded-2xl border border-dashed border-[rgba(255,255,255,0.08)] p-8 text-center"
+              data-testid="character-list-no-matches"
+            >
+              <p className="text-muted-foreground">No characters match the selected tags.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredCharacters.map((char) => (
             <motion.button
               whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
@@ -152,8 +215,10 @@ function CharacterGrid({ onSelect, onCreate }: { onSelect: (id: number) => void;
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </div>
             </motion.button>
-          ))}
-        </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
