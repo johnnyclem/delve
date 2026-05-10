@@ -11,6 +11,8 @@
     "srd:ingest": "tsx ./src/srd/ingest.ts",
     "srd:ingest-api": "tsx ./src/srd/ingest-api.ts",
     "srd:report": "tsx ./src/srd/report.ts",
+    "mm:ingest": "tsx ./src/monster-manual/ingest.ts",
+    "mm:dry-run": "MM_DRY_RUN=1 tsx ./src/monster-manual/ingest.ts",
     "backfill:entity-embeddings": "tsx ./src/backfill-entity-embeddings.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
