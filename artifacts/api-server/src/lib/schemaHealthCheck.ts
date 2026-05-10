@@ -1,45 +1,120 @@
-import { pool } from "@workspace/db";
+import {
+  pool,
+  campaignsTable,
+  campaignMembersTable,
+  campaignEntitiesTable,
+  campaignEntityChunksTable,
+  charactersTable,
+  sessionLogsTable,
+  referenceChunksTable,
+  homebrewRulesTable,
+} from "@workspace/db";
+import { getTableColumns, getTableName, type Table } from "drizzle-orm";
 import { logger } from "./logger";
 
-type SchemaCheck = {
-  name: string;
-  sql: string;
-};
-
-const CHECKS: SchemaCheck[] = [
-  {
-    name: "campaigns.default_edition",
-    sql: "SELECT default_edition FROM campaigns LIMIT 1",
-  },
-  {
-    name: "reference_chunks",
-    sql: "SELECT id FROM reference_chunks LIMIT 1",
-  },
-  {
-    name: "campaign_entities",
-    sql: "SELECT id FROM campaign_entities LIMIT 1",
-  },
+// Curated list of "critical" tables whose presence and columns are
+// validated against the live database on boot. The column list for each
+// table is derived from the Drizzle schema in `lib/db/src/schema/` so
+// adding a new column there automatically extends coverage.
+const CRITICAL_TABLES: Table[] = [
+  campaignsTable,
+  campaignMembersTable,
+  campaignEntitiesTable,
+  campaignEntityChunksTable,
+  charactersTable,
+  sessionLogsTable,
+  referenceChunksTable,
+  homebrewRulesTable,
 ];
 
-export async function runSchemaHealthCheck(): Promise<void> {
-  const failures: Array<{ check: string; error: string; code?: string }> = [];
+type Failure = {
+  check: string;
+  error: string;
+  code?: string;
+};
 
-  for (const check of CHECKS) {
-    try {
-      await pool.query(check.sql);
-    } catch (err) {
-      const error = err as { message?: string; code?: string };
+function expectedColumnsByTable(): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const table of CRITICAL_TABLES) {
+    const tableName = getTableName(table);
+    const columns = getTableColumns(table);
+    const colNames = new Set<string>(
+      Object.values(columns).map((c) => (c as { name: string }).name),
+    );
+    map.set(tableName, colNames);
+  }
+  return map;
+}
+
+export async function runSchemaHealthCheck(): Promise<void> {
+  const expected = expectedColumnsByTable();
+  const tableNames = Array.from(expected.keys());
+  const failures: Failure[] = [];
+
+  let actualRows: Array<{ table_name: string; column_name: string }> = [];
+  try {
+    const result = await pool.query<{ table_name: string; column_name: string }>(
+      `SELECT table_name, column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = ANY($1::text[])`,
+      [tableNames],
+    );
+    actualRows = result.rows;
+  } catch (err) {
+    const error = err as { message?: string; code?: string };
+    logger.error(
+      {
+        event: "schema_drift_detected",
+        failureCount: 1,
+        failures: [
+          {
+            check: "information_schema.columns",
+            error: error.message ?? String(err),
+            code: error.code,
+          },
+        ],
+      },
+      "SCHEMA DRIFT: unable to read information_schema.columns to verify schema",
+    );
+    return;
+  }
+
+  const actualByTable = new Map<string, Set<string>>();
+  for (const row of actualRows) {
+    let cols = actualByTable.get(row.table_name);
+    if (!cols) {
+      cols = new Set();
+      actualByTable.set(row.table_name, cols);
+    }
+    cols.add(row.column_name);
+  }
+
+  let checkCount = 0;
+  for (const [tableName, expectedCols] of expected) {
+    const actualCols = actualByTable.get(tableName);
+    if (!actualCols) {
+      checkCount += 1;
       failures.push({
-        check: check.name,
-        error: error.message ?? String(err),
-        code: error.code,
+        check: tableName,
+        error: `table "${tableName}" is missing from the database`,
       });
+      continue;
+    }
+    for (const colName of expectedCols) {
+      checkCount += 1;
+      if (!actualCols.has(colName)) {
+        failures.push({
+          check: `${tableName}.${colName}`,
+          error: `column "${colName}" is missing from table "${tableName}"`,
+        });
+      }
     }
   }
 
   if (failures.length === 0) {
     logger.info(
-      { checks: CHECKS.length },
+      { checks: checkCount, tables: tableNames.length },
       "Schema health check passed",
     );
     return;
