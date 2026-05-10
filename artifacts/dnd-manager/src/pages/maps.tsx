@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Tent, Home, Mountain, Map as MapIcon, Trash2, Plus, ChevronLeft } from "@/components/ui/pixel-icons";
 import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
@@ -36,6 +36,16 @@ export default function MapsPage() {
   const [name, setName] = useState("");
   const [chosenType, setChosenType] = useState<"dungeon" | "town" | "world">("dungeon");
   const [showCreate, setShowCreate] = useState(false);
+
+  // Maps lives in the Table triad group. Mark the intended group on mount so that
+  // returning to /dashboard (via the in-page Back button or the browser's back button)
+  // restores the Table tab and its sub-nav strip instead of falling back to default
+  // auto-land behavior. Triad nav clicks below override this with their own group.
+  useEffect(() => {
+    try {
+      localStorage.setItem(TRIAD_INTENDED_GROUP_KEY, "table");
+    } catch { /* ignore */ }
+  }, []);
 
   const handleTriadNav = (group: TriadGroup) => {
     if (group === "table") return;
