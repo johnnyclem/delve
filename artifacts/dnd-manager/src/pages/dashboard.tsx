@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useUser } from "@clerk/react";
 import {
-  Sword, BookOpen, Dice5, Calendar, ScrollText, Menu, X,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, Skull
+  BookOpen, Dice5, Calendar, ScrollText,
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, MoreHorizontal, Swords, Skull
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useGetDashboard, useListSessions, useListEvents, useGetMyMembership, useUpdateNotificationPrefs, useListCharacters } from "@workspace/api-client-react";
 import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint, CalendarEvent, Character } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -63,12 +64,28 @@ function buildNavItems(opts: { showMyCharacter: boolean; isDm: boolean }): NavIt
   return items;
 }
 
+const MOBILE_PRIMARY_TAB_IDS: NavId[] = ["overview", "characters", "sessions", "calendar"];
+
+function useDmMode(userId: string | undefined): [boolean, (v: boolean) => void] {
+  const key = userId ? `delve:dm-mode:${userId}` : null;
+  const [dmMode, setDmModeState] = useState<boolean>(() => {
+    if (!key) return false;
+    return localStorage.getItem(key) === "true";
+  });
+  const setDmMode = (v: boolean) => {
+    setDmModeState(v);
+    if (key) localStorage.setItem(key, v ? "true" : "false");
+  };
+  return [dmMode, setDmMode];
+}
+
 export default function DashboardPage() {
   const { user } = useUser();
   const { signOut } = useClerk();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTabState] = useState<NavId>("overview");
   const [hasAutoLanded, setHasAutoLanded] = useState(false);
+  const [dmMode, setDmMode] = useDmMode(user?.id);
   // Wraps setActiveTab so any user-initiated navigation locks out the auto-land effect.
   const setActiveTab = (next: NavId) => {
     setHasAutoLanded(true);
@@ -88,7 +105,7 @@ export default function DashboardPage() {
       setCalendarDeepLink(null);
     }
   }, [activeTab, calendarDeepLink]);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const { data: dashboard, isLoading, error } = useGetDashboard();
   const { data: sessions } = useListSessions();
   const { data: membership } = useGetMyMembership();
@@ -252,6 +269,19 @@ export default function DashboardPage() {
               testId="select-timezone"
             />
           </label>
+          {isDm && (
+            <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors" data-testid="label-dm-mode">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Swords className="h-4 w-4" />
+                DM Mode
+              </span>
+              <Switch
+                checked={dmMode}
+                onCheckedChange={setDmMode}
+                data-testid="switch-dm-mode"
+              />
+            </label>
+          )}
           <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={handleSignOut} data-testid="button-sign-out">
             <LogOut className="h-4 w-4 mr-2" />
             Sign Out
@@ -265,82 +295,15 @@ export default function DashboardPage() {
             <img src={`${import.meta.env.BASE_URL}logo.svg`} alt="Delve" className="h-7 w-7 pixelated" />
             <span className="text-sm font-semibold text-foreground tracking-tight">Delve</span>
           </div>
-          <motion.button whileTap={{ scale: 0.95 }} transition={{ type: "spring", stiffness: 400, damping: 17 }} onClick={() => setMobileMenuOpen(!mobileMenuOpen)} data-testid="button-mobile-menu" className="text-foreground p-1">
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </motion.button>
         </header>
 
-        {mobileMenuOpen && (
-          <div className="md:hidden absolute top-14 left-0 right-0 bg-sidebar bg-dither-surface border-b border-border/60 z-30 p-3 space-y-1">
-            {navItems.map((item) => (
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                key={item.id}
-                onClick={() => { setActiveTab(item.id as NavId); setMobileMenuOpen(false); }}
-                data-testid={`mobile-nav-${item.id}`}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === item.id
-                    ? "glass-panel text-foreground"
-                    : "text-muted-foreground hover:bg-muted/60"
-                }`}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-                {item.id === "sessions" && newRecapCount > 0 && (
-                  <span className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-black min-w-[18px]" data-testid="badge-new-recap-count-mobile">
-                    {newRecapCount}
-                  </span>
-                )}
-                {item.id === "calendar" && upcomingDeliveryFailureCount > 0 && (
-                  <span
-                    className="ml-auto inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white min-w-[18px]"
-                    title={`${upcomingDeliveryFailureCount} upcoming session${upcomingDeliveryFailureCount === 1 ? "" : "s"} with invite delivery failures`}
-                    data-testid="badge-delivery-failure-count-mobile"
-                  >
-                    {upcomingDeliveryFailureCount}
-                  </span>
-                )}
-              </motion.button>
-            ))}
-            <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-muted/60 cursor-pointer transition-colors mt-2">
-              <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Mail className="h-4 w-4" />
-                Recap emails
-              </span>
-              <Switch
-                checked={membership?.emailNotifications ?? false}
-                onCheckedChange={handleToggleEmailNotifications}
-                disabled={updateNotificationPrefs.isPending}
-              />
-            </label>
-            <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-muted/60 transition-colors">
-              <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
-                <Globe className="h-4 w-4" />
-                Your timezone
-              </span>
-              <TimezoneCombobox
-                value={currentTimezone}
-                onChange={handleChangeTimezone}
-                options={supportedTimezones}
-                disabled={updateNotificationPrefs.isPending}
-                triggerClassName="max-w-[160px]"
-                testId="select-timezone-mobile"
-              />
-            </div>
-            <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-1" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        )}
-
-        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+        <main className="flex-1 overflow-auto p-4 md:p-6 lg:p-8 pb-24 md:pb-8">
           {activeTab === "overview" && (
             <OverviewPanel
               dashboard={dashboard as DashboardSummary & { inviteCode?: string }}
               isLoading={isLoading}
               isDm={isDm}
+              dmMode={dmMode}
               onNavigate={setActiveTab}
               onOpenEvent={(eventId, opts) => {
                 setCalendarDeepLink({ eventId, scrollToDelivery: opts?.scrollToDelivery });
@@ -368,8 +331,185 @@ export default function DashboardPage() {
           {activeTab === "homebrew" && <HomebrewPanel />}
           {activeTab === "compare" && isDm && <CompareEditionsPanel />}
         </main>
+
+        {/* Mobile bottom tab bar — hidden on md+ */}
+        <MobileBottomTabBar
+          navItems={navItems}
+          primaryTabIds={showMyCharacterTab
+            ? (["my-character", "characters", "sessions", "calendar"] as NavId[])
+            : MOBILE_PRIMARY_TAB_IDS}
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+          onMore={() => setMobileMoreOpen(true)}
+          newRecapCount={newRecapCount}
+          upcomingDeliveryFailureCount={upcomingDeliveryFailureCount}
+        />
+
+        {/* Mobile "More" sheet */}
+        <Sheet open={mobileMoreOpen} onOpenChange={setMobileMoreOpen}>
+          <SheetContent side="bottom" className="bg-[#09090B] border-[rgba(255,255,255,0.06)] rounded-t-2xl px-4" style={{ paddingBottom: "calc(1rem + env(safe-area-inset-bottom, 0px))" }} data-testid="sheet-mobile-more">
+            <SheetHeader className="mb-4">
+              <SheetTitle className="text-foreground text-base">Menu</SheetTitle>
+            </SheetHeader>
+            <div className="space-y-1">
+              {navItems.map((item) => (
+                <motion.button
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                  key={item.id}
+                  onClick={() => { setActiveTab(item.id as NavId); setMobileMoreOpen(false); }}
+                  data-testid={`mobile-more-nav-${item.id}`}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === item.id
+                      ? "glass-panel text-foreground"
+                      : "text-muted-foreground hover:bg-[rgba(255,255,255,0.04)]"
+                  }`}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                  {item.id === "sessions" && newRecapCount > 0 && (
+                    <span className="ml-auto inline-flex items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-black min-w-[18px]" data-testid="badge-new-recap-count-mobile">
+                      {newRecapCount}
+                    </span>
+                  )}
+                  {item.id === "calendar" && upcomingDeliveryFailureCount > 0 && (
+                    <span
+                      className="ml-auto inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white min-w-[18px]"
+                      title={`${upcomingDeliveryFailureCount} upcoming session${upcomingDeliveryFailureCount === 1 ? "" : "s"} with invite delivery failures`}
+                      data-testid="badge-delivery-failure-count-mobile"
+                    >
+                      {upcomingDeliveryFailureCount}
+                    </span>
+                  )}
+                </motion.button>
+              ))}
+            </div>
+            <div className="border-t border-[rgba(255,255,255,0.06)] mt-4 pt-4 space-y-1">
+              {isDm && (
+                <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors" data-testid="label-dm-mode-mobile">
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Swords className="h-4 w-4" />
+                    DM Mode
+                  </span>
+                  <Switch
+                    checked={dmMode}
+                    onCheckedChange={setDmMode}
+                    data-testid="switch-dm-mode-mobile"
+                  />
+                </label>
+              )}
+              <label className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] cursor-pointer transition-colors">
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Mail className="h-4 w-4" />
+                  Recap emails
+                </span>
+                <Switch
+                  checked={membership?.emailNotifications ?? false}
+                  onCheckedChange={handleToggleEmailNotifications}
+                  disabled={updateNotificationPrefs.isPending}
+                />
+              </label>
+              <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors">
+                <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+                  <Globe className="h-4 w-4" />
+                  Your timezone
+                </span>
+                <TimezoneCombobox
+                  value={currentTimezone}
+                  onChange={handleChangeTimezone}
+                  options={supportedTimezones}
+                  disabled={updateNotificationPrefs.isPending}
+                  triggerClassName="max-w-[160px]"
+                  testId="select-timezone-mobile"
+                />
+              </div>
+              <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground mt-1" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
+  );
+}
+
+interface MobileBottomTabBarProps {
+  navItems: NavItem[];
+  primaryTabIds: NavId[];
+  activeTab: NavId;
+  onSelect: (id: NavId) => void;
+  onMore: () => void;
+  newRecapCount: number;
+  upcomingDeliveryFailureCount: number;
+}
+
+function MobileBottomTabBar({ navItems, primaryTabIds, activeTab, onSelect, onMore, newRecapCount, upcomingDeliveryFailureCount }: MobileBottomTabBarProps) {
+  const primaryItems = navItems.filter((item) => primaryTabIds.includes(item.id));
+  const isMoreActive = !primaryTabIds.includes(activeTab);
+
+  return (
+    <nav
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#09090B]/95 backdrop-blur-sm border-t border-[rgba(255,255,255,0.06)]"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      data-testid="nav-mobile-tab-bar"
+      aria-label="Primary navigation"
+    >
+      <div className="flex items-stretch">
+        {primaryItems.map((item) => {
+          const isActive = activeTab === item.id;
+          const hasBadge = (item.id === "sessions" && newRecapCount > 0) || (item.id === "calendar" && upcomingDeliveryFailureCount > 0);
+          const badgeCount = item.id === "sessions" ? newRecapCount : upcomingDeliveryFailureCount;
+          const badgeColor = item.id === "sessions" ? "bg-amber-500 text-black" : "bg-red-500 text-white";
+          return (
+            <motion.button
+              key={item.id}
+              whileTap={{ scale: 0.9 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+              onClick={() => onSelect(item.id)}
+              data-testid={`mobile-tab-${item.id}`}
+              className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 relative transition-colors ${
+                isActive ? "text-primary" : "text-muted-foreground"
+              }`}
+              aria-label={item.label}
+              aria-current={isActive ? "page" : undefined}
+            >
+              <div className="relative">
+                <item.icon className="h-5 w-5" />
+                {hasBadge && (
+                  <span className={`absolute -top-1.5 -right-2 inline-flex items-center justify-center rounded-full px-1 py-0.5 text-[9px] font-bold leading-none min-w-[16px] ${badgeColor}`}>
+                    {badgeCount}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-medium leading-none">{item.label}</span>
+              {isActive && (
+                <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full bg-primary" />
+              )}
+            </motion.button>
+          );
+        })}
+
+        {/* More button */}
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          onClick={onMore}
+          data-testid="mobile-tab-more"
+          className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 relative transition-colors ${
+            isMoreActive ? "text-primary" : "text-muted-foreground"
+          }`}
+          aria-label="More"
+        >
+          <MoreHorizontal className="h-5 w-5" />
+          <span className="text-[10px] font-medium leading-none">More</span>
+          {isMoreActive && (
+            <span className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-full bg-primary" />
+          )}
+        </motion.button>
+      </div>
+    </nav>
   );
 }
 
@@ -561,7 +701,7 @@ function SessionTrendChart({ data }: { data: SessionTrendPoint[] }) {
   );
 }
 
-function OverviewPanel({ dashboard, isLoading, isDm, onNavigate, onOpenEvent }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; isDm: boolean; onNavigate: (tab: NavId) => void; onOpenEvent: (eventId: number, opts?: { scrollToDelivery?: boolean }) => void }) {
+function OverviewPanel({ dashboard, isLoading, isDm, dmMode, onNavigate, onOpenEvent }: { dashboard: (DashboardSummary & { inviteCode?: string }) | undefined; isLoading: boolean; isDm: boolean; dmMode?: boolean; onNavigate: (tab: NavId) => void; onOpenEvent: (eventId: number, opts?: { scrollToDelivery?: boolean }) => void }) {
   if (isLoading) {
     return (
       <div className="space-y-6" data-testid="overview-loading">
@@ -581,7 +721,7 @@ function OverviewPanel({ dashboard, isLoading, isDm, onNavigate, onOpenEvent }: 
         </h1>
       </div>
 
-      {dashboard?.inviteCode && (
+      {!dmMode && dashboard?.inviteCode && (
         <AnimatedBorder className="p-4 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-foreground">Invite Code</p>
@@ -591,51 +731,53 @@ function OverviewPanel({ dashboard, isLoading, isDm, onNavigate, onOpenEvent }: 
         </AnimatedBorder>
       )}
 
-      <button
-        onClick={() => onNavigate("sessions")}
-        className="w-full text-left rounded-2xl glass-panel-hover p-5"
-        data-testid="card-session-stats"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
-            <ScrollText className="h-5 w-5 text-primary" />
-            Sessions
-          </h3>
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        </div>
-        <div className="flex gap-6">
-          <div>
-            <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-total-sessions">{dashboard?.totalSessions ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">sessions played</p>
+      {!dmMode && (
+        <button
+          onClick={() => onNavigate("sessions")}
+          className="w-full text-left rounded-2xl glass-panel-hover p-5"
+          data-testid="card-session-stats"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-foreground text-sm flex items-center gap-2">
+              <ScrollText className="h-5 w-5 text-primary" />
+              Sessions
+            </h3>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </div>
-          <div>
-            <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-recap-count">{dashboard?.recapCount ?? 0}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">recaps available</p>
-          </div>
-          {(dashboard?.recapCount ?? 0) > 0 && (
+          <div className="flex gap-6">
             <div>
-              <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-avg-recap-words">{dashboard?.avgRecapWordCount ?? 0}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">avg words / recap</p>
+              <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-total-sessions">{dashboard?.totalSessions ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">sessions played</p>
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-recap-count">{dashboard?.recapCount ?? 0}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">recaps available</p>
+            </div>
+            {(dashboard?.recapCount ?? 0) > 0 && (
+              <div>
+                <p className="text-2xl font-bold text-foreground font-mono tabular-nums" data-testid="text-avg-recap-words">{dashboard?.avgRecapWordCount ?? 0}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">avg words / recap</p>
+              </div>
+            )}
+          </div>
+          {(dashboard?.recapCount ?? 0) > 0 && dashboard?.recapLengthBreakdown && (
+            <div className="mt-3 flex flex-wrap gap-2" data-testid="recap-length-breakdown" title="Short: <100 words • Medium: 100–300 • Long: 300+">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-short">
+                {dashboard.recapLengthBreakdown.short} short
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-medium">
+                {dashboard.recapLengthBreakdown.medium} medium
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-long">
+                {dashboard.recapLengthBreakdown.long} long
+              </span>
             </div>
           )}
-        </div>
-        {(dashboard?.recapCount ?? 0) > 0 && dashboard?.recapLengthBreakdown && (
-          <div className="mt-3 flex flex-wrap gap-2" data-testid="recap-length-breakdown" title="Short: <100 words • Medium: 100–300 • Long: 300+">
-            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-short">
-              {dashboard.recapLengthBreakdown.short} short
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-medium">
-              {dashboard.recapLengthBreakdown.medium} medium
-            </span>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono tabular-nums" data-testid="text-recap-long">
-              {dashboard.recapLengthBreakdown.long} long
-            </span>
-          </div>
-        )}
-        {dashboard?.sessionTrend && dashboard.sessionTrend.length > 0 && (
-          <SessionTrendChart data={dashboard.sessionTrend} />
-        )}
-      </button>
+          {dashboard?.sessionTrend && dashboard.sessionTrend.length > 0 && (
+            <SessionTrendChart data={dashboard.sessionTrend} />
+          )}
+        </button>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <motion.button
