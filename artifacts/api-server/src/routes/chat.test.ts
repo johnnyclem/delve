@@ -475,6 +475,10 @@ describe("POST /chat speaking-as character context", () => {
     expect(res.status).toBe(200);
     const { user } = lastSystemAndUserMessages();
     expect(user).toContain("[ME]");
+    // The character context block must use a numbered tag so the model can cite it
+    // and so the frontend's index-based badge ordering stays consistent across
+    // [M], [H], [C], [R] sources.
+    expect(user).toContain("[M1]");
     expect(user).toContain("Aria");
     expect(user).toContain("Fire Bolt");
     // The picked character must surface as a citation entry.
@@ -483,6 +487,8 @@ describe("POST /chat speaking-as character context", () => {
         expect.objectContaining({ source: "character", entityName: "Aria", chunkId: 7 }),
       ]),
     );
+    // And it must be the first citation so its tag/index agree.
+    expect(res.body.citations[0]).toMatchObject({ source: "character", entityName: "Aria" });
   });
 
   it("does not auto-pick when the user owns zero or multiple active characters", async () => {

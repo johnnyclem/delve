@@ -176,9 +176,11 @@ function buildContextBlock(
   let cursor = 1;
 
   if (meBlock) {
+    const tag = `[M${cursor}]`;
     lines.push("## You — the asking user's character (use when the question is personal: \"I\", \"my\", \"me\")");
-    lines.push(meBlock.contextLines.join("\n") + "\n");
+    lines.push(`${tag} CHARACTER — ${meBlock.citation.entityName}\n${meBlock.contextLines.join("\n")}\n`);
     citations.push(meBlock.citation);
+    cursor += 1;
   }
 
   if (homeHits.length > 0) {

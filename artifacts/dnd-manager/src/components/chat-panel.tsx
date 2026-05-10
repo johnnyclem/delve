@@ -38,7 +38,7 @@ function escapeHtml(s: string): string {
 function renderAnswer(md: string): string {
   const escaped = escapeHtml(md);
   return escaped
-    .replace(/\[([CRH]\d+)\]/g, '<span class="inline-flex items-center rounded bg-primary/20 text-primary px-1 py-0 text-[10px] font-mono align-middle">$1</span>')
+    .replace(/\[([CRHM]\d+)\]/g, '<span class="inline-flex items-center rounded bg-primary/20 text-primary px-1 py-0 text-[10px] font-mono align-middle">$1</span>')
     .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
     .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
