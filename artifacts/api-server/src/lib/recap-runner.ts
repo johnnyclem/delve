@@ -165,9 +165,11 @@ export async function runRecapNow(sessionId: number, campaignId: number): Promis
 
 /**
  * Schedule a debounced auto-regeneration of the session's recap. Repeated
- * calls within RECAP_DEBOUNCE_MS reset the timer. When the timer fires the
- * run is enqueued via runRecapNow, which will serialize behind any in-flight
- * run for the same session.
+ * calls within RECAP_DEBOUNCE_MS reset the timer. When the timer fires we
+ * re-read the session and only enqueue a real run if the notes are still
+ * non-empty AND meaningfully different from the recap_notes_hash. This
+ * prevents stale queued timers from triggering redundant LLM calls (e.g.,
+ * after a manual generate completed in the meantime).
  */
 export function scheduleRecap(sessionId: number, campaignId: number): void {
   const existing = pendingTimers.get(sessionId);
@@ -175,12 +177,63 @@ export function scheduleRecap(sessionId: number, campaignId: number): void {
 
   const timer = setTimeout(() => {
     pendingTimers.delete(sessionId);
-    runRecapNow(sessionId, campaignId).catch((err) => {
-      logger.error({ err, sessionId }, "Auto recap generation failed");
-    });
+    void (async () => {
+      try {
+        const [row] = await db
+          .select({
+            rawNotesMd: sessionLogsTable.rawNotesMd,
+            recapNotesHash: sessionLogsTable.recapNotesHash,
+            recapStatus: sessionLogsTable.recapStatus,
+          })
+          .from(sessionLogsTable)
+          .where(and(eq(sessionLogsTable.id, sessionId), eq(sessionLogsTable.campaignId, campaignId)));
+        if (!row) return;
+        if (!shouldScheduleRecap(row.rawNotesMd, row.recapNotesHash)) {
+          // Notes were cleared, reverted, or already up-to-date — clear the
+          // "pending" badge so the FE doesn't get stuck on a stale state.
+          if (row.recapStatus === "pending") {
+            await db
+              .update(sessionLogsTable)
+              .set({ recapStatus: "idle", recapError: null })
+              .where(and(eq(sessionLogsTable.id, sessionId), eq(sessionLogsTable.campaignId, campaignId)));
+          }
+          return;
+        }
+        await runRecapNow(sessionId, campaignId);
+      } catch (err) {
+        logger.error({ err, sessionId }, "Auto recap generation failed");
+      }
+    })();
   }, RECAP_DEBOUNCE_MS);
   if (typeof timer.unref === "function") timer.unref();
   pendingTimers.set(sessionId, timer);
+}
+
+/**
+ * Cancel any pending debounced recap for a session and, if the session is
+ * stuck in `pending` status, return it to `idle`. Intended for the case
+ * where notes were saved as empty/unchanged after a previous schedule.
+ */
+export async function cancelScheduledRecap(sessionId: number, campaignId: number): Promise<void> {
+  const existing = pendingTimers.get(sessionId);
+  if (existing) {
+    clearTimeout(existing);
+    pendingTimers.delete(sessionId);
+  }
+  try {
+    await db
+      .update(sessionLogsTable)
+      .set({ recapStatus: "idle", recapError: null })
+      .where(
+        and(
+          eq(sessionLogsTable.id, sessionId),
+          eq(sessionLogsTable.campaignId, campaignId),
+          eq(sessionLogsTable.recapStatus, "pending"),
+        ),
+      );
+  } catch (err) {
+    logger.error({ err, sessionId }, "Failed to cancel scheduled recap status");
+  }
 }
 
 /** True if a recap run for this session is in flight (or queued). */

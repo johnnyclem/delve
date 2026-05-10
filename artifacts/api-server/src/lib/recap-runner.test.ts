@@ -144,7 +144,9 @@ describe("runRecapNow", () => {
 
 describe("scheduleRecap (debounce + dedup)", () => {
   it("fires the LLM once after the debounce window when called repeatedly", async () => {
-    // Three select calls: one per actual run that fires.
+    // Timer fire performs a freshness re-check select, then runRecapNow does
+    // its own select for the run.
+    selectResults.push([{ rawNotesMd: "notes", recapNotesHash: null, recapStatus: "pending" }]);
     selectResults.push([{ id: 1, sessionNumber: 1, title: "T", rawNotesMd: "notes", attendees: null }]);
     openaiCreate.mockResolvedValue({ choices: [{ message: { content: "ok" } }] });
 
@@ -161,9 +163,11 @@ describe("scheduleRecap (debounce + dedup)", () => {
   });
 
   it("queues a follow-up run when scheduleRecap is called while one is in flight", async () => {
-    // First run.
+    // First (manual) run select.
     selectResults.push([{ id: 1, sessionNumber: 1, title: "T", rawNotesMd: "n1", attendees: null }]);
-    // Follow-up run.
+    // Timer-fire freshness re-check select (notes differ from prior hash → run).
+    selectResults.push([{ rawNotesMd: "n2", recapNotesHash: hashNotes("n1"), recapStatus: "pending" }]);
+    // Queued follow-up run select.
     selectResults.push([{ id: 1, sessionNumber: 1, title: "T", rawNotesMd: "n2", attendees: null }]);
 
     let resolveFirst!: () => void;

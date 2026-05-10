@@ -499,7 +499,6 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
   }, [isDirty]);
   const isRecapStale = !!(s?.generatedAt && s?.updatedAt && new Date(s.updatedAt) > new Date(s.generatedAt));
   const recapStatus = s?.recapStatus ?? "idle";
-  const recapAuto = recapStatus === "pending" || recapStatus === "running";
 
   const handleSaveSessionNumber = useCallback(() => {
     if (!s || draftSessionNumber < 1 || draftSessionNumber === s.sessionNumber) {
@@ -1005,16 +1004,16 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
                   size="sm"
                   variant="outline"
                   onClick={handleGenerateRecap}
-                  disabled={generateRecap.isPending || recapAuto}
+                  disabled={generateRecap.isPending}
                   data-testid="button-generate-recap"
                 >
                   <Sparkles className="h-4 w-4 mr-1" />
                   {generateRecap.isPending
                     ? "Generating..."
-                    : recapStatus === "running"
-                      ? "Auto-generating…"
-                      : recapStatus === "pending"
-                        ? "Generate now"
+                    : recapStatus === "pending"
+                      ? "Generate now"
+                      : recapStatus === "running"
+                        ? "Regenerate now"
                         : s.recapMd
                           ? "Regenerate Recap"
                           : "Generate Recap"}

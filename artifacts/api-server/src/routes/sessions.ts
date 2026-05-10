@@ -9,7 +9,7 @@ import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
 import { sendRecapNotifications, buildRecipientContext, sendRecapEmailToRecipient } from "../lib/email";
 import { logger } from "../lib/logger";
 import { RECAP_MODEL } from "../lib/recap-prompt";
-import { runRecapNow, scheduleRecap, shouldScheduleRecap } from "../lib/recap-runner";
+import { runRecapNow, scheduleRecap, shouldScheduleRecap, cancelScheduledRecap } from "../lib/recap-runner";
 
 const router: IRouter = Router();
 
@@ -350,22 +350,35 @@ router.patch("/sessions/:id", requireAuth, requireCampaignMember, async (req, re
     return;
   }
 
-  // Auto-schedule a debounced recap regeneration when the DM's notes have
-  // meaningfully changed since the last recap. Empty notes never trigger.
-  if (
-    parsed.data.rawNotesMd !== undefined &&
-    shouldScheduleRecap(updated.rawNotesMd, updated.recapNotesHash)
-  ) {
-    scheduleRecap(id, campaignId);
-    // Reflect "pending" immediately in the response so the FE can render the
-    // status without waiting for the next poll.
-    const [stamped] = await db
-      .update(sessionLogsTable)
-      .set({ recapStatus: "pending", recapError: null })
-      .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)))
-      .returning();
-    res.json(stamped ?? updated);
-    return;
+  // Notes-aware recap auto-scheduling. We only act when the request actually
+  // touched rawNotesMd, so non-notes edits (title, attendees, etc.) leave any
+  // existing pending state alone.
+  if (parsed.data.rawNotesMd !== undefined) {
+    if (shouldScheduleRecap(updated.rawNotesMd, updated.recapNotesHash)) {
+      scheduleRecap(id, campaignId);
+      // Reflect "pending" immediately so the FE can render the status without
+      // waiting for the next poll.
+      const [stamped] = await db
+        .update(sessionLogsTable)
+        .set({ recapStatus: "pending", recapError: null })
+        .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)))
+        .returning();
+      res.json(stamped ?? updated);
+      return;
+    }
+    // Notes were saved as empty or reverted to match the current recap —
+    // cancel any stale pending timer/badge so the UI doesn't get stuck.
+    if (updated.recapStatus === "pending") {
+      await cancelScheduledRecap(id, campaignId);
+      const [refreshed] = await db
+        .select()
+        .from(sessionLogsTable)
+        .where(and(eq(sessionLogsTable.id, id), eq(sessionLogsTable.campaignId, campaignId)));
+      res.json(refreshed ?? updated);
+      return;
+    } else {
+      cancelScheduledRecap(id, campaignId).catch(() => {});
+    }
   }
 
   res.json(updated);
