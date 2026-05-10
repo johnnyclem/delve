@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useUser } from "@clerk/react";
 import {
   BookOpen, Dice5, Calendar, ScrollText,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, Swords, Skull
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, Swords, Skull, X
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -162,7 +162,16 @@ export default function DashboardPage() {
     [],
   );
 
-  const handleTriadTabClick = (group: TriadGroup) => {
+  const { data: dashboard, isLoading, error } = useGetDashboard();
+  const { data: sessions } = useListSessions();
+  const { data: membership } = useGetMyMembership();
+  const { data: characters } = useListCharacters({ query: { enabled: !!membership, queryKey: ["/api/characters"] } });
+  const updateNotificationPrefs = useUpdateNotificationPrefs();
+  const queryClient = useQueryClient();
+  const isDm = membership?.role === "dm";
+  const showMyCharacterTab = !!membership && !isDm;
+
+  const handleTriadTabClick = useCallback((group: TriadGroup) => {
     setHasAutoLanded(true);
     const items = getGroupItems(group, showMyCharacterTab, isDm);
     const lastNav = readLastSubNav();
@@ -178,7 +187,35 @@ export default function DashboardPage() {
     const firstNonMaps = items.find((i) => i !== "maps") ?? items[0];
     const target = validLast ?? firstNonMaps;
     setActiveTabState(target as NavId);
-  };
+  }, [showMyCharacterTab, isDm, setLocation]);
+
+  // Keyboard shortcuts: 1 / 2 / 3 (or Alt+1/2/3) to switch triad groups.
+  // Disabled when text inputs, textareas, contenteditable elements, or sheets are focused.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+      // Accept e.key for plain digits and e.code (Digit1/2/3) so Alt+1/2/3 works
+      // even on platforms where Alt remaps the key (e.g. macOS Option layer).
+      const code = e.code;
+      const key = e.key;
+      const isOne = key === "1" || code === "Digit1";
+      const isTwo = key === "2" || code === "Digit2";
+      const isThree = key === "3" || code === "Digit3";
+      if (!isOne && !isTwo && !isThree) return;
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+        if (target.isContentEditable) return;
+        if (target.closest('[role="dialog"], [role="textbox"], [contenteditable="true"]')) return;
+      }
+      const group: TriadGroup = isOne ? "active" : isTwo ? "table" : "library";
+      e.preventDefault();
+      handleTriadTabClick(group);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [handleTriadTabClick]);
 
   const [calendarDeepLink, setCalendarDeepLink] = useState<{ eventId: number; scrollToDelivery?: boolean } | null>(null);
   useEffect(() => {
@@ -186,15 +223,6 @@ export default function DashboardPage() {
       setCalendarDeepLink(null);
     }
   }, [activeTab, calendarDeepLink]);
-
-  const { data: dashboard, isLoading, error } = useGetDashboard();
-  const { data: sessions } = useListSessions();
-  const { data: membership } = useGetMyMembership();
-  const { data: characters } = useListCharacters({ query: { enabled: !!membership, queryKey: ["/api/characters"] } });
-  const updateNotificationPrefs = useUpdateNotificationPrefs();
-  const queryClient = useQueryClient();
-  const isDm = membership?.role === "dm";
-  const showMyCharacterTab = !!membership && !isDm;
 
   // Auto-land: non-DM players → My Character (Library), DMs → Overview (Active).
   // Also handles the case of returning from /maps with an intended group stored in localStorage.
@@ -487,6 +515,56 @@ interface SubNavStripProps {
   upcomingDeliveryFailureCount: number;
 }
 
+const SHORTCUT_HINT_KEY = "delve:triad-shortcut-hint-dismissed";
+
+function ShortcutHint() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SHORTCUT_HINT_KEY) === "1") return;
+      // Only show on desktop / pointer-fine devices (where keyboards are typical).
+      const isDesktop = window.matchMedia("(min-width: 768px) and (pointer: fine)").matches;
+      if (isDesktop) setVisible(true);
+    } catch { /* ignore */ }
+  }, []);
+
+  const dismiss = () => {
+    setVisible(false);
+    try { sessionStorage.setItem(SHORTCUT_HINT_KEY, "1"); } catch { /* ignore */ }
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="hidden md:flex items-center gap-2 ml-auto pl-3 text-[11px] text-muted-foreground shrink-0"
+      data-testid="hint-keyboard-shortcuts"
+    >
+      <span>
+        Press
+        {" "}
+        <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono text-[10px] text-foreground">1</kbd>
+        {" "}
+        <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono text-[10px] text-foreground">2</kbd>
+        {" "}
+        <kbd className="px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono text-[10px] text-foreground">3</kbd>
+        {" "}
+        to switch
+      </span>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss keyboard shortcut hint"
+        className="p-0.5 rounded hover:bg-muted/60 text-muted-foreground hover:text-foreground transition-colors"
+        data-testid="button-dismiss-shortcut-hint"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 function SubNavStrip({ items, activeTab, onSelect, newRecapCount, upcomingDeliveryFailureCount }: SubNavStripProps) {
   return (
     <div className="sticky top-[53px] z-30 bg-background/95 backdrop-blur-sm border-b border-border/40">
@@ -543,6 +621,7 @@ function SubNavStrip({ items, activeTab, onSelect, newRecapCount, upcomingDelive
             </motion.button>
           );
         })}
+        <ShortcutHint />
       </div>
     </div>
   );
