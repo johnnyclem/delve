@@ -197,6 +197,105 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /bestiary:
+    get:
+      operationId: listBestiary
+      tags: [rules]
+      summary: List SRD monsters with filters and paging
+      parameters:
+        - name: edition
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["2014", "2024"]
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Free-text name search
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated creature types (e.g. "humanoid,dragon")
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated sizes (e.g. "Medium,Large")
+        - name: alignment
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated alignment substrings
+        - name: crMin
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: crMax
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: Bestiary list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BestiaryListResponse"
+        "400":
+          description: Invalid edition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /bestiary/facets:
+    get:
+      operationId: getBestiaryFacets
+      tags: [rules]
+      summary: Distinct filter values available in the bestiary for an edition
+      parameters:
+        - name: edition
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["2014", "2024"]
+      responses:
+        "200":
+          description: Facet values
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BestiaryFacetsResponse"
+        "400":
+          description: Invalid edition
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /healthz:
     get:
       operationId: healthCheck
@@ -2820,6 +2919,92 @@ components:
         - entitySlug
         - title
         - chunks
+
+    BestiaryEntry:
+      type: object
+      properties:
+        slug:
+          type: string
+        title:
+          type: string
+        sourceUrl:
+          type: ["string", "null"]
+        type:
+          type: ["string", "null"]
+        size:
+          type: ["string", "null"]
+        alignment:
+          type: ["string", "null"]
+        cr:
+          type: ["number", "null"]
+      required:
+        - slug
+        - title
+
+    BestiaryListResponse:
+      type: object
+      properties:
+        edition:
+          type: string
+          enum: ["2014", "2024"]
+        total:
+          type: integer
+        offset:
+          type: integer
+        limit:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BestiaryEntry"
+      required:
+        - edition
+        - total
+        - offset
+        - limit
+        - items
+
+    BestiaryFacetValue:
+      type: object
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+      required:
+        - value
+        - count
+
+    BestiaryFacetsResponse:
+      type: object
+      properties:
+        edition:
+          type: string
+          enum: ["2014", "2024"]
+        total:
+          type: integer
+        crMin:
+          type: ["number", "null"]
+        crMax:
+          type: ["number", "null"]
+        types:
+          type: array
+          items:
+            $ref: "#/components/schemas/BestiaryFacetValue"
+        sizes:
+          type: array
+          items:
+            $ref: "#/components/schemas/BestiaryFacetValue"
+        alignments:
+          type: array
+          items:
+            $ref: "#/components/schemas/BestiaryFacetValue"
+      required:
+        - edition
+        - total
+        - types
+        - sizes
+        - alignments
 
     UpdateNotificationPrefsBody:
       type: object

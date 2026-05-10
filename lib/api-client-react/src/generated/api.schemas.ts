@@ -755,6 +755,62 @@ export interface RuleEntity {
   chunks: RuleChunk[];
 }
 
+export interface BestiaryEntry {
+  slug: string;
+  title: string;
+  /** @nullable */
+  sourceUrl?: string | null;
+  /** @nullable */
+  type?: string | null;
+  /** @nullable */
+  size?: string | null;
+  /** @nullable */
+  alignment?: string | null;
+  /** @nullable */
+  cr?: number | null;
+}
+
+export type BestiaryListResponseEdition =
+  (typeof BestiaryListResponseEdition)[keyof typeof BestiaryListResponseEdition];
+
+export const BestiaryListResponseEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export interface BestiaryListResponse {
+  edition: BestiaryListResponseEdition;
+  total: number;
+  offset: number;
+  limit: number;
+  items: BestiaryEntry[];
+}
+
+export interface BestiaryFacetValue {
+  value: string;
+  count: number;
+}
+
+export type BestiaryFacetsResponseEdition =
+  (typeof BestiaryFacetsResponseEdition)[keyof typeof BestiaryFacetsResponseEdition];
+
+export const BestiaryFacetsResponseEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export interface BestiaryFacetsResponse {
+  edition: BestiaryFacetsResponseEdition;
+  total: number;
+  /** @nullable */
+  crMin?: number | null;
+  /** @nullable */
+  crMax?: number | null;
+  types: BestiaryFacetValue[];
+  sizes: BestiaryFacetValue[];
+  alignments: BestiaryFacetValue[];
+}
+
 export interface UpdateNotificationPrefsBody {
   emailNotifications?: boolean;
   /**
@@ -1229,6 +1285,57 @@ export type GetRuleEdition =
   (typeof GetRuleEdition)[keyof typeof GetRuleEdition];
 
 export const GetRuleEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export type ListBestiaryParams = {
+  edition?: ListBestiaryEdition;
+  /**
+   * Free-text name search
+   */
+  q?: string;
+  /**
+   * Comma-separated creature types (e.g. "humanoid,dragon")
+   */
+  type?: string;
+  /**
+   * Comma-separated sizes (e.g. "Medium,Large")
+   */
+  size?: string;
+  /**
+   * Comma-separated alignment substrings
+   */
+  alignment?: string;
+  crMin?: number;
+  crMax?: number;
+  /**
+   * @minimum 1
+   * @maximum 500
+   */
+  limit?: number;
+  /**
+   * @minimum 0
+   */
+  offset?: number;
+};
+
+export type ListBestiaryEdition =
+  (typeof ListBestiaryEdition)[keyof typeof ListBestiaryEdition];
+
+export const ListBestiaryEdition = {
+  NUMBER_2014: "2014",
+  NUMBER_2024: "2024",
+} as const;
+
+export type GetBestiaryFacetsParams = {
+  edition?: GetBestiaryFacetsEdition;
+};
+
+export type GetBestiaryFacetsEdition =
+  (typeof GetBestiaryFacetsEdition)[keyof typeof GetBestiaryFacetsEdition];
+
+export const GetBestiaryFacetsEdition = {
   NUMBER_2014: "2014",
   NUMBER_2024: "2024",
 } as const;

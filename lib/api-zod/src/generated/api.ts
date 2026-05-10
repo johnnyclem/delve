@@ -104,6 +104,84 @@ export const GetRuleResponse = zod.object({
 });
 
 /**
+ * @summary List SRD monsters with filters and paging
+ */
+export const listBestiaryQueryLimitMax = 500;
+
+export const listBestiaryQueryOffsetMin = 0;
+
+export const ListBestiaryQueryParams = zod.object({
+  edition: zod.enum(["2014", "2024"]).optional(),
+  q: zod.coerce.string().optional().describe("Free-text name search"),
+  type: zod.coerce
+    .string()
+    .optional()
+    .describe('Comma-separated creature types (e.g. \"humanoid,dragon\")'),
+  size: zod.coerce
+    .string()
+    .optional()
+    .describe('Comma-separated sizes (e.g. \"Medium,Large\")'),
+  alignment: zod.coerce
+    .string()
+    .optional()
+    .describe("Comma-separated alignment substrings"),
+  crMin: zod.coerce.number().optional(),
+  crMax: zod.coerce.number().optional(),
+  limit: zod.coerce.number().min(1).max(listBestiaryQueryLimitMax).optional(),
+  offset: zod.coerce.number().min(listBestiaryQueryOffsetMin).optional(),
+});
+
+export const ListBestiaryResponse = zod.object({
+  edition: zod.enum(["2014", "2024"]),
+  total: zod.number(),
+  offset: zod.number(),
+  limit: zod.number(),
+  items: zod.array(
+    zod.object({
+      slug: zod.string(),
+      title: zod.string(),
+      sourceUrl: zod.string().nullish(),
+      type: zod.string().nullish(),
+      size: zod.string().nullish(),
+      alignment: zod.string().nullish(),
+      cr: zod.number().nullish(),
+    }),
+  ),
+});
+
+/**
+ * @summary Distinct filter values available in the bestiary for an edition
+ */
+export const GetBestiaryFacetsQueryParams = zod.object({
+  edition: zod.enum(["2014", "2024"]).optional(),
+});
+
+export const GetBestiaryFacetsResponse = zod.object({
+  edition: zod.enum(["2014", "2024"]),
+  total: zod.number(),
+  crMin: zod.number().nullish(),
+  crMax: zod.number().nullish(),
+  types: zod.array(
+    zod.object({
+      value: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  sizes: zod.array(
+    zod.object({
+      value: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+  alignments: zod.array(
+    zod.object({
+      value: zod.string(),
+      count: zod.number(),
+    }),
+  ),
+});
+
+/**
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({

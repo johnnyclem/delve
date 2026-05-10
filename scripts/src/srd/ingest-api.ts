@@ -607,21 +607,46 @@ async function fetchOpen5eMonsters2024(): Promise<PreparedChunk[]> {
   return out;
 }
 
-// Minimum required coverage per edition. Used by `assertCoverage` so
-// post-merge automation fails loudly if a critical category drops out.
-const MIN_COUNTS: Record<SrdEdition, Partial<Record<Kind, number>>> = {
-  "2014": { spell: 200, monster: 200, class: 5, condition: 10 },
-  "2024": { spell: 200, monster: 200, class: 5, condition: 10 },
+// Exact expected SRD entity counts per edition, measured by distinct
+// `entity_slug` (not chunk count, since multi-part monsters like vampire
+// or troll legitimately produce multiple chunks for one entity).
+//
+// These numbers come from auditing the live upstreams:
+//   - dnd5eapi 2014: 334 monsters, 319 spells, 12 classes (incl.
+//     subclasses exposed by the `/classes` endpoint), 15 conditions.
+//   - open5e srd-2024 (with dnd5eapi 2024 fallback for non-monster
+//     kinds): 330 monsters, 339 spells, 12 classes, 15 conditions.
+//
+// Mismatching counts cause `assertCoverage` to throw so post-merge
+// automation fails loudly if a category silently drops entries.
+const EXPECTED_COUNTS: Record<SrdEdition, Partial<Record<Kind, number>>> = {
+  "2014": { spell: 319, monster: 334, class: 12, condition: 15 },
+  "2024": { spell: 339, monster: 330, class: 12, condition: 15 },
 };
 
+function distinctSlugCounts(prepared: PreparedChunk[]): Map<Kind, number> {
+  const seen = new Map<Kind, Set<string>>();
+  for (const p of prepared) {
+    let slugs = seen.get(p.entityKind);
+    if (!slugs) {
+      slugs = new Set();
+      seen.set(p.entityKind, slugs);
+    }
+    slugs.add(p.entitySlug);
+  }
+  const counts = new Map<Kind, number>();
+  for (const [k, s] of seen) counts.set(k, s.size);
+  return counts;
+}
+
 function assertCoverage(edition: SrdEdition, prepared: PreparedChunk[]): void {
-  const counts: Partial<Record<Kind, number>> = {};
-  for (const p of prepared) counts[p.entityKind] = (counts[p.entityKind] ?? 0) + 1;
-  const mins = MIN_COUNTS[edition];
+  const counts = distinctSlugCounts(prepared);
+  const expected = EXPECTED_COUNTS[edition];
   const failures: string[] = [];
-  for (const [kind, min] of Object.entries(mins) as Array<[Kind, number]>) {
-    if ((counts[kind] ?? 0) < min) {
-      failures.push(`${kind}: ${counts[kind] ?? 0} < ${min}`);
+  for (const [kind, want] of Object.entries(expected) as Array<[Kind, number]>) {
+    const got = counts.get(kind) ?? 0;
+    if (got !== want) {
+      failures.push(`${kind}: got ${got}, expected ${want}`);
     }
   }
   if (failures.length) {
@@ -761,27 +786,36 @@ async function ingestEdition(edition: SrdEdition) {
 }
 
 async function alreadyPopulated(): Promise<boolean> {
-  // Cheap pre-flight to keep post-merge under its 20s timeout once the
-  // SRD has already been loaded. We require non-trivial coverage of the
-  // two highest-value kinds (spell + monster) for both editions before
-  // declaring the table populated.
+  // Pre-flight check that keeps post-merge under its 20s timeout once
+  // the SRD is fully loaded — but only short-circuits when EVERY tracked
+  // category is at its exact expected distinct-slug count. If even one
+  // entity is missing (e.g. a previous run crashed mid-monster), the
+  // re-run proceeds and backfills the gap. Set SRD_FORCE=1 to override.
   const result = await db.execute<{
     edition: string;
     entity_kind: string;
     n: number;
   }>(
-    sql`SELECT edition, entity_kind, count(*)::int AS n FROM reference_chunks
-        WHERE entity_kind IN ('spell','monster') GROUP BY edition, entity_kind`,
+    sql`SELECT edition, entity_kind, count(DISTINCT entity_slug)::int AS n
+        FROM reference_chunks
+        WHERE entity_kind IN ('spell','monster','class','condition')
+        GROUP BY edition, entity_kind`,
   );
   const counts = new Map<string, number>();
   for (const r of result.rows) counts.set(`${r.edition}:${r.entity_kind}`, Number(r.n));
-  const required: Array<[string, number]> = [
-    ["2014:spell", 200],
-    ["2014:monster", 200],
-    ["2024:spell", 200],
-    ["2024:monster", 200],
-  ];
-  return required.every(([k, min]) => (counts.get(k) ?? 0) >= min);
+  for (const ed of EDITIONS) {
+    const expected = EXPECTED_COUNTS[ed];
+    for (const [kind, want] of Object.entries(expected) as Array<[Kind, number]>) {
+      const got = counts.get(`${ed}:${kind}`) ?? 0;
+      if (got < want) {
+        console.log(
+          `[srd:ingest-api] preflight: ${ed}/${kind} has ${got}/${want} distinct slugs — running ingest to backfill`,
+        );
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 async function main() {

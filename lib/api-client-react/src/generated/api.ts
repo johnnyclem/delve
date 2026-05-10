@@ -17,6 +17,8 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  BestiaryFacetsResponse,
+  BestiaryListResponse,
   CalendarEvent,
   CalendarEventWithRsvps,
   Campaign,
@@ -44,10 +46,12 @@ import type {
   ErrorResponse,
   EventInviteLog,
   GeneratedRecap,
+  GetBestiaryFacetsParams,
   GetRuleParams,
   HealthStatus,
   HomebrewRule,
   HouseRulesShareToken,
+  ListBestiaryParams,
   ListEntitiesParams,
   Map,
   MapSummary,
@@ -545,6 +549,197 @@ export function useGetRule<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetRuleQueryOptions(kind, slug, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List SRD monsters with filters and paging
+ */
+export const getListBestiaryUrl = (params?: ListBestiaryParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/bestiary?${stringifiedParams}`
+    : `/api/bestiary`;
+};
+
+export const listBestiary = async (
+  params?: ListBestiaryParams,
+  options?: RequestInit,
+): Promise<BestiaryListResponse> => {
+  return customFetch<BestiaryListResponse>(getListBestiaryUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListBestiaryQueryKey = (params?: ListBestiaryParams) => {
+  return [`/api/bestiary`, ...(params ? [params] : [])] as const;
+};
+
+export const getListBestiaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof listBestiary>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListBestiaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBestiary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListBestiaryQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listBestiary>>> = ({
+    signal,
+  }) => listBestiary(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listBestiary>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListBestiaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listBestiary>>
+>;
+export type ListBestiaryQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List SRD monsters with filters and paging
+ */
+
+export function useListBestiary<
+  TData = Awaited<ReturnType<typeof listBestiary>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: ListBestiaryParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listBestiary>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListBestiaryQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Distinct filter values available in the bestiary for an edition
+ */
+export const getGetBestiaryFacetsUrl = (params?: GetBestiaryFacetsParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/bestiary/facets?${stringifiedParams}`
+    : `/api/bestiary/facets`;
+};
+
+export const getBestiaryFacets = async (
+  params?: GetBestiaryFacetsParams,
+  options?: RequestInit,
+): Promise<BestiaryFacetsResponse> => {
+  return customFetch<BestiaryFacetsResponse>(getGetBestiaryFacetsUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBestiaryFacetsQueryKey = (
+  params?: GetBestiaryFacetsParams,
+) => {
+  return [`/api/bestiary/facets`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetBestiaryFacetsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBestiaryFacets>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetBestiaryFacetsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBestiaryFacets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetBestiaryFacetsQueryKey(params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBestiaryFacets>>
+  > = ({ signal }) => getBestiaryFacets(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBestiaryFacets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBestiaryFacetsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBestiaryFacets>>
+>;
+export type GetBestiaryFacetsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Distinct filter values available in the bestiary for an edition
+ */
+
+export function useGetBestiaryFacets<
+  TData = Awaited<ReturnType<typeof getBestiaryFacets>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  params?: GetBestiaryFacetsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getBestiaryFacets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBestiaryFacetsQueryOptions(params, options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
