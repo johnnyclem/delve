@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check, ChevronDown, History, Sparkles, Dice5 } from "lucide-react";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check, ChevronDown, History, Sparkles, Dice5, Plus } from "lucide-react";
 import LevelUpModal from "@/components/level-up-modal";
 import { Button } from "@/components/ui/button";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership, useGetCampaign } from "@workspace/api-client-react";
@@ -101,6 +101,8 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
   const [asiEditingIdx, setAsiEditingIdx] = useState<number | null>(null);
   const [asiEditDraft, setAsiEditDraft] = useState<AsiEntry | null>(null);
   const [asiRemoveIdx, setAsiRemoveIdx] = useState<number | null>(null);
+  const [tagEditorOpen, setTagEditorOpen] = useState(false);
+  const [customTagInput, setCustomTagInput] = useState("");
 
   const char = character as Character | undefined;
   const isOwner = char?.ownerUserId === user?.id;
@@ -347,6 +349,45 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
     if (url.startsWith("/objects/")) return `${import.meta.env.BASE_URL}api/storage${url}`;
     return url;
   })();
+
+  const PRESET_TAGS: { label: string; color: string }[] = [
+    { label: "Friendly", color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" },
+    { label: "Hostile", color: "bg-red-500/20 text-red-300 border-red-500/40" },
+    { label: "Neutral", color: "bg-slate-500/20 text-slate-300 border-slate-500/40" },
+    { label: "Mysterious", color: "bg-violet-500/20 text-violet-300 border-violet-500/40" },
+    { label: "Ally", color: "bg-sky-500/20 text-sky-300 border-sky-500/40" },
+    { label: "Rival", color: "bg-orange-500/20 text-orange-300 border-orange-500/40" },
+    { label: "Unknown", color: "bg-zinc-500/20 text-zinc-400 border-zinc-500/40" },
+  ];
+  const TAG_COLOR_MAP = Object.fromEntries(PRESET_TAGS.map((t) => [t.label, t.color]));
+  const getTagColor = (tag: string) =>
+    TAG_COLOR_MAP[tag] ?? "bg-primary/15 text-primary/80 border-primary/30";
+
+  const saveRelationshipTags = (tags: string[]) => {
+    updateMutation.mutate(
+      { id, data: { relationshipTags: tags } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getGetCharacterQueryKey(id) });
+          queryClient.invalidateQueries({ queryKey: getListCharactersQueryKey() });
+        },
+        onError: () => toast({ title: "Could not update tags", variant: "destructive" }),
+      },
+    );
+  };
+
+  const addTag = (tag: string) => {
+    const trimmed = tag.trim();
+    if (!trimmed || !char) return;
+    const current = char.relationshipTags ?? [];
+    if (current.includes(trimmed)) return;
+    saveRelationshipTags([...current, trimmed]);
+  };
+
+  const removeTag = (tag: string) => {
+    if (!char) return;
+    saveRelationshipTags((char.relationshipTags ?? []).filter((t) => t !== tag));
+  };
 
   const savePortraitUrl = (portraitUrl: string | null) => {
     updateMutation.mutate(
@@ -755,6 +796,109 @@ export default function CharacterDetail({ id, onBack }: { id: number; onBack?: (
           <p className="text-xs text-muted-foreground mt-1" data-testid="text-character-background">
             Background: <span className="text-foreground">{char.sheetJson?.background?.trim() ? char.sheetJson.background : "—"}</span>
           </p>
+
+          {/* Relationship tags display + editor */}
+          <div className="mt-2 space-y-2" data-testid="relationship-tags-section">
+            {(char.relationshipTags ?? []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5" data-testid="relationship-tags-list">
+                {(char.relationshipTags ?? []).map((tag) => (
+                  <span
+                    key={tag}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${getTagColor(tag)}`}
+                    data-testid={`tag-chip-${tag}`}
+                  >
+                    {tag}
+                    {canEditDetails && (
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        disabled={updateMutation.isPending}
+                        className="ml-0.5 opacity-60 hover:opacity-100 transition-opacity disabled:pointer-events-none"
+                        aria-label={`Remove tag ${tag}`}
+                        data-testid={`button-remove-tag-${tag}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+            {canEditDetails && !editing && !editingDetails && (
+              <div>
+                {tagEditorOpen ? (
+                  <div className="space-y-2" data-testid="tag-editor">
+                    <div className="flex flex-wrap gap-1.5">
+                      {PRESET_TAGS.filter((t) => !(char.relationshipTags ?? []).includes(t.label)).map((t) => (
+                        <button
+                          key={t.label}
+                          type="button"
+                          onClick={() => { addTag(t.label); }}
+                          disabled={updateMutation.isPending}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-opacity hover:opacity-90 disabled:opacity-40 disabled:pointer-events-none ${t.color}`}
+                          data-testid={`button-preset-tag-${t.label}`}
+                        >
+                          + {t.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 max-w-xs">
+                      <Input
+                        value={customTagInput}
+                        onChange={(e) => setCustomTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && customTagInput.trim() && !updateMutation.isPending) {
+                            addTag(customTagInput);
+                            setCustomTagInput("");
+                          }
+                        }}
+                        placeholder="Custom tag…"
+                        className="h-7 text-xs"
+                        maxLength={40}
+                        disabled={updateMutation.isPending}
+                        data-testid="input-custom-tag"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs px-2"
+                        disabled={updateMutation.isPending || !customTagInput.trim()}
+                        onClick={() => {
+                          if (customTagInput.trim()) {
+                            addTag(customTagInput);
+                            setCustomTagInput("");
+                          }
+                        }}
+                        data-testid="button-add-custom-tag"
+                      >
+                        Add
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs px-2"
+                        onClick={() => { setTagEditorOpen(false); setCustomTagInput(""); }}
+                        data-testid="button-close-tag-editor"
+                      >
+                        Done
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setTagEditorOpen(true)}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                    data-testid="button-open-tag-editor"
+                  >
+                    <Plus className="h-3 w-3" />
+                    {(char.relationshipTags ?? []).length === 0 ? "Add relationship tags" : "Edit tags"}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {isOwner && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <input

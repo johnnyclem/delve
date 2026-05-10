@@ -13,6 +13,7 @@ export const charactersTable = pgTable("characters", {
   level: integer("level").notNull().default(1),
   sheetJson: jsonb("sheet_json").notNull().default({}),
   portraitUrl: text("portrait_url"),
+  relationshipTags: text("relationship_tags").array().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

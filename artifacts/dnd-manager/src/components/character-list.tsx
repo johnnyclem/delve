@@ -8,6 +8,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import CharacterCreateForm from "./character-create";
 import CharacterDetail from "./character-detail";
 
+const TAG_COLOR_MAP: Record<string, string> = {
+  Friendly: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  Hostile: "bg-red-500/20 text-red-300 border-red-500/40",
+  Neutral: "bg-slate-500/20 text-slate-300 border-slate-500/40",
+  Mysterious: "bg-violet-500/20 text-violet-300 border-violet-500/40",
+  Ally: "bg-sky-500/20 text-sky-300 border-sky-500/40",
+  Rival: "bg-orange-500/20 text-orange-300 border-orange-500/40",
+  Unknown: "bg-zinc-500/20 text-zinc-400 border-zinc-500/40",
+};
+
 type View = { mode: "list" } | { mode: "detail"; id: number } | { mode: "create" };
 
 export default function CharacterListPanel() {
@@ -113,6 +123,24 @@ function CharacterGrid({ onSelect, onCreate }: { onSelect: (id: number) => void;
                     Level <span className="font-mono tabular-nums">{char.level}</span> {char.race} {char.class}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1 truncate">Played by {char.ownerDisplayName}</p>
+                  {(char.relationshipTags ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2" data-testid={`card-tags-${char.id}`}>
+                      {(char.relationshipTags ?? []).slice(0, 4).map((tag) => (
+                        <span
+                          key={tag}
+                          className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium leading-tight ${TAG_COLOR_MAP[tag] ?? "bg-primary/15 text-primary/80 border-primary/30"}`}
+                          data-testid={`card-tag-${char.id}-${tag}`}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                      {(char.relationshipTags ?? []).length > 4 && (
+                        <span className="inline-block rounded-full border border-muted px-2 py-0.5 text-[10px] font-medium leading-tight text-muted-foreground">
+                          +{(char.relationshipTags ?? []).length - 4}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
               </div>

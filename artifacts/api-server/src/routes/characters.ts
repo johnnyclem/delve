@@ -181,6 +181,7 @@ router.patch("/characters/:id", requireAuth, requireCampaignMember, async (req, 
   if (parsed.data.level !== undefined) updateData.level = parsed.data.level;
   if (parsed.data.sheetJson !== undefined) updateData.sheetJson = parsed.data.sheetJson;
   if (parsed.data.portraitUrl !== undefined) updateData.portraitUrl = parsed.data.portraitUrl;
+  if (parsed.data.relationshipTags !== undefined) updateData.relationshipTags = parsed.data.relationshipTags;
 
   const [updated] = await db
     .update(charactersTable)

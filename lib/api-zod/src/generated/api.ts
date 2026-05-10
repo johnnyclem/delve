@@ -568,6 +568,8 @@ export const UpdateNotificationPrefsResponse = zod.object({
 /**
  * @summary List all active characters in the campaign
  */
+export const listCharactersResponseRelationshipTagsDefault = [];
+
 export const ListCharactersResponseItem = zod.object({
   id: zod.number(),
   campaignId: zod.number(),
@@ -703,6 +705,9 @@ export const ListCharactersResponseItem = zod.object({
       .optional(),
   }),
   portraitUrl: zod.string().nullish(),
+  relationshipTags: zod
+    .array(zod.string())
+    .default(listCharactersResponseRelationshipTagsDefault),
   isActive: zod.boolean(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -877,6 +882,8 @@ export const GetCharacterParams = zod.object({
   id: zod.coerce.number(),
 });
 
+export const getCharacterResponseRelationshipTagsDefault = [];
+
 export const GetCharacterResponse = zod.object({
   id: zod.number(),
   campaignId: zod.number(),
@@ -1012,6 +1019,9 @@ export const GetCharacterResponse = zod.object({
       .optional(),
   }),
   portraitUrl: zod.string().nullish(),
+  relationshipTags: zod
+    .array(zod.string())
+    .default(getCharacterResponseRelationshipTagsDefault),
   isActive: zod.boolean(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -1161,7 +1171,10 @@ export const UpdateCharacterBody = zod.object({
     })
     .optional(),
   portraitUrl: zod.string().nullish(),
+  relationshipTags: zod.array(zod.string()).optional(),
 });
+
+export const updateCharacterResponseRelationshipTagsDefault = [];
 
 export const UpdateCharacterResponse = zod.object({
   id: zod.number(),
@@ -1298,6 +1311,9 @@ export const UpdateCharacterResponse = zod.object({
       .optional(),
   }),
   portraitUrl: zod.string().nullish(),
+  relationshipTags: zod
+    .array(zod.string())
+    .default(updateCharacterResponseRelationshipTagsDefault),
   isActive: zod.boolean(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),

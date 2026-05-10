@@ -2104,6 +2104,11 @@ components:
           $ref: "#/components/schemas/CharacterSheet"
         portraitUrl:
           type: ["string", "null"]
+        relationshipTags:
+          type: array
+          items:
+            type: string
+          default: []
         isActive:
           type: boolean
         createdAt:
@@ -2121,6 +2126,7 @@ components:
         - class
         - level
         - sheetJson
+        - relationshipTags
         - isActive
         - createdAt
         - updatedAt
@@ -2140,6 +2146,10 @@ components:
           $ref: "#/components/schemas/CharacterSheet"
         portraitUrl:
           type: ["string", "null"]
+        relationshipTags:
+          type: array
+          items:
+            type: string
 
     CreateCharacterBody:
       type: object

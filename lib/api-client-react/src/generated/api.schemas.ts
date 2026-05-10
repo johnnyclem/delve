@@ -244,6 +244,7 @@ export interface Character {
   sheetJson: CharacterSheet;
   /** @nullable */
   portraitUrl?: string | null;
+  relationshipTags: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -257,6 +258,7 @@ export interface UpdateCharacterBody {
   sheetJson?: CharacterSheet;
   /** @nullable */
   portraitUrl?: string | null;
+  relationshipTags?: string[];
 }
 
 export interface CreateCharacterBody {
