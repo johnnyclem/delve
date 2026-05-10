@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Loader2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,149 @@ export default function SessionsPanel() {
   }
 
   return <SessionList onSelect={setSelectedId} onCreate={() => setShowCreate(true)} />;
+}
+
+type SessionState = "scheduled" | "drafting" | "completed";
+
+function getSessionState(s: SessionLog, isDm: boolean): SessionState {
+  if (s.recapMd) return "completed";
+  if (isDm && s.rawNotesMd) return "drafting";
+  return "scheduled";
+}
+
+function truncateRecap(md: string, maxChars = 220): string {
+  const plain = md
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/^-\s+/gm, "")
+    .replace(/\[(.+?)\]\(.+?\)/g, "$1")
+    .replace(/\n+/g, " ")
+    .trim();
+  if (plain.length <= maxChars) return plain;
+  return plain.slice(0, maxChars).trimEnd() + "…";
+}
+
+const STATE_CONFIG: Record<SessionState, {
+  icon: React.ElementType;
+  iconClass: string;
+  dotClass: string;
+  label: string;
+  labelClass: string;
+}> = {
+  completed: {
+    icon: CheckCircle2,
+    iconClass: "text-emerald-400",
+    dotClass: "bg-emerald-400/10 border-emerald-400/30",
+    label: "Completed",
+    labelClass: "text-emerald-400 bg-emerald-400/10",
+  },
+  drafting: {
+    icon: FileText,
+    iconClass: "text-amber-400",
+    dotClass: "bg-amber-400/10 border-amber-400/30",
+    label: "Drafting",
+    labelClass: "text-amber-400 bg-amber-400/10",
+  },
+  scheduled: {
+    icon: Calendar,
+    iconClass: "text-blue-400/70",
+    dotClass: "bg-[rgba(255,255,255,0.04)] border-[rgba(255,255,255,0.1)]",
+    label: "Scheduled",
+    labelClass: "text-muted-foreground bg-muted",
+  },
+};
+
+function TimelineNode({
+  session: s,
+  state,
+  index,
+  onSelect,
+}: {
+  session: SessionLog;
+  state: SessionState;
+  index: number;
+  onSelect: (id: number) => void;
+}) {
+  const cfg = STATE_CONFIG[state];
+  const IconComponent = cfg.icon;
+  const recapPreview = s.recapMd ? truncateRecap(s.recapMd) : null;
+
+  const cardContent = (
+    <div className="space-y-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-foreground flex items-center gap-2 flex-wrap leading-snug">
+            Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
+            {s.hasNewRecap && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-400 animate-pulse" data-testid={`badge-new-recap-${s.id}`}>
+                <Bell className="h-3 w-3" />
+                New
+              </span>
+            )}
+          </h3>
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <span className="text-xs text-muted-foreground">
+              {s.playedAt ? new Date(s.playedAt).toLocaleDateString() : "Date TBD"}
+            </span>
+            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.labelClass}`}>
+              <IconComponent className="h-3 w-3" />
+              {cfg.label}
+            </span>
+            {s.recapMd && typeof s.recapWordCount === "number" && s.recapWordCount > 0 && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid={`badge-recap-words-${s.id}`}>
+                <FileText className="h-3 w-3" />
+                <span className="font-mono tabular-nums">{s.recapWordCount.toLocaleString()}</span> words
+              </span>
+            )}
+          </div>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+      </div>
+
+      {recapPreview ? (
+        <p className="text-sm text-foreground/65 leading-relaxed" data-testid={`badge-recap-available-${s.id}`}>
+          {recapPreview}
+        </p>
+      ) : state === "drafting" ? (
+        <p className="text-xs text-muted-foreground italic" data-testid={`badge-recap-pending-${s.id}`}>
+          DM notes added — recap not yet published.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground italic" data-testid={`badge-recap-pending-${s.id}`}>
+          Recap will appear here once the DM publishes one.
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    <motion.div
+      className="flex items-start gap-3"
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ type: "spring", stiffness: 300, damping: 28, delay: index * 0.04 }}
+    >
+      <div
+        className={`relative z-10 shrink-0 w-10 h-10 rounded-full border flex items-center justify-center${s.hasNewRecap ? " ring-2 ring-amber-400/40" : ""} ${cfg.dotClass}`}
+        aria-hidden="true"
+      >
+        <IconComponent className={`h-4 w-4 ${cfg.iconClass}`} />
+      </div>
+
+      <motion.button
+        whileTap={{ scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        onClick={() => onSelect(s.id)}
+        className={`flex-1 min-w-0 text-left mb-1 ${s.hasNewRecap ? "" : "rounded-2xl glass-panel-hover p-4"}`}
+        data-testid={`card-session-${s.id}`}
+      >
+        {s.hasNewRecap ? (
+          <AnimatedBorder className="p-4" interactive speed="slow">{cardContent}</AnimatedBorder>
+        ) : cardContent}
+      </motion.button>
+    </motion.div>
+  );
 }
 
 function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; onCreate: () => void }) {
@@ -88,64 +231,23 @@ function SessionList({ onSelect, onCreate }: { onSelect: (id: number) => void; o
           <p className="text-muted-foreground">No session logs yet.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {(sessions as SessionLog[]).map((s) => {
-            const cardInner = (
-              <div className="flex items-center justify-between">
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-foreground flex items-center gap-2">
-                    Session <span className="font-mono tabular-nums">{s.sessionNumber}</span>: {s.title}
-                    {s.hasNewRecap && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-bold text-amber-400 animate-pulse" data-testid={`badge-new-recap-${s.id}`}>
-                        <Bell className="h-3 w-3" />
-                        New
-                      </span>
-                    )}
-                  </h3>
-                  <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-xs text-muted-foreground">
-                      {s.playedAt ? new Date(s.playedAt).toLocaleDateString() : "Date TBD"}
-                    </span>
-                    {s.recapMd ? (
-                      <>
-                        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary" data-testid={`badge-recap-available-${s.id}`}>
-                          <CheckCircle2 className="h-3 w-3" />
-                          Recap available
-                        </span>
-                        {typeof s.recapWordCount === "number" && s.recapWordCount > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid={`badge-recap-words-${s.id}`}>
-                            <FileText className="h-3 w-3" />
-                            <span className="font-mono tabular-nums">{s.recapWordCount.toLocaleString()}</span> words
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground" data-testid={`badge-recap-pending-${s.id}`}>
-                        <Clock className="h-3 w-3" />
-                        Recap pending
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 ml-2" />
-              </div>
-            );
-
-            return (
-              <motion.button
-                whileTap={{ scale: 0.95 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        <div className="relative">
+          <div
+            className="absolute left-[19px] top-5 bottom-4 w-[2px] rounded-full pointer-events-none"
+            style={{ background: "linear-gradient(to bottom, rgba(139,92,246,0.3), rgba(255,255,255,0.06) 70%, transparent)" }}
+            aria-hidden="true"
+          />
+          <div className="flex flex-col gap-2">
+            {(sessions as SessionLog[]).map((s, index) => (
+              <TimelineNode
                 key={s.id}
-                onClick={() => onSelect(s.id)}
-                className={`w-full text-left ${s.hasNewRecap ? "" : "rounded-2xl glass-panel-hover p-4"}`}
-                data-testid={`card-session-${s.id}`}
-              >
-                {s.hasNewRecap ? (
-                  <AnimatedBorder className="p-4" interactive speed="slow">{cardInner}</AnimatedBorder>
-                ) : cardInner}
-              </motion.button>
-            );
-          })}
+                session={s}
+                state={getSessionState(s, isDm)}
+                index={index}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>
