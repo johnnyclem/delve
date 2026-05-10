@@ -28,6 +28,7 @@
     "http-proxy-middleware": "^3",
     "multer": "^2.1.1",
     "openai": "^6",
+    "p-limit": "^7.3.0",
     "pdf-lib": "^1.17.1",
     "pino": "^9",
     "pino-http": "^10",
