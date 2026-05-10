@@ -77,21 +77,32 @@ async function doGenerateRecap(sessionId: number, campaignId: number): Promise<s
 
   if (!session) throw new Error("Session not found");
   const notes = session.rawNotesMd;
-  if (!notes || notes.trim() === "") throw new Error("No raw notes to generate recap from");
-
-  let openai;
-  try {
-    openai = (await import("@workspace/integrations-openai-ai-server")).openai;
-  } catch {
-    throw new Error("AI service is not configured");
+  if (!notes || notes.trim() === "") {
+    // Benign: notes cleared between schedule and run. Reset any stuck
+    // 'pending' status so the FE badge doesn't get stuck.
+    await db
+      .update(sessionLogsTable)
+      .set({ recapStatus: "idle", recapError: null })
+      .where(and(eq(sessionLogsTable.id, sessionId), eq(sessionLogsTable.campaignId, campaignId)))
+      .catch(() => {});
+    throw new Error("No raw notes to generate recap from");
   }
 
+  // Stamp 'running' BEFORE the AI import so any pre-run failure (e.g. AI
+  // service unavailable) gets the error update path below — never leaves the
+  // row stuck in 'pending'.
   await db
     .update(sessionLogsTable)
     .set({ recapStatus: "running", recapError: null })
     .where(and(eq(sessionLogsTable.id, sessionId), eq(sessionLogsTable.campaignId, campaignId)));
 
   try {
+    let openai;
+    try {
+      openai = (await import("@workspace/integrations-openai-ai-server")).openai;
+    } catch {
+      throw new Error("AI service is not configured");
+    }
     const recapAttendees = await buildAttendeesForRecap(session.attendees, campaignId);
     const completion = await openai.chat.completions.create({
       model: RECAP_MODEL,
