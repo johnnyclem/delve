@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useUser } from "@clerk/react";
 import {
   BookOpen, Dice5, Calendar, ScrollText,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, Swords, Skull, X
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, Swords, Skull, X, RotateCcw
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -77,6 +77,55 @@ function getGroupItems(group: TriadGroup, showMyCharacter: boolean, isDm: boolea
   return libraryItems;
 }
 
+// DM-only items (and any other items) that should always remain pinned at the
+// end of their group regardless of user-defined ordering.
+function getPinnedItems(group: TriadGroup): NavId[] {
+  if (group === "library") return ["compare"];
+  return [];
+}
+
+const TRIAD_ITEM_ORDER_KEY = (group: TriadGroup) => `delve:triad-item-order:${group}`;
+
+function readGroupOrder(group: TriadGroup): NavId[] | null {
+  try {
+    const raw = localStorage.getItem(TRIAD_ITEM_ORDER_KEY(group));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return parsed.filter((v): v is NavId => typeof v === "string");
+  } catch {
+    return null;
+  }
+}
+
+function writeGroupOrder(group: TriadGroup, order: NavId[]) {
+  try {
+    localStorage.setItem(TRIAD_ITEM_ORDER_KEY(group), JSON.stringify(order));
+  } catch { /* ignore */ }
+}
+
+function clearGroupOrder(group: TriadGroup) {
+  try {
+    localStorage.removeItem(TRIAD_ITEM_ORDER_KEY(group));
+  } catch { /* ignore */ }
+}
+
+function getOrderedGroupItems(group: TriadGroup, showMyCharacter: boolean, isDm: boolean): NavId[] {
+  const def = getGroupItems(group, showMyCharacter, isDm);
+  const pinned = getPinnedItems(group).filter((id) => def.includes(id));
+  const reorderable = def.filter((id) => !pinned.includes(id));
+  const saved = readGroupOrder(group);
+  if (!saved) return def;
+  const ordered: NavId[] = [];
+  for (const id of saved) {
+    if (reorderable.includes(id) && !ordered.includes(id)) ordered.push(id);
+  }
+  for (const id of reorderable) {
+    if (!ordered.includes(id)) ordered.push(id);
+  }
+  return [...ordered, ...pinned];
+}
+
 function getGroupForTab(tab: NavId): TriadGroup {
   if (ACTIVE_ITEMS.includes(tab)) return "active";
   if (TABLE_ITEMS.includes(tab)) return "table";
@@ -136,6 +185,10 @@ export default function DashboardPage() {
   const [hasAutoLanded, setHasAutoLanded] = useState(false);
   const [dmMode, setDmMode] = useDmMode(user?.id);
   const [profileOpen, setProfileOpen] = useState(false);
+  // Bumped whenever the user reorders or resets a group's sub-nav items, so
+  // the memoized `getOrderedGroupItems` re-reads localStorage.
+  const [orderVersion, setOrderVersion] = useState(0);
+  const bumpOrderVersion = useCallback(() => setOrderVersion((v) => v + 1), []);
 
   const setActiveTab = (next: NavId) => {
     setHasAutoLanded(true);
@@ -173,7 +226,7 @@ export default function DashboardPage() {
 
   const handleTriadTabClick = useCallback((group: TriadGroup) => {
     setHasAutoLanded(true);
-    const items = getGroupItems(group, showMyCharacterTab, isDm);
+    const items = getOrderedGroupItems(group, showMyCharacterTab, isDm);
     const lastNav = readLastSubNav();
     const lastItem = lastNav[group];
     // If last item was "maps" (a redirect route), navigate to /maps for table group;
@@ -234,7 +287,7 @@ export default function DashboardPage() {
     const intendedGroup = readIntendedGroup();
     if (intendedGroup) {
       clearIntendedGroup();
-      const items = getGroupItems(intendedGroup, !!membership && !isDm, isDm);
+      const items = getOrderedGroupItems(intendedGroup, !!membership && !isDm, isDm);
       const lastNav = readLastSubNav();
       const lastItem = lastNav[intendedGroup];
       const validLast = lastItem && items.includes(lastItem) && lastItem !== "maps" ? lastItem : null;
@@ -298,13 +351,37 @@ export default function DashboardPage() {
 
   const currentTimezone = membership?.timezone ?? browserTimezone;
 
+  const activeGroup = getGroupForTab(activeTab);
+  const groupItems = useMemo(
+    () => getOrderedGroupItems(activeGroup, showMyCharacterTab, isDm),
+    [activeGroup, showMyCharacterTab, isDm, orderVersion],
+  );
+  const hasCustomOrder = useMemo(
+    () => readGroupOrder(activeGroup) !== null,
+    [activeGroup, orderVersion],
+  );
+
+  const handleReorderGroup = useCallback(
+    (group: TriadGroup, nextReorderable: NavId[]) => {
+      writeGroupOrder(group, nextReorderable);
+      bumpOrderVersion();
+    },
+    [bumpOrderVersion],
+  );
+
+  const handleResetGroupOrder = useCallback(
+    (group: TriadGroup) => {
+      clearGroupOrder(group);
+      bumpOrderVersion();
+    },
+    [bumpOrderVersion],
+  );
+
   const needsInvite = error && (error as { status?: number }).status === 403;
   if (needsInvite) {
     return <JoinCampaignPage />;
   }
 
-  const activeGroup = getGroupForTab(activeTab);
-  const groupItems = getGroupItems(activeGroup, showMyCharacterTab, isDm);
   const activeBadgeCount = newRecapCount + upcomingDeliveryFailureCount;
   const avatarInitial = user?.firstName?.[0] ?? user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ?? "?";
 
@@ -329,11 +406,16 @@ export default function DashboardPage() {
 
       {/* Sub-nav strip */}
       <SubNavStrip
+        group={activeGroup}
         items={groupItems}
+        pinnedItems={getPinnedItems(activeGroup)}
         activeTab={activeTab}
         onSelect={setActiveTab}
         newRecapCount={newRecapCount}
         upcomingDeliveryFailureCount={upcomingDeliveryFailureCount}
+        hasCustomOrder={hasCustomOrder}
+        onReorder={handleReorderGroup}
+        onReset={handleResetGroupOrder}
       />
 
       {/* Main content */}
@@ -508,11 +590,16 @@ export default function DashboardPage() {
 }
 
 interface SubNavStripProps {
+  group: TriadGroup;
   items: NavId[];
+  pinnedItems: NavId[];
   activeTab: NavId;
   onSelect: (id: NavId) => void;
   newRecapCount: number;
   upcomingDeliveryFailureCount: number;
+  hasCustomOrder: boolean;
+  onReorder: (group: TriadGroup, nextReorderable: NavId[]) => void;
+  onReset: (group: TriadGroup) => void;
 }
 
 const SHORTCUT_HINT_KEY = "delve:triad-shortcut-hint-dismissed";
@@ -538,7 +625,7 @@ function ShortcutHint() {
 
   return (
     <div
-      className="hidden md:flex items-center gap-2 ml-auto pl-3 text-[11px] text-muted-foreground shrink-0"
+      className="hidden md:flex items-center gap-2 pl-3 text-[11px] text-muted-foreground shrink-0"
       data-testid="hint-keyboard-shortcuts"
     >
       <span>
@@ -565,11 +652,164 @@ function ShortcutHint() {
   );
 }
 
-function SubNavStrip({ items, activeTab, onSelect, newRecapCount, upcomingDeliveryFailureCount }: SubNavStripProps) {
+const LONG_PRESS_MS = 400;
+const MOVE_CANCEL_PX = 8;
+
+function SubNavStrip({
+  group,
+  items,
+  pinnedItems,
+  activeTab,
+  onSelect,
+  newRecapCount,
+  upcomingDeliveryFailureCount,
+  hasCustomOrder,
+  onReorder,
+  onReset,
+}: SubNavStripProps) {
+  // Local working order — committed via onReorder when drag completes.
+  const [workingOrder, setWorkingOrder] = useState<NavId[]>(items);
+  useEffect(() => { setWorkingOrder(items); }, [items]);
+
+  const [draggingId, setDraggingId] = useState<NavId | null>(null);
+  const itemRefs = useRef<Map<NavId, HTMLButtonElement | null>>(new Map());
+  const longPressTimer = useRef<number | null>(null);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  const armedId = useRef<NavId | null>(null);
+  const suppressClick = useRef<NavId | null>(null);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current != null) {
+      window.clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    armedId.current = null;
+    pointerStart.current = null;
+  };
+
+  const isReorderable = useCallback(
+    (id: NavId) => !pinnedItems.includes(id),
+    [pinnedItems],
+  );
+
+  const moveItem = useCallback((from: NavId, to: NavId) => {
+    if (from === to) return;
+    if (!isReorderable(from) || !isReorderable(to)) return;
+    setWorkingOrder((prev) => {
+      const reorderable = prev.filter((id) => isReorderable(id));
+      const fromIdx = reorderable.indexOf(from);
+      const toIdx = reorderable.indexOf(to);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const next = reorderable.slice();
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, from);
+      const pinnedTail = prev.filter((id) => !isReorderable(id));
+      return [...next, ...pinnedTail];
+    });
+  }, [isReorderable]);
+
+  const findItemAt = (clientX: number, clientY: number): NavId | null => {
+    for (const [id, el] of itemRefs.current) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom) {
+        return id;
+      }
+    }
+    return null;
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>, id: NavId) => {
+    if (!isReorderable(id)) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pointerStart.current = { x: e.clientX, y: e.clientY };
+    armedId.current = id;
+    const targetEl = e.currentTarget;
+    const pointerId = e.pointerId;
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTimer.current = null;
+      if (armedId.current !== id) return;
+      try { targetEl.setPointerCapture(pointerId); } catch { /* ignore */ }
+      setDraggingId(id);
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>, id: NavId) => {
+    if (draggingId) {
+      const overId = findItemAt(e.clientX, e.clientY);
+      if (overId && isReorderable(overId)) {
+        moveItem(draggingId, overId);
+      }
+      return;
+    }
+    if (pointerStart.current && armedId.current === id) {
+      const dx = e.clientX - pointerStart.current.x;
+      const dy = e.clientY - pointerStart.current.y;
+      if (Math.abs(dx) > MOVE_CANCEL_PX || Math.abs(dy) > MOVE_CANCEL_PX) {
+        clearLongPress();
+      }
+    }
+  };
+
+  const finishDrag = () => {
+    if (draggingId) {
+      suppressClick.current = draggingId;
+      const reorderable = workingOrder.filter((wId) => isReorderable(wId));
+      onReorder(group, reorderable);
+      setDraggingId(null);
+    }
+    clearLongPress();
+  };
+
+  const handlePointerUp = (_e: React.PointerEvent<HTMLButtonElement>) => {
+    finishDrag();
+  };
+
+  const handlePointerCancel = (_e: React.PointerEvent<HTMLButtonElement>) => {
+    if (draggingId) setDraggingId(null);
+    clearLongPress();
+  };
+
+  const handleClick = (id: NavId) => {
+    if (suppressClick.current === id) {
+      suppressClick.current = null;
+      return;
+    }
+    onSelect(id);
+  };
+
+  // Native HTML5 drag (desktop fallback for keyboard/mouse users).
+  const handleDragStart = (e: React.DragEvent<HTMLButtonElement>, id: NavId) => {
+    if (!isReorderable(id)) {
+      e.preventDefault();
+      return;
+    }
+    setDraggingId(id);
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", id); } catch { /* ignore */ }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLButtonElement>, id: NavId) => {
+    if (!draggingId || !isReorderable(id)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    moveItem(draggingId, id);
+  };
+
+  const handleDragEnd = () => {
+    if (draggingId) {
+      const reorderable = workingOrder.filter((wId) => isReorderable(wId));
+      onReorder(group, reorderable);
+      setDraggingId(null);
+    }
+  };
+
+  const renderItems = workingOrder;
+
   return (
     <div className="sticky top-[53px] z-30 bg-background/95 backdrop-blur-sm border-b border-border/40">
       <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-none max-w-5xl mx-auto">
-        {items.map((id) => {
+        {renderItems.map((id) => {
           const item = navItem(id);
           const isActive = activeTab === id;
           const Icon = item.icon;
@@ -577,19 +817,29 @@ function SubNavStrip({ items, activeTab, onSelect, newRecapCount, upcomingDelive
           const hasFailureBadge = id === "calendar" && upcomingDeliveryFailureCount > 0;
           const badgeCount = hasRecapBadge ? newRecapCount : upcomingDeliveryFailureCount;
           const badgeColor = hasRecapBadge ? "bg-amber-500 text-black" : "bg-red-500 text-white";
+          const reorderable = isReorderable(id);
+          const isDragging = draggingId === id;
 
           return (
-            <motion.button
+            <button
               key={id}
-              whileTap={{ scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 400, damping: 17 }}
-              onClick={() => onSelect(id)}
+              ref={(el) => { itemRefs.current.set(id, el); }}
+              draggable={reorderable}
+              onDragStart={(e) => handleDragStart(e, id)}
+              onDragOver={(e) => handleDragOver(e, id)}
+              onDragEnd={handleDragEnd}
+              onPointerDown={(e) => handlePointerDown(e, id)}
+              onPointerMove={(e) => handlePointerMove(e, id)}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerCancel}
+              onClick={() => handleClick(id)}
               data-testid={`nav-${id}`}
-              className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0 ${
+              style={{ touchAction: draggingId ? "none" : "manipulation" }}
+              className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors shrink-0 select-none ${
                 isActive
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-              }`}
+              } ${isDragging ? "opacity-60 ring-2 ring-primary/40 scale-105" : ""} ${reorderable ? "cursor-grab active:cursor-grabbing" : ""}`}
             >
               <Icon className="h-3.5 w-3.5" />
               {item.label}
@@ -618,10 +868,24 @@ function SubNavStrip({ items, activeTab, onSelect, newRecapCount, upcomingDelive
                   <span className="hidden" data-testid="badge-delivery-failure-count-mobile" aria-hidden="true" />
                 </>
               )}
-            </motion.button>
+            </button>
           );
         })}
-        <ShortcutHint />
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {hasCustomOrder && (
+            <button
+              type="button"
+              onClick={() => onReset(group)}
+              data-testid={`button-reset-subnav-order-${group}`}
+              title="Reset to default order"
+              className="flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors shrink-0"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reset
+            </button>
+          )}
+          <ShortcutHint />
+        </div>
       </div>
     </div>
   );
