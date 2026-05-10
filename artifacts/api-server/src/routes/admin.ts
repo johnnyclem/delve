@@ -15,6 +15,10 @@ import {
 } from "../middlewares/requireAuth";
 import { getOrCreateCampaign, claimDmWithToken, isDm } from "../lib/campaign";
 import { logger } from "../lib/logger";
+import {
+  getLastSchemaHealthResult,
+  runSchemaHealthCheck,
+} from "../lib/schemaHealthCheck";
 import { reanchorAllSeries } from "./calendar";
 
 const EMBEDDING_BACKFILL_CONCURRENCY = 4;
@@ -141,5 +145,27 @@ router.post(
     res.json({ success: stats.failures === 0, ...stats });
   },
 );
+
+/**
+ * Admin-only schema health endpoint. Returns the cached result from the
+ * most recent schema drift check (run on startup). Pass `?refresh=1` to
+ * trigger a fresh read-only check on demand. Never executes DDL.
+ */
+router.get("/admin/schema-health", async (req, res): Promise<void> => {
+  const check = checkAdminToken(req);
+  if (!check.ok) {
+    res.status(check.status).json({ error: check.error });
+    return;
+  }
+
+  const refresh = req.query.refresh === "1" || req.query.refresh === "true";
+  let result = getLastSchemaHealthResult();
+
+  if (refresh || !result) {
+    result = await runSchemaHealthCheck();
+  }
+
+  res.json(result);
+});
 
 export default router;

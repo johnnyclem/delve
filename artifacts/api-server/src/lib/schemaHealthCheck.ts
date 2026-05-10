@@ -27,11 +27,24 @@ const CRITICAL_TABLES: Table[] = [
   homebrewRulesTable,
 ];
 
-type Failure = {
+export type SchemaCheckFailure = {
   check: string;
   error: string;
   code?: string;
 };
+
+export type SchemaHealthResult = {
+  ok: boolean;
+  checkedAt: string;
+  totalChecks: number;
+  failures: SchemaCheckFailure[];
+};
+
+let lastResult: SchemaHealthResult | null = null;
+
+export function getLastSchemaHealthResult(): SchemaHealthResult | null {
+  return lastResult;
+}
 
 function expectedColumnsByTable(): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>();
@@ -46,10 +59,10 @@ function expectedColumnsByTable(): Map<string, Set<string>> {
   return map;
 }
 
-export async function runSchemaHealthCheck(): Promise<void> {
+export async function runSchemaHealthCheck(): Promise<SchemaHealthResult> {
   const expected = expectedColumnsByTable();
   const tableNames = Array.from(expected.keys());
-  const failures: Failure[] = [];
+  const failures: SchemaCheckFailure[] = [];
 
   let actualRows: Array<{ table_name: string; column_name: string }> = [];
   try {
@@ -63,21 +76,27 @@ export async function runSchemaHealthCheck(): Promise<void> {
     actualRows = result.rows;
   } catch (err) {
     const error = err as { message?: string; code?: string };
+    const failure: SchemaCheckFailure = {
+      check: "information_schema.columns",
+      error: error.message ?? String(err),
+      code: error.code,
+    };
     logger.error(
       {
         event: "schema_drift_detected",
         failureCount: 1,
-        failures: [
-          {
-            check: "information_schema.columns",
-            error: error.message ?? String(err),
-            code: error.code,
-          },
-        ],
+        failures: [failure],
       },
       "SCHEMA DRIFT: unable to read information_schema.columns to verify schema",
     );
-    return;
+    const result: SchemaHealthResult = {
+      ok: false,
+      checkedAt: new Date().toISOString(),
+      totalChecks: 1,
+      failures: [failure],
+    };
+    lastResult = result;
+    return result;
   }
 
   const actualByTable = new Map<string, Set<string>>();
@@ -112,22 +131,31 @@ export async function runSchemaHealthCheck(): Promise<void> {
     }
   }
 
-  if (failures.length === 0) {
+  const result: SchemaHealthResult = {
+    ok: failures.length === 0,
+    checkedAt: new Date().toISOString(),
+    totalChecks: checkCount,
+    failures,
+  };
+  lastResult = result;
+
+  if (result.ok) {
     logger.info(
       { checks: checkCount, tables: tableNames.length },
       "Schema health check passed",
     );
-    return;
+  } else {
+    logger.error(
+      {
+        event: "schema_drift_detected",
+        failureCount: failures.length,
+        failures,
+        likelyFix:
+          "Re-publish the API server to sync the production database schema (the application schema in lib/db is ahead of the deployed database).",
+      },
+      `SCHEMA DRIFT: ${failures.length} required schema element(s) missing or unreadable: ${failures.map((f) => f.check).join(", ")}`,
+    );
   }
 
-  logger.error(
-    {
-      event: "schema_drift_detected",
-      failureCount: failures.length,
-      failures,
-      likelyFix:
-        "Re-publish the API server to sync the production database schema (the application schema in lib/db is ahead of the deployed database).",
-    },
-    `SCHEMA DRIFT: ${failures.length} required schema element(s) missing or unreadable: ${failures.map((f) => f.check).join(", ")}`,
-  );
+  return result;
 }
