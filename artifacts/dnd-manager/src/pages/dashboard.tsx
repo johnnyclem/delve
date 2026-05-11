@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useUser } from "@clerk/react";
 import {
   BookOpen, Dice5, Calendar, ScrollText,
-  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, Swords, Skull, X, RotateCcw
+  LogOut, ChevronRight, Users, Sparkles, Shield, Mail, Globe, User, Map as MapIcon, Library, Compass, MessageSquare, Scroll, GitCompare, Swords, Skull, X, RotateCcw, Copy
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
@@ -222,7 +222,9 @@ export default function DashboardPage() {
   const { data: characters } = useListCharacters({ query: { enabled: !!membership, queryKey: ["/api/characters"] } });
   const updateNotificationPrefs = useUpdateNotificationPrefs();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const isDm = membership?.role === "dm";
+  const inviteCode = (dashboard as (DashboardSummary & { inviteCode?: string }) | undefined)?.inviteCode;
   const showMyCharacterTab = !!membership && !isDm;
 
   const handleTriadTabClick = useCallback((group: TriadGroup) => {
@@ -575,6 +577,48 @@ export default function DashboardPage() {
                   <GitCompare className="h-4 w-4" />
                   Compare Editions
                 </button>
+              )}
+
+              {/* Invite code (DM only) */}
+              {isDm && inviteCode && (
+                <div
+                  className="flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg hover:bg-[rgba(255,255,255,0.04)] transition-colors"
+                  data-testid="row-invite-code-profile"
+                >
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+                    <Users className="h-4 w-4" />
+                    Invite code
+                  </span>
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span
+                      className="font-mono text-sm font-bold text-primary tracking-widest tabular-nums truncate"
+                      data-testid="text-invite-code-profile"
+                    >
+                      {inviteCode}
+                    </span>
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-md hover:bg-[rgba(255,255,255,0.06)] text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                      onClick={async () => {
+                        if (!inviteCode) return;
+                        try {
+                          await navigator.clipboard.writeText(inviteCode);
+                          toast({ title: "Invite code copied" });
+                        } catch {
+                          toast({
+                            title: "Couldn't copy invite code",
+                            description: "Copy it manually from the dashboard.",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      aria-label="Copy invite code"
+                      data-testid="button-copy-invite-code-profile"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
