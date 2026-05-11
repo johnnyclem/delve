@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
 import { Library, Radio, Swords, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { Shield } from "lucide-react";
-import { useUser } from "@clerk/react";
+import { useReorderHint } from "@/hooks/use-reorder-hint";
 
 export type TriadGroup = "active" | "table" | "library";
 
@@ -19,35 +18,8 @@ interface TriadTabBarProps {
   subNavReordered?: boolean;
 }
 
-const REORDER_HINT_KEY_PREFIX = "delve:triad-bottom-reorder-hint-dismissed";
-
 function BottomReorderHint({ dismissed }: { dismissed: boolean }) {
-  const { user } = useUser();
-  const userId = user?.id;
-  const storageKey = userId ? `${REORDER_HINT_KEY_PREFIX}:${userId}` : null;
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!storageKey) return;
-    if (dismissed) return;
-    try {
-      if (localStorage.getItem(storageKey) === "1") return;
-      setVisible(true);
-    } catch { /* ignore */ }
-  }, [dismissed, storageKey]);
-
-  useEffect(() => {
-    if (!dismissed) return;
-    setVisible(false);
-    if (!storageKey) return;
-    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
-  }, [dismissed, storageKey]);
-
-  const dismiss = () => {
-    setVisible(false);
-    if (!storageKey) return;
-    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
-  };
+  const { visible, dismiss } = useReorderHint(dismissed);
 
   if (!visible) return null;
 

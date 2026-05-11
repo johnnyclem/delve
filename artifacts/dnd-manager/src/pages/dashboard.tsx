@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useGetDashboard, useListSessions, useListEvents, useGetMyMembership, useUpdateNotificationPrefs, useListCharacters } from "@workspace/api-client-react";
+import { useReorderHint } from "@/hooks/use-reorder-hint";
 import type { DashboardSummary, PartyMemberSummary, DiceRoll, SessionTrendPoint, CalendarEvent, Character } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import DiceRollerPanel from "@/components/dice-roller";
@@ -663,36 +664,8 @@ function ShortcutHint() {
 const LONG_PRESS_MS = 400;
 const MOVE_CANCEL_PX = 8;
 
-const REORDER_HINT_KEY_PREFIX = "delve:subnav-reorder-hint-dismissed";
-
 function ReorderHint({ dismissed }: { dismissed: boolean }) {
-  const { user } = useUser();
-  const userId = user?.id;
-  const storageKey = userId ? `${REORDER_HINT_KEY_PREFIX}:${userId}` : null;
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    if (!storageKey) return;
-    if (dismissed) return;
-    try {
-      if (localStorage.getItem(storageKey) === "1") return;
-      setVisible(true);
-    } catch { /* ignore */ }
-  }, [dismissed, storageKey]);
-
-  // Auto-dismiss (and persist) once the user has reordered.
-  useEffect(() => {
-    if (!dismissed) return;
-    setVisible(false);
-    if (!storageKey) return;
-    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
-  }, [dismissed, storageKey]);
-
-  const dismiss = () => {
-    setVisible(false);
-    if (!storageKey) return;
-    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
-  };
+  const { visible, dismiss } = useReorderHint(dismissed);
 
   if (!visible) return null;
 
