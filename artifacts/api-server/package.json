@@ -9,7 +9,8 @@
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "eval:recap": "node --experimental-strip-types --no-warnings ./scripts/eval-recap-grounding.ts"
+    "eval:recap": "node --experimental-strip-types --no-warnings ./scripts/eval-recap-grounding.ts",
+    "seed:test-user": "tsx ./scripts/seed-test-user.ts"
   },
   "dependencies": {
     "@clerk/express": "^1",

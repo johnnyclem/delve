@@ -66,6 +66,19 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - **Dice Roller**: Roll any dice expression (e.g. 2d6+3) with shared log
 - **Roles**: First user auto-becomes DM; subsequent users join with invite code as players
 
+## Test Account (shareable demo login)
+
+A pre-seeded shared account lets anyone explore Delve without creating a personal account.
+
+| Field    | Value              |
+| -------- | ------------------ |
+| Email    | `demo@delve.app`   |
+| Password | `Delve@Demo2025`   |
+
+After signing in the dashboard shows a sample campaign with 3 characters and 3 sessions (2 with recaps). The seed targets the same campaign the app resolves at runtime so the demo user always lands on the right dashboard. Full details and re-seed instructions are in [TEST_ACCOUNT.md](./TEST_ACCOUNT.md).
+
+To seed (or re-seed) the account: `pnpm --filter @workspace/api-server run seed:test-user`
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages
@@ -73,6 +86,7 @@ A private D&D 5e campaign manager web app for ~6 users. Single campaign, no mult
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
+- `pnpm --filter @workspace/api-server run seed:test-user` — seed (or re-seed) the shared demo account
 
 ## API Routes (all under /api)
 
