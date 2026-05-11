@@ -22,6 +22,7 @@
     "@workspace/db": "workspace:*",
     "@workspace/entity-embeddings": "workspace:*",
     "@workspace/integrations-openai-ai-server": "workspace:*",
+    "@workspace/npc-archetypes": "workspace:*",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
     "drizzle-orm": "catalog:",

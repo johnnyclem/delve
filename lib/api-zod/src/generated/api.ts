@@ -1345,6 +1345,12 @@ export const ListNpcsResponseItem = zod.object({
   relationshipTags: zod
     .array(zod.string())
     .default(listNpcsResponseRelationshipTagsDefault),
+  archetypeKey: zod.string().nullish(),
+  occupation: zod.string().nullish(),
+  suggestedClass: zod.string().nullish(),
+  backstoryMd: zod.string().nullish(),
+  publicMotive: zod.string().nullish(),
+  secretMotive: zod.string().nullish(),
   createdByUserId: zod.string(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -1359,7 +1365,110 @@ export const CreateNpcBody = zod.object({
   shortNote: zod.string().nullish(),
   avatarUrl: zod.string().nullish(),
   relationshipTags: zod.array(zod.string()).optional(),
+  archetypeKey: zod.string().nullish(),
+  occupation: zod.string().nullish(),
+  suggestedClass: zod.string().nullish(),
+  backstoryMd: zod.string().nullish(),
+  publicMotive: zod.string().nullish(),
+  secretMotive: zod.string().nullish(),
+  dialogueLines: zod
+    .array(
+      zod.object({
+        topic: zod.string(),
+        line: zod.string(),
+        dmOnly: zod.boolean().optional(),
+        orderIndex: zod.number().optional(),
+      }),
+    )
+    .optional(),
 });
+
+/**
+ * @summary List the curated NPC archetype catalog (lite metadata)
+ */
+export const ListNpcArchetypesResponseItem = zod.object({
+  key: zod.string(),
+  displayName: zod.string(),
+  category: zod.string(),
+  occupation: zod.string(),
+});
+export const ListNpcArchetypesResponse = zod.array(
+  ListNpcArchetypesResponseItem,
+);
+
+/**
+ * @summary Generate a prefilled NPC payload from an archetype (DM only, not saved)
+ */
+export const PrefillNpcFromArchetypeBody = zod.object({
+  archetypeKey: zod.string(),
+  only: zod.array(zod.string()).optional(),
+  currentName: zod.string().optional(),
+});
+
+export const PrefillNpcFromArchetypeResponse = zod.object({
+  archetypeKey: zod.string(),
+  name: zod.string().nullish(),
+  occupation: zod.string().nullish(),
+  suggestedClass: zod.string().nullish(),
+  backstoryMd: zod.string().nullish(),
+  publicMotive: zod.string().nullish(),
+  secretMotive: zod.string().nullish(),
+  avatarUrl: zod.string().nullish(),
+  dialogueLines: zod
+    .array(
+      zod.object({
+        topic: zod.string(),
+        line: zod.string(),
+        dmOnly: zod.boolean(),
+        orderIndex: zod.number(),
+      }),
+    )
+    .optional(),
+});
+
+/**
+ * @summary Fetch a single NPC with dialogue lines
+ */
+export const GetNpcParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const getNpcResponseOneRelationshipTagsDefault = [];
+
+export const GetNpcResponse = zod
+  .object({
+    id: zod.number(),
+    campaignId: zod.number(),
+    name: zod.string(),
+    shortNote: zod.string().nullish(),
+    avatarUrl: zod.string().nullish(),
+    relationshipTags: zod
+      .array(zod.string())
+      .default(getNpcResponseOneRelationshipTagsDefault),
+    archetypeKey: zod.string().nullish(),
+    occupation: zod.string().nullish(),
+    suggestedClass: zod.string().nullish(),
+    backstoryMd: zod.string().nullish(),
+    publicMotive: zod.string().nullish(),
+    secretMotive: zod.string().nullish(),
+    createdByUserId: zod.string(),
+    createdAt: zod.coerce.date(),
+    updatedAt: zod.coerce.date(),
+  })
+  .and(
+    zod.object({
+      dialogueLines: zod.array(
+        zod.object({
+          id: zod.number(),
+          npcId: zod.number(),
+          topic: zod.string(),
+          line: zod.string(),
+          dmOnly: zod.boolean(),
+          orderIndex: zod.number(),
+        }),
+      ),
+    }),
+  );
 
 /**
  * @summary Update an NPC in the campaign roster (DM only)
@@ -1373,6 +1482,12 @@ export const UpdateNpcBody = zod.object({
   shortNote: zod.string().nullish(),
   avatarUrl: zod.string().nullish(),
   relationshipTags: zod.array(zod.string()).optional(),
+  archetypeKey: zod.string().nullish(),
+  occupation: zod.string().nullish(),
+  suggestedClass: zod.string().nullish(),
+  backstoryMd: zod.string().nullish(),
+  publicMotive: zod.string().nullish(),
+  secretMotive: zod.string().nullish(),
 });
 
 export const updateNpcResponseRelationshipTagsDefault = [];
@@ -1386,6 +1501,12 @@ export const UpdateNpcResponse = zod.object({
   relationshipTags: zod
     .array(zod.string())
     .default(updateNpcResponseRelationshipTagsDefault),
+  archetypeKey: zod.string().nullish(),
+  occupation: zod.string().nullish(),
+  suggestedClass: zod.string().nullish(),
+  backstoryMd: zod.string().nullish(),
+  publicMotive: zod.string().nullish(),
+  secretMotive: zod.string().nullish(),
   createdByUserId: zod.string(),
   createdAt: zod.coerce.date(),
   updatedAt: zod.coerce.date(),
@@ -1399,6 +1520,56 @@ export const DeleteNpcParams = zod.object({
 });
 
 export const DeleteNpcResponse = zod.object({
+  success: zod.boolean(),
+});
+
+/**
+ * @summary Add a dialogue line to an NPC (DM only)
+ */
+export const CreateNpcDialogueLineParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CreateNpcDialogueLineBody = zod.object({
+  topic: zod.string(),
+  line: zod.string(),
+  dmOnly: zod.boolean().optional(),
+  orderIndex: zod.number().optional(),
+});
+
+/**
+ * @summary Edit a dialogue line (DM only)
+ */
+export const UpdateNpcDialogueLineParams = zod.object({
+  id: zod.coerce.number(),
+  lineId: zod.coerce.number(),
+});
+
+export const UpdateNpcDialogueLineBody = zod.object({
+  topic: zod.string().optional(),
+  line: zod.string().optional(),
+  dmOnly: zod.boolean().optional(),
+  orderIndex: zod.number().optional(),
+});
+
+export const UpdateNpcDialogueLineResponse = zod.object({
+  id: zod.number(),
+  npcId: zod.number(),
+  topic: zod.string(),
+  line: zod.string(),
+  dmOnly: zod.boolean(),
+  orderIndex: zod.number(),
+});
+
+/**
+ * @summary Delete a dialogue line (DM only)
+ */
+export const DeleteNpcDialogueLineParams = zod.object({
+  id: zod.coerce.number(),
+  lineId: zod.coerce.number(),
+});
+
+export const DeleteNpcDialogueLineResponse = zod.object({
   success: zod.boolean(),
 });
 

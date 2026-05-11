@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  ArchetypeListItem,
   BestiaryFacetsResponse,
   BestiaryListResponse,
   CalendarEvent,
@@ -37,6 +38,7 @@ import type {
   CreateHouseRulesShareTokenBody,
   CreateMapBody,
   CreateNpcBody,
+  CreateNpcDialogueLineInput,
   CreateSessionBody,
   DashboardSummary,
   DeleteEvent200,
@@ -58,6 +60,10 @@ import type {
   NotificationLog,
   NotifyRecapResult,
   Npc,
+  NpcArchetypePrefill,
+  NpcArchetypePrefillBody,
+  NpcDialogueLine,
+  NpcWithDialogue,
   PublicHouseRulesView,
   ReanchorSeriesResult,
   ResendEventInviteResult,
@@ -82,6 +88,7 @@ import type {
   UpdateMapBody,
   UpdateNotificationPrefsBody,
   UpdateNpcBody,
+  UpdateNpcDialogueLineBody,
   UpdateSessionBody,
   UploadUrlRequest,
   UploadUrlResponse,
@@ -1858,6 +1865,243 @@ export const useCreateNpc = <
 };
 
 /**
+ * @summary List the curated NPC archetype catalog (lite metadata)
+ */
+export const getListNpcArchetypesUrl = () => {
+  return `/api/npcs/archetypes`;
+};
+
+export const listNpcArchetypes = async (
+  options?: RequestInit,
+): Promise<ArchetypeListItem[]> => {
+  return customFetch<ArchetypeListItem[]>(getListNpcArchetypesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListNpcArchetypesQueryKey = () => {
+  return [`/api/npcs/archetypes`] as const;
+};
+
+export const getListNpcArchetypesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listNpcArchetypes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listNpcArchetypes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListNpcArchetypesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listNpcArchetypes>>
+  > = ({ signal }) => listNpcArchetypes({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listNpcArchetypes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListNpcArchetypesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listNpcArchetypes>>
+>;
+export type ListNpcArchetypesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List the curated NPC archetype catalog (lite metadata)
+ */
+
+export function useListNpcArchetypes<
+  TData = Awaited<ReturnType<typeof listNpcArchetypes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listNpcArchetypes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListNpcArchetypesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Generate a prefilled NPC payload from an archetype (DM only, not saved)
+ */
+export const getPrefillNpcFromArchetypeUrl = () => {
+  return `/api/npcs/from-archetype`;
+};
+
+export const prefillNpcFromArchetype = async (
+  npcArchetypePrefillBody: NpcArchetypePrefillBody,
+  options?: RequestInit,
+): Promise<NpcArchetypePrefill> => {
+  return customFetch<NpcArchetypePrefill>(getPrefillNpcFromArchetypeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(npcArchetypePrefillBody),
+  });
+};
+
+export const getPrefillNpcFromArchetypeMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof prefillNpcFromArchetype>>,
+    TError,
+    { data: BodyType<NpcArchetypePrefillBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof prefillNpcFromArchetype>>,
+  TError,
+  { data: BodyType<NpcArchetypePrefillBody> },
+  TContext
+> => {
+  const mutationKey = ["prefillNpcFromArchetype"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof prefillNpcFromArchetype>>,
+    { data: BodyType<NpcArchetypePrefillBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return prefillNpcFromArchetype(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PrefillNpcFromArchetypeMutationResult = NonNullable<
+  Awaited<ReturnType<typeof prefillNpcFromArchetype>>
+>;
+export type PrefillNpcFromArchetypeMutationBody =
+  BodyType<NpcArchetypePrefillBody>;
+export type PrefillNpcFromArchetypeMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Generate a prefilled NPC payload from an archetype (DM only, not saved)
+ */
+export const usePrefillNpcFromArchetype = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof prefillNpcFromArchetype>>,
+    TError,
+    { data: BodyType<NpcArchetypePrefillBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof prefillNpcFromArchetype>>,
+  TError,
+  { data: BodyType<NpcArchetypePrefillBody> },
+  TContext
+> => {
+  return useMutation(getPrefillNpcFromArchetypeMutationOptions(options));
+};
+
+/**
+ * @summary Fetch a single NPC with dialogue lines
+ */
+export const getGetNpcUrl = (id: number) => {
+  return `/api/npcs/${id}`;
+};
+
+export const getNpc = async (
+  id: number,
+  options?: RequestInit,
+): Promise<NpcWithDialogue> => {
+  return customFetch<NpcWithDialogue>(getGetNpcUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetNpcQueryKey = (id: number) => {
+  return [`/api/npcs/${id}`] as const;
+};
+
+export const getGetNpcQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNpc>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getNpc>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetNpcQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getNpc>>> = ({
+    signal,
+  }) => getNpc(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getNpc>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetNpcQueryResult = NonNullable<Awaited<ReturnType<typeof getNpc>>>;
+export type GetNpcQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Fetch a single NPC with dialogue lines
+ */
+
+export function useGetNpc<
+  TData = Awaited<ReturnType<typeof getNpc>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getNpc>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNpcQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Update an NPC in the campaign roster (DM only)
  */
 export const getUpdateNpcUrl = (id: number) => {
@@ -2026,6 +2270,268 @@ export const useDeleteNpc = <
   TContext
 > => {
   return useMutation(getDeleteNpcMutationOptions(options));
+};
+
+/**
+ * @summary Add a dialogue line to an NPC (DM only)
+ */
+export const getCreateNpcDialogueLineUrl = (id: number) => {
+  return `/api/npcs/${id}/dialogue`;
+};
+
+export const createNpcDialogueLine = async (
+  id: number,
+  createNpcDialogueLineInput: CreateNpcDialogueLineInput,
+  options?: RequestInit,
+): Promise<NpcDialogueLine> => {
+  return customFetch<NpcDialogueLine>(getCreateNpcDialogueLineUrl(id), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(createNpcDialogueLineInput),
+  });
+};
+
+export const getCreateNpcDialogueLineMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNpcDialogueLine>>,
+    TError,
+    { id: number; data: BodyType<CreateNpcDialogueLineInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createNpcDialogueLine>>,
+  TError,
+  { id: number; data: BodyType<CreateNpcDialogueLineInput> },
+  TContext
+> => {
+  const mutationKey = ["createNpcDialogueLine"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createNpcDialogueLine>>,
+    { id: number; data: BodyType<CreateNpcDialogueLineInput> }
+  > = (props) => {
+    const { id, data } = props ?? {};
+
+    return createNpcDialogueLine(id, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateNpcDialogueLineMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createNpcDialogueLine>>
+>;
+export type CreateNpcDialogueLineMutationBody =
+  BodyType<CreateNpcDialogueLineInput>;
+export type CreateNpcDialogueLineMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Add a dialogue line to an NPC (DM only)
+ */
+export const useCreateNpcDialogueLine = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNpcDialogueLine>>,
+    TError,
+    { id: number; data: BodyType<CreateNpcDialogueLineInput> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createNpcDialogueLine>>,
+  TError,
+  { id: number; data: BodyType<CreateNpcDialogueLineInput> },
+  TContext
+> => {
+  return useMutation(getCreateNpcDialogueLineMutationOptions(options));
+};
+
+/**
+ * @summary Edit a dialogue line (DM only)
+ */
+export const getUpdateNpcDialogueLineUrl = (id: number, lineId: number) => {
+  return `/api/npcs/${id}/dialogue/${lineId}`;
+};
+
+export const updateNpcDialogueLine = async (
+  id: number,
+  lineId: number,
+  updateNpcDialogueLineBody: UpdateNpcDialogueLineBody,
+  options?: RequestInit,
+): Promise<NpcDialogueLine> => {
+  return customFetch<NpcDialogueLine>(getUpdateNpcDialogueLineUrl(id, lineId), {
+    ...options,
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(updateNpcDialogueLineBody),
+  });
+};
+
+export const getUpdateNpcDialogueLineMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNpcDialogueLine>>,
+    TError,
+    { id: number; lineId: number; data: BodyType<UpdateNpcDialogueLineBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateNpcDialogueLine>>,
+  TError,
+  { id: number; lineId: number; data: BodyType<UpdateNpcDialogueLineBody> },
+  TContext
+> => {
+  const mutationKey = ["updateNpcDialogueLine"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateNpcDialogueLine>>,
+    { id: number; lineId: number; data: BodyType<UpdateNpcDialogueLineBody> }
+  > = (props) => {
+    const { id, lineId, data } = props ?? {};
+
+    return updateNpcDialogueLine(id, lineId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateNpcDialogueLineMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateNpcDialogueLine>>
+>;
+export type UpdateNpcDialogueLineMutationBody =
+  BodyType<UpdateNpcDialogueLineBody>;
+export type UpdateNpcDialogueLineMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Edit a dialogue line (DM only)
+ */
+export const useUpdateNpcDialogueLine = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateNpcDialogueLine>>,
+    TError,
+    { id: number; lineId: number; data: BodyType<UpdateNpcDialogueLineBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateNpcDialogueLine>>,
+  TError,
+  { id: number; lineId: number; data: BodyType<UpdateNpcDialogueLineBody> },
+  TContext
+> => {
+  return useMutation(getUpdateNpcDialogueLineMutationOptions(options));
+};
+
+/**
+ * @summary Delete a dialogue line (DM only)
+ */
+export const getDeleteNpcDialogueLineUrl = (id: number, lineId: number) => {
+  return `/api/npcs/${id}/dialogue/${lineId}`;
+};
+
+export const deleteNpcDialogueLine = async (
+  id: number,
+  lineId: number,
+  options?: RequestInit,
+): Promise<SuccessResponse> => {
+  return customFetch<SuccessResponse>(getDeleteNpcDialogueLineUrl(id, lineId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteNpcDialogueLineMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNpcDialogueLine>>,
+    TError,
+    { id: number; lineId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteNpcDialogueLine>>,
+  TError,
+  { id: number; lineId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteNpcDialogueLine"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteNpcDialogueLine>>,
+    { id: number; lineId: number }
+  > = (props) => {
+    const { id, lineId } = props ?? {};
+
+    return deleteNpcDialogueLine(id, lineId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteNpcDialogueLineMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteNpcDialogueLine>>
+>;
+
+export type DeleteNpcDialogueLineMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Delete a dialogue line (DM only)
+ */
+export const useDeleteNpcDialogueLine = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteNpcDialogueLine>>,
+    TError,
+    { id: number; lineId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteNpcDialogueLine>>,
+  TError,
+  { id: number; lineId: number },
+  TContext
+> => {
+  return useMutation(getDeleteNpcDialogueLineMutationOptions(options));
 };
 
 /**

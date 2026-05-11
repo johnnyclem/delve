@@ -284,9 +284,80 @@ export interface Npc {
   /** @nullable */
   avatarUrl?: string | null;
   relationshipTags: string[];
+  /** @nullable */
+  archetypeKey?: string | null;
+  /** @nullable */
+  occupation?: string | null;
+  /** @nullable */
+  suggestedClass?: string | null;
+  /** @nullable */
+  backstoryMd?: string | null;
+  /** @nullable */
+  publicMotive?: string | null;
+  /** @nullable */
+  secretMotive?: string | null;
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface NpcDialogueLine {
+  id: number;
+  npcId: number;
+  topic: string;
+  line: string;
+  dmOnly: boolean;
+  orderIndex: number;
+}
+
+export type NpcWithDialogue = Npc & {
+  dialogueLines: NpcDialogueLine[];
+};
+
+export interface ArchetypeListItem {
+  key: string;
+  displayName: string;
+  category: string;
+  occupation: string;
+}
+
+export interface NpcArchetypePrefillBody {
+  archetypeKey: string;
+  only?: string[];
+  currentName?: string;
+}
+
+export type NpcArchetypePrefillDialogueLinesItem = {
+  topic: string;
+  line: string;
+  dmOnly: boolean;
+  orderIndex: number;
+};
+
+export interface NpcArchetypePrefill {
+  archetypeKey: string;
+  /** @nullable */
+  name?: string | null;
+  /** @nullable */
+  occupation?: string | null;
+  /** @nullable */
+  suggestedClass?: string | null;
+  /** @nullable */
+  backstoryMd?: string | null;
+  /** @nullable */
+  publicMotive?: string | null;
+  /** @nullable */
+  secretMotive?: string | null;
+  /** @nullable */
+  avatarUrl?: string | null;
+  dialogueLines?: NpcArchetypePrefillDialogueLinesItem[];
+}
+
+export interface CreateNpcDialogueLineInput {
+  topic: string;
+  line: string;
+  dmOnly?: boolean;
+  orderIndex?: number;
 }
 
 export interface CreateNpcBody {
@@ -296,6 +367,19 @@ export interface CreateNpcBody {
   /** @nullable */
   avatarUrl?: string | null;
   relationshipTags?: string[];
+  /** @nullable */
+  archetypeKey?: string | null;
+  /** @nullable */
+  occupation?: string | null;
+  /** @nullable */
+  suggestedClass?: string | null;
+  /** @nullable */
+  backstoryMd?: string | null;
+  /** @nullable */
+  publicMotive?: string | null;
+  /** @nullable */
+  secretMotive?: string | null;
+  dialogueLines?: CreateNpcDialogueLineInput[];
 }
 
 export interface UpdateNpcBody {
@@ -305,6 +389,18 @@ export interface UpdateNpcBody {
   /** @nullable */
   avatarUrl?: string | null;
   relationshipTags?: string[];
+  /** @nullable */
+  archetypeKey?: string | null;
+  /** @nullable */
+  occupation?: string | null;
+  /** @nullable */
+  suggestedClass?: string | null;
+  /** @nullable */
+  backstoryMd?: string | null;
+  /** @nullable */
+  publicMotive?: string | null;
+  /** @nullable */
+  secretMotive?: string | null;
 }
 
 export type SessionAttendeesNpcsItem = {
@@ -1362,6 +1458,13 @@ export const GetBestiaryFacetsEdition = {
   NUMBER_2014: "2014",
   NUMBER_2024: "2024",
 } as const;
+
+export type UpdateNpcDialogueLineBody = {
+  topic?: string;
+  line?: string;
+  dmOnly?: boolean;
+  orderIndex?: number;
+};
 
 export type DeleteEventParams = {
   series?: boolean;

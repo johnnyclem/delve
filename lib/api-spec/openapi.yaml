@@ -544,7 +544,58 @@ paths:
               schema:
                 $ref: "#/components/schemas/Npc"
 
+  /npcs/archetypes:
+    get:
+      operationId: listNpcArchetypes
+      tags: [npcs]
+      summary: List the curated NPC archetype catalog (lite metadata)
+      responses:
+        "200":
+          description: Archetype list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ArchetypeListItem"
+
+  /npcs/from-archetype:
+    post:
+      operationId: prefillNpcFromArchetype
+      tags: [npcs]
+      summary: Generate a prefilled NPC payload from an archetype (DM only, not saved)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NpcArchetypePrefillBody"
+      responses:
+        "200":
+          description: Prefilled NPC draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NpcArchetypePrefill"
+
   /npcs/{id}:
+    get:
+      operationId: getNpc
+      tags: [npcs]
+      summary: Fetch a single NPC with dialogue lines
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: NPC with dialogue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NpcWithDialogue"
     patch:
       operationId: updateNpc
       tags: [npcs]
@@ -574,6 +625,92 @@ paths:
       summary: Delete an NPC from the campaign roster (DM only)
       parameters:
         - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+
+  /npcs/{id}/dialogue:
+    post:
+      operationId: createNpcDialogueLine
+      tags: [npcs]
+      summary: Add a dialogue line to an NPC (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNpcDialogueLineInput"
+      responses:
+        "201":
+          description: Created dialogue line
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NpcDialogueLine"
+
+  /npcs/{id}/dialogue/{lineId}:
+    patch:
+      operationId: updateNpcDialogueLine
+      tags: [npcs]
+      summary: Edit a dialogue line (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: lineId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                topic:
+                  type: string
+                line:
+                  type: string
+                dmOnly:
+                  type: boolean
+                orderIndex:
+                  type: integer
+      responses:
+        "200":
+          description: Updated dialogue line
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NpcDialogueLine"
+    delete:
+      operationId: deleteNpcDialogueLine
+      tags: [npcs]
+      summary: Delete a dialogue line (DM only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: lineId
           in: path
           required: true
           schema:
@@ -2221,6 +2358,19 @@ components:
           items:
             type: string
           default: []
+        archetypeKey:
+          type: ["string", "null"]
+        occupation:
+          type: ["string", "null"]
+        suggestedClass:
+          type: ["string", "null"]
+        backstoryMd:
+          type: ["string", "null"]
+        publicMotive:
+          type: ["string", "null"]
+        # DM-only. Server returns null for non-DMs.
+        secretMotive:
+          type: ["string", "null"]
         createdByUserId:
           type: string
         createdAt:
@@ -2238,6 +2388,130 @@ components:
         - createdAt
         - updatedAt
 
+    NpcDialogueLine:
+      type: object
+      properties:
+        id:
+          type: integer
+        npcId:
+          type: integer
+        topic:
+          type: string
+        line:
+          type: string
+        dmOnly:
+          type: boolean
+        orderIndex:
+          type: integer
+      required:
+        - id
+        - npcId
+        - topic
+        - line
+        - dmOnly
+        - orderIndex
+
+    NpcWithDialogue:
+      allOf:
+        - $ref: "#/components/schemas/Npc"
+        - type: object
+          properties:
+            dialogueLines:
+              type: array
+              items:
+                $ref: "#/components/schemas/NpcDialogueLine"
+          required:
+            - dialogueLines
+
+    ArchetypeListItem:
+      type: object
+      properties:
+        key:
+          type: string
+        displayName:
+          type: string
+        category:
+          type: string
+        occupation:
+          type: string
+      required:
+        - key
+        - displayName
+        - category
+        - occupation
+
+    NpcArchetypePrefillBody:
+      type: object
+      properties:
+        archetypeKey:
+          type: string
+        # Optional list of fields to roll. Omit to roll everything
+        # (text fields + portrait + starter dialogue lines).
+        # Allowed values: name, occupation, suggestedClass, backstory,
+        # publicMotive, secretMotive, portrait, dialogueLines
+        only:
+          type: array
+          items:
+            type: string
+        # Optional. Current draft name from the form, used so per-field
+        # re-rolls of name-dependent fields (backstory, motives) keep the
+        # NPC's actual name. Ignored when rolling `name` itself.
+        currentName:
+          type: string
+      required:
+        - archetypeKey
+
+    NpcArchetypePrefill:
+      type: object
+      properties:
+        archetypeKey:
+          type: string
+        name:
+          type: ["string", "null"]
+        occupation:
+          type: ["string", "null"]
+        suggestedClass:
+          type: ["string", "null"]
+        backstoryMd:
+          type: ["string", "null"]
+        publicMotive:
+          type: ["string", "null"]
+        secretMotive:
+          type: ["string", "null"]
+        avatarUrl:
+          type: ["string", "null"]
+        dialogueLines:
+          type: array
+          items:
+            type: object
+            properties:
+              topic:
+                type: string
+              line:
+                type: string
+              dmOnly:
+                type: boolean
+              orderIndex:
+                type: integer
+            required: [topic, line, dmOnly, orderIndex]
+      required:
+        - archetypeKey
+
+    CreateNpcDialogueLineInput:
+      type: object
+      properties:
+        topic:
+          type: string
+        line:
+          type: string
+        dmOnly:
+          type: boolean
+        orderIndex:
+          type: integer
+      required:
+        - topic
+        - line
+
     CreateNpcBody:
       type: object
       properties:
@@ -2251,6 +2525,22 @@ components:
           type: array
           items:
             type: string
+        archetypeKey:
+          type: ["string", "null"]
+        occupation:
+          type: ["string", "null"]
+        suggestedClass:
+          type: ["string", "null"]
+        backstoryMd:
+          type: ["string", "null"]
+        publicMotive:
+          type: ["string", "null"]
+        secretMotive:
+          type: ["string", "null"]
+        dialogueLines:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateNpcDialogueLineInput"
       required:
         - name
 
@@ -2267,6 +2557,18 @@ components:
           type: array
           items:
             type: string
+        archetypeKey:
+          type: ["string", "null"]
+        occupation:
+          type: ["string", "null"]
+        suggestedClass:
+          type: ["string", "null"]
+        backstoryMd:
+          type: ["string", "null"]
+        publicMotive:
+          type: ["string", "null"]
+        secretMotive:
+          type: ["string", "null"]
 
     SessionAttendees:
       type: object
