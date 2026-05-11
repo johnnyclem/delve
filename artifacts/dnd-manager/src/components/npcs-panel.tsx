@@ -12,6 +12,10 @@ import {
   Loader2,
   EyeOff,
   MessageSquare,
+  Copy,
+  ArrowUp,
+  ArrowDown,
+  Check,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -158,7 +162,7 @@ function NpcGrid({ onSelect, onCreate }: { onSelect: (id: number) => void; onCre
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {(npcs as Npc[]).map((npc) => (
+          {npcs.map((npc) => (
             <motion.button
               whileTap={{ scale: 0.95 }}
               transition={{ type: "spring", stiffness: 400, damping: 17 }}
@@ -270,6 +274,11 @@ function RerollButton({
   );
 }
 
+// Sentinel value for the explicit "Custom" picker option. Picking this
+// clears any prefilled archetype data so the DM can fill the form by
+// hand without an archetype attached.
+const CUSTOM_PICKER_VALUE = "__custom__";
+
 function ArchetypePicker({
   archetypes,
   value,
@@ -295,6 +304,7 @@ function ArchetypePicker({
       data-testid="select-archetype"
     >
       <option value="">— Pick an archetype —</option>
+      <option value={CUSTOM_PICKER_VALUE}>Custom (fill in by hand)</option>
       {Object.entries(grouped).map(([cat, items]) => (
         <optgroup key={cat} label={cat}>
           {items.map((a) => (
@@ -316,7 +326,10 @@ function NpcCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreate
   const { toast } = useToast();
 
   const [draft, setDraft] = useState<NpcDraft>(EMPTY_DRAFT);
-  const [customOpen, setCustomOpen] = useState(false);
+  // True when the DM has explicitly chosen the "Custom" picker option —
+  // distinguished from the initial unselected state so the helper text
+  // and reroll-disabled UI stay sensible.
+  const [customMode, setCustomMode] = useState(false);
   // Field that is currently rerolling — used to show a spinner on the
   // matching button while the request is in flight.
   const [rerollingField, setRerollingField] = useState<string | null>(null);
@@ -353,6 +366,14 @@ function NpcCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreate
 
   const onPickArchetype = async (key: string) => {
     if (!key) return;
+    if (key === CUSTOM_PICKER_VALUE) {
+      // Explicit custom path: clear archetype binding without rolling
+      // anything. Keep whatever the DM has already typed in the form.
+      setCustomMode(true);
+      setDraft((d) => ({ ...d, archetypeKey: null }));
+      return;
+    }
+    setCustomMode(false);
     setFullRolling(true);
     try {
       const payload = await prefillMutation.mutateAsync({ data: { archetypeKey: key } });
@@ -376,7 +397,7 @@ function NpcCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreate
           // when re-rolling backstory / motives. Without this the
           // re-rolled text would mention a freshly rolled random name.
           ...(draft.name.trim() ? { currentName: draft.name.trim() } : {}),
-        } as never,
+        },
       });
       applyPrefill(draft.archetypeKey, payload);
     } catch {
@@ -401,19 +422,16 @@ function NpcCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreate
           backstoryMd: draft.backstoryMd.trim() || null,
           publicMotive: draft.publicMotive.trim() || null,
           secretMotive: draft.secretMotive.trim() || null,
-          // dialogueLines is an extension to CreateNpcBody; the server
-          // accepts it via the same POST. Cast through unknown because
-          // the generated zod schema doesn't list it explicitly.
           ...(draft.dialogueLines.length > 0
             ? { dialogueLines: draft.dialogueLines }
             : {}),
-        } as never,
+        },
       },
       {
         onSuccess: (created) => {
           queryClient.invalidateQueries({ queryKey: getListNpcsQueryKey() });
           toast({ title: `Added "${trimmedName}" to the roster` });
-          onCreated((created as Npc).id);
+          onCreated(created.id);
         },
         onError: () => toast({ title: "Could not create NPC", variant: "destructive" }),
       },
@@ -441,8 +459,8 @@ function NpcCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreate
           <div className="flex gap-2 items-stretch">
             <div className="flex-1">
               <ArchetypePicker
-                archetypes={archetypes as ArchetypeListItem[] | undefined}
-                value={draft.archetypeKey}
+                archetypes={archetypes}
+                value={customMode ? CUSTOM_PICKER_VALUE : draft.archetypeKey}
                 onChange={(k) => onPickArchetype(k)}
               />
             </div>
@@ -468,7 +486,9 @@ function NpcCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreate
           <p className="text-xs text-muted-foreground">
             {archetypeChosen
               ? "Edit any field below, or use the ↻ button to re-roll just that field."
-              : "Pick an archetype to auto-fill, or fill in the form by hand."}
+              : customMode
+                ? "Custom mode — fill in any fields you like and save."
+                : "Pick an archetype to auto-fill, or choose Custom to fill in by hand."}
           </p>
         </div>
 
@@ -636,21 +656,6 @@ function NpcCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreate
           </div>
         )}
 
-        {/* Custom (manual) section toggle */}
-        <button
-          type="button"
-          onClick={() => setCustomOpen((v) => !v)}
-          className="text-xs text-primary hover:underline"
-          data-testid="button-toggle-custom-section"
-        >
-          {customOpen ? "Hide custom options" : "Custom: skip the archetype and fill in by hand"}
-        </button>
-        {customOpen && !archetypeChosen && (
-          <p className="text-xs text-muted-foreground">
-            All fields above are editable. Just fill in what you need and save — no archetype required.
-          </p>
-        )}
-
         <div className="flex gap-2 pt-2">
           <Button
             size="sm"
@@ -746,19 +751,19 @@ function NpcDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const addTag = (tag: string) => {
     const trimmed = tag.trim();
     if (!trimmed || !npc) return;
-    const current = (npc as NpcWithDialogue).relationshipTags ?? [];
+    const current = npc.relationshipTags ?? [];
     if (current.includes(trimmed)) return;
     saveRelationshipTags([...current, trimmed]);
   };
 
   const removeTag = (tag: string) => {
     if (!npc) return;
-    saveRelationshipTags(((npc as NpcWithDialogue).relationshipTags ?? []).filter((t) => t !== tag));
+    saveRelationshipTags((npc.relationshipTags ?? []).filter((t) => t !== tag));
   };
 
   const onDelete = () => {
     if (!npc) return;
-    if (!confirm(`Remove "${(npc as NpcWithDialogue).name}" from the roster?`)) return;
+    if (!confirm(`Remove "${npc.name}" from the roster?`)) return;
     deleteMutation.mutate(
       { id },
       {
@@ -799,7 +804,7 @@ function NpcDetail({ id, onBack }: { id: number; onBack: () => void }) {
     );
   }
 
-  const npcDetail = npc as NpcWithDialogue;
+  const npcDetail = npc;
   const tags = npcDetail.relationshipTags ?? [];
 
   return (
@@ -1059,6 +1064,39 @@ function DialogueSection({
     );
   };
 
+  // Move a line up or down within the full sorted list. We use the
+  // current sort order, swap orderIndex with the neighbor, and persist
+  // both updates back-to-back. The list is small (a handful of lines)
+  // so the two-PATCH cost is fine.
+  const onMoveLine = async (lineId: number, dir: "up" | "down") => {
+    const sorted = [...lines].sort(
+      (a, b) => a.orderIndex - b.orderIndex || a.id - b.id,
+    );
+    const idx = sorted.findIndex((l) => l.id === lineId);
+    if (idx === -1) return;
+    const swapWith = dir === "up" ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= sorted.length) return;
+    const a = sorted[idx];
+    const b = sorted[swapWith];
+    try {
+      await Promise.all([
+        updateMutation.mutateAsync({
+          id: npcId,
+          lineId: a.id,
+          data: { orderIndex: b.orderIndex },
+        }),
+        updateMutation.mutateAsync({
+          id: npcId,
+          lineId: b.id,
+          data: { orderIndex: a.orderIndex },
+        }),
+      ]);
+      invalidateNpc();
+    } catch {
+      toast({ title: "Could not reorder line", variant: "destructive" });
+    }
+  };
+
   if (lines.length === 0 && !isDm) {
     // Players see nothing if there's nothing to show.
     return null;
@@ -1099,24 +1137,35 @@ function DialogueSection({
                 )}
               </p>
               <ul className="space-y-1 pl-3 border-l border-[rgba(255,255,255,0.05)]">
-                {g.lines.map((l) => (
-                  <DialogueLineRow
-                    key={l.id}
-                    line={l}
-                    isDm={isDm}
-                    onDelete={() => onDeleteLine(l.id)}
-                    onSave={(patch) => {
-                      updateMutation.mutate(
-                        { id: npcId, lineId: l.id, data: patch },
-                        {
-                          onSuccess: () => invalidateNpc(),
-                          onError: () =>
-                            toast({ title: "Could not save line", variant: "destructive" }),
-                        },
-                      );
-                    }}
-                  />
-                ))}
+                {g.lines.map((l) => {
+                  // Position within the full sorted list (not the
+                  // grouped subset) determines whether ↑/↓ are enabled.
+                  const sorted = [...lines].sort(
+                    (a, b) => a.orderIndex - b.orderIndex || a.id - b.id,
+                  );
+                  const fullIdx = sorted.findIndex((s) => s.id === l.id);
+                  return (
+                    <DialogueLineRow
+                      key={l.id}
+                      line={l}
+                      isDm={isDm}
+                      canMoveUp={fullIdx > 0}
+                      canMoveDown={fullIdx >= 0 && fullIdx < sorted.length - 1}
+                      onMove={(dir) => onMoveLine(l.id, dir)}
+                      onDelete={() => onDeleteLine(l.id)}
+                      onSave={(patch) => {
+                        updateMutation.mutate(
+                          { id: npcId, lineId: l.id, data: patch },
+                          {
+                            onSuccess: () => invalidateNpc(),
+                            onError: () =>
+                              toast({ title: "Could not save line", variant: "destructive" }),
+                          },
+                        );
+                      }}
+                    />
+                  );
+                })}
               </ul>
             </div>
           ))}
@@ -1178,19 +1227,51 @@ function DialogueSection({
 function DialogueLineRow({
   line,
   isDm,
+  canMoveUp,
+  canMoveDown,
+  onMove,
   onDelete,
   onSave,
 }: {
   line: NpcDialogueLine;
   isDm: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMove: (dir: "up" | "down") => void;
   onDelete: () => void;
   onSave: (patch: { line?: string; dmOnly?: boolean }) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [draft, setDraft] = useState(line.line);
   useEffect(() => {
     setDraft(line.line);
   }, [line.line]);
+
+  // Copy the bare quoted line to the clipboard so the DM can paste it
+  // straight into chat. Falls back to a textarea trick on insecure
+  // contexts where navigator.clipboard is undefined.
+  const onCopy = async () => {
+    const text = line.line;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // Silent — copying is a convenience, not a critical path.
+    }
+  };
 
   if (editing && isDm) {
     return (
@@ -1234,8 +1315,42 @@ function DialogueLineRow({
       data-testid={`dialogue-line-${line.id}`}
     >
       <span className="flex-1 text-sm">"{line.line}"</span>
+      {/* Copy is available to everyone (players too) — they often
+          want to paste a memorable NPC quote into chat as well. */}
+      <button
+        type="button"
+        onClick={onCopy}
+        className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center justify-center h-6 w-6 rounded border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.05)] text-muted-foreground"
+        title="Copy line"
+        aria-label="Copy line"
+        data-testid={`button-copy-line-${line.id}`}
+      >
+        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+      </button>
       {isDm && (
         <span className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+          <button
+            type="button"
+            onClick={() => onMove("up")}
+            disabled={!canMoveUp}
+            className="inline-flex items-center justify-center h-6 w-6 rounded border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.05)] disabled:opacity-30 disabled:pointer-events-none text-muted-foreground"
+            title="Move up"
+            aria-label="Move up"
+            data-testid={`button-move-up-line-${line.id}`}
+          >
+            <ArrowUp className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove("down")}
+            disabled={!canMoveDown}
+            className="inline-flex items-center justify-center h-6 w-6 rounded border border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.05)] disabled:opacity-30 disabled:pointer-events-none text-muted-foreground"
+            title="Move down"
+            aria-label="Move down"
+            data-testid={`button-move-down-line-${line.id}`}
+          >
+            <ArrowDown className="h-3 w-3" />
+          </button>
           <button
             type="button"
             onClick={() => onSave({ dmOnly: !line.dmOnly })}
