@@ -1,0 +1,69 @@
+name: Reset demo account
+
+# Wipes the demo campaign's child data (characters, sessions, dice rolls,
+# maps, npcs, chat threads, entities, calendar events, …) and re-seeds the
+# canonical demo content so every visitor to the deployed app gets the
+# intended first-impression experience.
+#
+# Required repository secrets:
+#   DEMO_RESET_DATABASE_URL    — production PostgreSQL connection string
+#   DEMO_RESET_CLERK_SECRET    — production Clerk backend secret key
+#
+# The reset script is safe by design: it only wipes when the demo user
+# (`demo@delve.app`) is DM on the resolved campaign — never against a
+# campaign owned by a real user. See artifacts/api-server/scripts/seed-test-user.ts.
+
+on:
+  schedule:
+    # Nightly at 04:00 UTC — quiet hours for most demo traffic.
+    # Adjust the cron expression to change cadence (e.g. "0 */6 * * *" for
+    # every 6 hours). GitHub Actions cron uses UTC.
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Optional reason for manual reset (logged in run summary)"
+        required: false
+        default: "manual reset"
+
+concurrency:
+  # Never let two resets overlap — a partial wipe could surprise visitors.
+  group: demo-reset
+  cancel-in-progress: false
+
+jobs:
+  reset:
+    name: Reset demo account
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run demo reset
+        env:
+          DATABASE_URL: ${{ secrets.DEMO_RESET_DATABASE_URL }}
+          CLERK_SECRET_KEY: ${{ secrets.DEMO_RESET_CLERK_SECRET }}
+        run: pnpm --filter @workspace/api-server run reset:test-user
+
+      - name: Summarize
+        if: always()
+        run: |
+          echo "### Demo reset run" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Trigger: \`${{ github.event_name }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Reason: \`${{ github.event.inputs.reason || 'scheduled' }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Status: \`${{ job.status }}\`" >> "$GITHUB_STEP_SUMMARY"

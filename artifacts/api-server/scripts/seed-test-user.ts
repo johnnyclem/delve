@@ -21,6 +21,21 @@
  * Usage (from repo root):
  *   pnpm --filter @workspace/api-server run seed:test-user
  *
+ *   # Reset mode — wipes the demo campaign's child rows (characters, sessions,
+ *   # dice rolls, maps, npcs, chat threads, entities, calendar events, …) and
+ *   # re-seeds the canonical demo content. The campaign row + memberships are
+ *   # preserved so the demo user keeps DM/player status. Reset only runs when
+ *   # the demo user is DM on the campaign — never against a campaign owned by
+ *   # a real user.
+ *   pnpm --filter @workspace/api-server run reset:test-user
+ *   # Equivalent forms: `RESET=1 pnpm … seed:test-user`,
+ *   #                   `tsx scripts/seed-test-user.ts --reset`
+ *
+ * Scheduling: run `reset:test-user` on a cron (Replit scheduled deployment,
+ * GitHub Action, or external cron) so the demo account stays fresh. A nightly
+ * 04:00 UTC run is a good default — it gives daytime visitors a clean slate
+ * while never interrupting an active demo session.
+ *
  * Required env vars:
  *   CLERK_SECRET_KEY   — Clerk backend secret key
  *   DATABASE_URL       — PostgreSQL connection string
@@ -38,10 +53,27 @@ import {
   campaignMembersTable,
   charactersTable,
   sessionLogsTable,
+  calendarEventsTable,
+  rsvpsTable,
+  diceRollsTable,
+  recapViewsTable,
+  notificationLogsTable,
+  mapsTable,
+  npcsTable,
+  homebrewRulesTable,
+  campaignEntitiesTable,
+  chatThreadsTable,
   pool,
 } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import crypto from "node:crypto";
+
+// `--reset` (or RESET=1) wipes the demo campaign's child data before
+// re-seeding so the demo account always returns to a clean canonical state.
+const RESET_MODE =
+  process.argv.includes("--reset") ||
+  process.env.RESET === "1" ||
+  process.env.RESET_DEMO === "1";
 
 const TEST_EMAIL = "demo@delve.app";
 const TEST_PASSWORD = "Delve@Demo2025";
@@ -60,8 +92,82 @@ function generateInviteCode(): string {
   return crypto.randomBytes(4).toString("hex").toUpperCase();
 }
 
+/**
+ * Wipe every child row tied to the demo campaign so the next seed pass
+ * recreates the canonical state. The campaign row itself and its membership
+ * rows are preserved so the demo user keeps their DM/player role and the
+ * runtime resolution (`getOrCreateCampaign`) still finds the same campaign id.
+ *
+ * Deletion order respects foreign-key constraints: leaf tables first, then
+ * their parents. Tables that already cascade on `campaignId` (chat_threads,
+ * homebrew_rules, npcs, campaign_entities) are still issued explicit deletes
+ * so the wipe is auditable from the script alone.
+ */
+async function resetDemoCampaign(campaignId: number): Promise<void> {
+  // Snapshot id sets we need before deleting their parents.
+  const sessionRows = await db
+    .select({ id: sessionLogsTable.id })
+    .from(sessionLogsTable)
+    .where(eq(sessionLogsTable.campaignId, campaignId));
+  const sessionIds = sessionRows.map((r) => r.id);
+
+  const eventRows = await db
+    .select({ id: calendarEventsTable.id })
+    .from(calendarEventsTable)
+    .where(eq(calendarEventsTable.campaignId, campaignId));
+  const eventIds = eventRows.map((r) => r.id);
+
+  // Leaf rows that point at sessions / events / campaign with no cascade.
+  if (sessionIds.length > 0) {
+    await db
+      .delete(recapViewsTable)
+      .where(inArray(recapViewsTable.sessionLogId, sessionIds));
+  }
+  await db
+    .delete(notificationLogsTable)
+    .where(eq(notificationLogsTable.campaignId, campaignId));
+  if (eventIds.length > 0) {
+    await db.delete(rsvpsTable).where(inArray(rsvpsTable.calendarEventId, eventIds));
+  }
+
+  // Campaign-scoped rows.
+  await db.delete(diceRollsTable).where(eq(diceRollsTable.campaignId, campaignId));
+  await db.delete(mapsTable).where(eq(mapsTable.campaignId, campaignId));
+  await db.delete(npcsTable).where(eq(npcsTable.campaignId, campaignId));
+  await db
+    .delete(homebrewRulesTable)
+    .where(eq(homebrewRulesTable.campaignId, campaignId));
+  await db
+    .delete(campaignEntitiesTable)
+    .where(eq(campaignEntitiesTable.campaignId, campaignId));
+  await db.delete(chatThreadsTable).where(eq(chatThreadsTable.campaignId, campaignId));
+  await db.delete(charactersTable).where(eq(charactersTable.campaignId, campaignId));
+  await db.delete(sessionLogsTable).where(eq(sessionLogsTable.campaignId, campaignId));
+  await db
+    .delete(calendarEventsTable)
+    .where(eq(calendarEventsTable.campaignId, campaignId));
+
+  // Restore canonical campaign settings (name, world, timezone, homebrew rules,
+  // edition). dmUserId / inviteCode / houseRulesShareToken are intentionally
+  // left alone so the demo user stays DM and existing share links keep working.
+  await db
+    .update(campaignsTable)
+    .set({
+      name: "The Shattered Crown",
+      worldName: "Aethoria",
+      timezone: "UTC",
+      homebrewRules: {},
+      defaultEdition: "2024",
+    })
+    .where(eq(campaignsTable.id, campaignId));
+}
+
 async function main(): Promise<void> {
-  console.log(bold("\n=== Delve — test-user seed ===\n"));
+  console.log(
+    bold(
+      `\n=== Delve — test-user ${RESET_MODE ? "reset + " : ""}seed ===\n`,
+    ),
+  );
 
   if (!process.env.CLERK_SECRET_KEY) {
     console.error("❌  CLERK_SECRET_KEY is not set. Aborting.");
@@ -156,6 +262,34 @@ async function main(): Promise<void> {
     campaignName = created.name;
     demoUserRole = "dm";
     log("Campaign", green(`created  "${campaignName}"  (id=${campaignId})`));
+  }
+
+  // ── 2b. Reset (optional) ──────────────────────────────────────────────────
+  // Wipe child data ONLY if the demo user owns the campaign as DM. We never
+  // wipe data on a campaign owned by a real user — `demoUserRole === 'player'`
+  // means a live user holds DM and any deletion would destroy their content.
+  if (RESET_MODE) {
+    if (demoUserRole === "dm") {
+      await resetDemoCampaign(campaignId);
+      log("Reset", yellow("wiped child data on demo campaign"));
+    } else {
+      // Hard short-circuit: in reset mode we refuse to touch a campaign owned
+      // by a real user. Skipping the remaining seed steps avoids writing demo
+      // characters/sessions into someone else's content, which would be both
+      // surprising and hard to clean up. Run without `--reset` if you want to
+      // add the demo user as a player to a real-user campaign.
+      log(
+        "Reset",
+        yellow("⚠  aborted — campaign is owned by another user; no writes performed"),
+      );
+      console.log(
+        `\n${yellow(
+          "Reset mode is a no-op when the demo user is not DM. Re-run without --reset to add the demo user as a player on the existing campaign.",
+        )}\n`,
+      );
+      await pool.end();
+      return;
+    }
   }
 
   // ── 3. Membership ──────────────────────────────────────────────────────────
@@ -443,7 +577,7 @@ Party escorted Aldric back to Millhaven. Sheriff offered 50gp bounty on the cult
 
   // ── Done ───────────────────────────────────────────────────────────────────
   console.log(`
-${bold("✅  Seed complete.")}
+${bold(RESET_MODE ? "✅  Reset + seed complete." : "✅  Seed complete.")}
 
 ${bold("Test account credentials")}
   Email    ${green(TEST_EMAIL)}

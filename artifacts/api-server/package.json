@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "eval:recap": "node --experimental-strip-types --no-warnings ./scripts/eval-recap-grounding.ts",
-    "seed:test-user": "tsx ./scripts/seed-test-user.ts"
+    "seed:test-user": "tsx ./scripts/seed-test-user.ts",
+    "reset:test-user": "tsx ./scripts/seed-test-user.ts --reset"
   },
   "dependencies": {
     "@clerk/express": "^1",
