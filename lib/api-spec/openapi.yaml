@@ -2966,6 +2966,9 @@ components:
           type: string
         sourceUrl:
           type: ["string", "null"]
+        imageUrl:
+          type: ["string", "null"]
+          description: Object-storage path for the entity's generated portrait (currently only populated for monsters), or null when no image is available.
         chunks:
           type: array
           items:
@@ -2994,6 +2997,9 @@ components:
           type: ["string", "null"]
         cr:
           type: ["number", "null"]
+        imageUrl:
+          type: ["string", "null"]
+          description: Object-storage path (e.g. "/objects/<id>") for the generated pixel-art portrait of this monster, or null when no image has been generated yet. Shared across the 2014 and 2024 editions.
       required:
         - slug
         - title

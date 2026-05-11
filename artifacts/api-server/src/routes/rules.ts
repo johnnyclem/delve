@@ -3,6 +3,7 @@ import {
   db,
   referenceChunksTable,
   campaignsTable,
+  monsterImagesTable,
   REFERENCE_ENTITY_KINDS,
   type SrdEdition,
   type ReferenceEntityKind,
@@ -139,12 +140,26 @@ router.get("/rules/:kind/:slug", requireAuth, requireCampaignMember, async (req,
   }
 
   const first = rows[0];
+
+  // Monster portraits are shared across editions and stored in
+  // `monster_images` keyed by slug. Other entity kinds don't have
+  // generated artwork yet — return null so the FE fallback fires.
+  let imageUrl: string | null = null;
+  if (kind === "monster") {
+    const [img] = await db
+      .select({ objectPath: monsterImagesTable.objectPath })
+      .from(monsterImagesTable)
+      .where(eq(monsterImagesTable.slug, first.entitySlug));
+    imageUrl = img?.objectPath ?? null;
+  }
+
   res.json({
     edition,
     entityKind: first.entityKind,
     entitySlug: first.entitySlug,
     title: first.title,
     sourceUrl: first.sourceUrl,
+    imageUrl,
     chunks: rows.map((r) => ({
       id: r.id,
       section: r.section,

@@ -765,6 +765,11 @@ export interface RuleEntity {
   title: string;
   /** @nullable */
   sourceUrl?: string | null;
+  /**
+   * Object-storage path for the entity's generated portrait (currently only populated for monsters), or null when no image is available.
+   * @nullable
+   */
+  imageUrl?: string | null;
   chunks: RuleChunk[];
 }
 
@@ -781,6 +786,11 @@ export interface BestiaryEntry {
   alignment?: string | null;
   /** @nullable */
   cr?: number | null;
+  /**
+   * Object-storage path (e.g. "/objects/<id>") for the generated pixel-art portrait of this monster, or null when no image has been generated yet. Shared across the 2014 and 2024 editions.
+   * @nullable
+   */
+  imageUrl?: string | null;
 }
 
 export type BestiaryListResponseEdition =

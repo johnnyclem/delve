@@ -18,6 +18,7 @@ interface BestiaryEntry {
   size?: string | null;
   alignment?: string | null;
   cr?: number | null;
+  imageUrl?: string | null;
 }
 
 interface RuleEntity {
@@ -26,7 +27,64 @@ interface RuleEntity {
   entitySlug: string;
   title: string;
   sourceUrl?: string | null;
+  imageUrl?: string | null;
   chunks: { id: number; section: string | null; title: string; bodyMd: string }[];
+}
+
+// Mirrors `resolvePortraitSrc` in character-list. Object-storage paths
+// stored as `/objects/<id>` are served by the api-server's
+// `/api/storage/objects/<id>` route (auth-gated by campaign membership).
+function resolveImageSrc(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("/objects/")) return `${import.meta.env.BASE_URL}api/storage${url}`;
+  return url;
+}
+
+function MonsterArt({
+  url,
+  name,
+  size,
+}: {
+  url: string | null | undefined;
+  name: string;
+  size: "thumb" | "hero";
+}) {
+  const src = resolveImageSrc(url);
+  // Track per-mount load failures so a stale or 404'd object path falls
+  // back to the skull placeholder instead of rendering a broken image.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+
+  const imgCls =
+    size === "thumb"
+      ? "h-16 w-16 sm:h-20 sm:w-20 rounded-lg shrink-0 object-cover [image-rendering:pixelated] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)]"
+      : "w-full max-w-sm aspect-square mx-auto rounded-xl object-cover [image-rendering:pixelated] border border-[rgba(255,255,255,0.08)] bg-[rgba(255,255,255,0.04)]";
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={`${name} portrait`}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className={imgCls}
+        data-testid={size === "thumb" ? "img-monster-thumb" : "img-monster-hero"}
+      />
+    );
+  }
+  const placeholderCls =
+    size === "thumb"
+      ? "h-16 w-16 sm:h-20 sm:w-20 rounded-lg shrink-0 flex items-center justify-center bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]"
+      : "w-full max-w-sm aspect-square mx-auto rounded-xl flex items-center justify-center bg-[rgba(255,255,255,0.04)] border border-[rgba(255,255,255,0.08)]";
+  return (
+    <div
+      className={placeholderCls}
+      data-testid={size === "thumb" ? "img-monster-thumb-placeholder" : "img-monster-hero-placeholder"}
+      aria-label={`No portrait for ${name}`}
+    >
+      <Skull className={size === "thumb" ? "h-7 w-7 text-muted-foreground/60" : "h-20 w-20 text-muted-foreground/40"} />
+    </div>
+  );
 }
 
 function useDebounced<T>(value: T, delay: number): T {
@@ -180,6 +238,9 @@ export default function BestiaryPanel() {
               className="prose prose-sm prose-invert max-w-none text-foreground/90"
               data-testid="text-monster-body"
             >
+              <div className="not-prose mb-4">
+                <MonsterArt url={detail.imageUrl} name={detail.title} size="hero" />
+              </div>
               {detail.chunks.map((c) => (
                 <div key={c.id}>
                   {c.section && (
@@ -390,20 +451,23 @@ export default function BestiaryPanel() {
               exit={{ opacity: 0 }}
               onClick={() => setOpenSlug(m.slug)}
               data-testid={`bestiary-card-${m.slug}`}
-              className="text-left rounded-xl glass-panel-hover p-4"
+              className="text-left rounded-xl glass-panel-hover p-4 flex items-start gap-3"
             >
-              <div className="flex items-baseline justify-between gap-2">
-                <h4 className="font-semibold text-foreground truncate">{m.title}</h4>
-                <span className="text-xs font-mono shrink-0 text-primary">
-                  CR {formatCr(m.cr)}
-                </span>
+              <MonsterArt url={m.imageUrl} name={m.title} size="thumb" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h4 className="font-semibold text-foreground truncate">{m.title}</h4>
+                  <span className="text-xs font-mono shrink-0 text-primary">
+                    CR {formatCr(m.cr)}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 truncate">
+                  {[m.size, m.type].filter(Boolean).join(" · ") || "—"}
+                </p>
+                {m.alignment && (
+                  <p className="text-xs text-muted-foreground/80 mt-0.5 truncate">{m.alignment}</p>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground mt-1 truncate">
-                {[m.size, m.type].filter(Boolean).join(" · ") || "—"}
-              </p>
-              {m.alignment && (
-                <p className="text-xs text-muted-foreground/80 mt-0.5 truncate">{m.alignment}</p>
-              )}
             </motion.button>
           ))}
         </AnimatePresence>

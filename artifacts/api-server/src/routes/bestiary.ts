@@ -3,6 +3,7 @@ import {
   db,
   referenceChunksTable,
   campaignsTable,
+  monsterImagesTable,
   type SrdEdition,
 } from "@workspace/db";
 import { and, eq, sql } from "drizzle-orm";
@@ -126,6 +127,13 @@ router.get(
     // filter is cheaper and simpler than building dynamic SQL with
     // partial regex predicates.
     const result = await db.execute<MonsterRow>(monsterBaseSelect(edition));
+    const imageRows = await db
+      .select({
+        slug: monsterImagesTable.slug,
+        objectPath: monsterImagesTable.objectPath,
+      })
+      .from(monsterImagesTable);
+    const imagesBySlug = new Map(imageRows.map((r) => [r.slug, r.objectPath]));
     const all = result.rows.map((r) => ({
       slug: r.entity_slug,
       title: r.title,
@@ -134,6 +142,7 @@ router.get(
       size: trimOrNull(r.size) ?? null,
       alignment: trimOrNull(r.alignment) ?? null,
       cr: parseCr(r.cr_text),
+      imageUrl: imagesBySlug.get(r.entity_slug) ?? null,
     }));
 
     const qLower = q.toLowerCase();

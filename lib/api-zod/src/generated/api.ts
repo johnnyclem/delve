@@ -93,6 +93,12 @@ export const GetRuleResponse = zod.object({
   entitySlug: zod.string(),
   title: zod.string(),
   sourceUrl: zod.string().nullish(),
+  imageUrl: zod
+    .string()
+    .nullish()
+    .describe(
+      "Object-storage path for the entity's generated portrait (currently only populated for monsters), or null when no image is available.",
+    ),
   chunks: zod.array(
     zod.object({
       id: zod.number(),
@@ -145,6 +151,12 @@ export const ListBestiaryResponse = zod.object({
       size: zod.string().nullish(),
       alignment: zod.string().nullish(),
       cr: zod.number().nullish(),
+      imageUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          'Object-storage path (e.g. \"\/objects\/<id>\") for the generated pixel-art portrait of this monster, or null when no image has been generated yet. Shared across the 2014 and 2024 editions.',
+        ),
     }),
   ),
 });
