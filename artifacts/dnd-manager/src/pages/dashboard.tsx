@@ -655,6 +655,63 @@ function ShortcutHint() {
 const LONG_PRESS_MS = 400;
 const MOVE_CANCEL_PX = 8;
 
+const REORDER_HINT_KEY_PREFIX = "delve:subnav-reorder-hint-dismissed";
+
+function ReorderHint({ dismissed }: { dismissed: boolean }) {
+  const { user } = useUser();
+  const userId = user?.id;
+  const storageKey = userId ? `${REORDER_HINT_KEY_PREFIX}:${userId}` : null;
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    if (dismissed) return;
+    try {
+      if (localStorage.getItem(storageKey) === "1") return;
+      setVisible(true);
+    } catch { /* ignore */ }
+  }, [dismissed, storageKey]);
+
+  // Auto-dismiss (and persist) once the user has reordered.
+  useEffect(() => {
+    if (!dismissed) return;
+    setVisible(false);
+    if (!storageKey) return;
+    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
+  }, [dismissed, storageKey]);
+
+  const dismiss = () => {
+    setVisible(false);
+    if (!storageKey) return;
+    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-40 flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-[11px] shadow-lg pointer-events-auto animate-in fade-in slide-in-from-top-1"
+      role="status"
+      data-testid="hint-subnav-reorder"
+    >
+      <span
+        className="absolute -top-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-primary"
+        aria-hidden="true"
+      />
+      <span>Tip: long-press or drag to reorder</span>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss reorder hint"
+        className="p-0.5 rounded hover:bg-primary-foreground/10 transition-colors"
+        data-testid="button-dismiss-reorder-hint"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 function SubNavStrip({
   group,
   items,
@@ -672,6 +729,7 @@ function SubNavStrip({
   useEffect(() => { setWorkingOrder(items); }, [items]);
 
   const [draggingId, setDraggingId] = useState<NavId | null>(null);
+  const [reorderedOnce, setReorderedOnce] = useState(false);
   const itemRefs = useRef<Map<NavId, HTMLButtonElement | null>>(new Map());
   const longPressTimer = useRef<number | null>(null);
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
@@ -757,6 +815,7 @@ function SubNavStrip({
       const reorderable = workingOrder.filter((wId) => isReorderable(wId));
       onReorder(group, reorderable);
       setDraggingId(null);
+      setReorderedOnce(true);
     }
     clearLongPress();
   };
@@ -801,13 +860,15 @@ function SubNavStrip({
       const reorderable = workingOrder.filter((wId) => isReorderable(wId));
       onReorder(group, reorderable);
       setDraggingId(null);
+      setReorderedOnce(true);
     }
   };
 
   const renderItems = workingOrder;
 
   return (
-    <div className="sticky top-[53px] z-30 bg-background/95 backdrop-blur-sm border-b border-border/40">
+    <div className="sticky top-[53px] z-30 bg-background/95 backdrop-blur-sm border-b border-border/40 relative">
+      <ReorderHint dismissed={reorderedOnce || hasCustomOrder} />
       <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-none max-w-5xl mx-auto">
         {renderItems.map((id) => {
           const item = navItem(id);
