@@ -4,12 +4,26 @@ import { db, campaignMembersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { getOrCreateCampaign } from "../lib/campaign";
 
+const DESTRUCTIVE_METHODS = new Set(["DELETE", "PATCH", "PUT"]);
+
+export function isDemoUser(userId: string | undefined | null): boolean {
+  const demoId = process.env["DEMO_USER_ID"];
+  return !!demoId && !!userId && userId === demoId;
+}
+
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   const auth = getAuth(req);
   const claimsUserId = auth?.sessionClaims?.userId;
   const userId = typeof claimsUserId === "string" ? claimsUserId : auth?.userId;
   if (!userId || typeof userId !== "string") {
     res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  if (isDemoUser(userId) && DESTRUCTIVE_METHODS.has(req.method)) {
+    res.status(403).json({
+      error: "This action is disabled for the demo account",
+      code: "demo_account_readonly",
+    });
     return;
   }
   (req as AuthenticatedRequest).userId = userId;
