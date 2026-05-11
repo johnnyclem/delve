@@ -1,6 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScanlineOverlay } from "@/components/ui/scanline-overlay";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, useUser } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, Show, useClerk, useSignIn, useUser } from "@clerk/react";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Sparkles } from "lucide-react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { dark } from "@clerk/themes";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
@@ -82,10 +85,93 @@ const clerkAppearance = {
   },
 };
 
+// Demo account credentials. Source of truth: artifacts/api-server/scripts/seed-test-user.ts
+const DEMO_EMAIL = "demo@delve.app";
+const DEMO_PASSWORD = "Delve@Demo2025";
+
+function DemoSignInButton() {
+  const { signIn } = useSignIn();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleDemoSignIn = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
+
+    const fail = (message: string) => {
+      toast({
+        title: "Couldn't sign in to demo account",
+        description: message,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    };
+
+    try {
+      const createResult = await signIn.create({
+        identifier: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
+      });
+      if (createResult.error) {
+        fail(createResult.error.message ?? "Please try again or sign in manually.");
+        return;
+      }
+
+      if (signIn.status !== "complete") {
+        fail("The demo account requires extra verification. Please sign in manually.");
+        return;
+      }
+
+      // Activate the session and redirect. `finalize` sets the active session
+      // (equivalent to the legacy `setActive`) so subsequent auth-aware hooks
+      // see the demo user as signed in.
+      const finalizeResult = await signIn.finalize({
+        navigate: () => setLocation("/dashboard"),
+      });
+      if (finalizeResult.error) {
+        fail(finalizeResult.error.message ?? "Please try again or sign in manually.");
+      }
+    } catch (err) {
+      fail(err instanceof Error ? err.message : "Please try again or sign in manually.");
+    }
+  };
+
+  return (
+    <div className="glass-panel w-[440px] max-w-full px-6 py-5 flex flex-col items-center gap-3">
+      <p className="text-xs uppercase tracking-wider text-muted-foreground">
+        Just looking around?
+      </p>
+      <Button
+        type="button"
+        variant="secondary"
+        onClick={handleDemoSignIn}
+        disabled={isLoading}
+        className="w-full"
+        data-testid="button-demo-sign-in"
+      >
+        {isLoading ? (
+          <Loader2 className="animate-spin" />
+        ) : (
+          <Sparkles className="text-primary" />
+        )}
+        {isLoading ? "Signing in…" : "Try demo account"}
+      </Button>
+      <p className="text-[11px] text-muted-foreground/80 text-center">
+        Signs you in to a shared sample campaign — no account needed.
+      </p>
+    </div>
+  );
+}
+
 function SignInPage() {
   return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4" data-testid="page-sign-in">
+    <div
+      className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-background px-4 py-8"
+      data-testid="page-sign-in"
+    >
       <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
+      <DemoSignInButton />
     </div>
   );
 }
