@@ -196,7 +196,7 @@ async function main(): Promise<void> {
   );
 
   console.log(
-    `[bestiary-images] done. generated=${done - failed} failed=${failed} total=${missing.length}`,
+    `[bestiary-images] done. generated=${done} failed=${failed} total=${missing.length}`,
   );
 }
 
