@@ -1,6 +1,8 @@
-import { Library, Radio, Swords } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Library, Radio, Swords, X } from "lucide-react";
 import { motion } from "framer-motion";
 import { Shield } from "lucide-react";
+import { useUser } from "@clerk/react";
 
 export type TriadGroup = "active" | "table" | "library";
 
@@ -14,9 +16,66 @@ interface TriadTabBarProps {
   activeGroup: TriadGroup;
   onSelect: (group: TriadGroup) => void;
   activeBadgeCount?: number;
+  subNavReordered?: boolean;
 }
 
-export function TriadTabBar({ activeGroup, onSelect, activeBadgeCount = 0 }: TriadTabBarProps) {
+const REORDER_HINT_KEY_PREFIX = "delve:triad-bottom-reorder-hint-dismissed";
+
+function BottomReorderHint({ dismissed }: { dismissed: boolean }) {
+  const { user } = useUser();
+  const userId = user?.id;
+  const storageKey = userId ? `${REORDER_HINT_KEY_PREFIX}:${userId}` : null;
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!storageKey) return;
+    if (dismissed) return;
+    try {
+      if (localStorage.getItem(storageKey) === "1") return;
+      setVisible(true);
+    } catch { /* ignore */ }
+  }, [dismissed, storageKey]);
+
+  useEffect(() => {
+    if (!dismissed) return;
+    setVisible(false);
+    if (!storageKey) return;
+    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
+  }, [dismissed, storageKey]);
+
+  const dismiss = () => {
+    setVisible(false);
+    if (!storageKey) return;
+    try { localStorage.setItem(storageKey, "1"); } catch { /* ignore */ }
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div
+      className="md:hidden absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 z-40 flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-[11px] shadow-lg pointer-events-auto animate-in fade-in slide-in-from-bottom-1 whitespace-nowrap"
+      role="status"
+      data-testid="hint-triad-bottom-reorder"
+    >
+      <span>Tip: long-press or drag tabs above to reorder</span>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss reorder hint"
+        className="p-0.5 rounded hover:bg-primary-foreground/10 transition-colors"
+        data-testid="button-dismiss-triad-reorder-hint"
+      >
+        <X className="h-3 w-3" />
+      </button>
+      <span
+        className="absolute -bottom-1 left-1/2 -translate-x-1/2 h-2 w-2 rotate-45 bg-primary"
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
+export function TriadTabBar({ activeGroup, onSelect, activeBadgeCount = 0, subNavReordered = false }: TriadTabBarProps) {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-40 bg-[#09090B]/95 backdrop-blur-sm border-t border-[rgba(255,255,255,0.06)]"
@@ -24,6 +83,7 @@ export function TriadTabBar({ activeGroup, onSelect, activeBadgeCount = 0 }: Tri
       data-testid="nav-triad-tab-bar"
       aria-label="Main navigation"
     >
+      <BottomReorderHint dismissed={subNavReordered} />
       <div className="flex items-stretch max-w-lg mx-auto md:max-w-none">
         {TRIAD_TABS.map(({ id, label, icon: Icon }) => {
           const isActive = activeGroup === id;

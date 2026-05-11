@@ -360,6 +360,13 @@ export default function DashboardPage() {
     () => readGroupOrder(activeGroup) !== null,
     [activeGroup, orderVersion],
   );
+  const hasAnyCustomOrder = useMemo(
+    () =>
+      readGroupOrder("active") !== null ||
+      readGroupOrder("table") !== null ||
+      readGroupOrder("library") !== null,
+    [orderVersion],
+  );
 
   const handleReorderGroup = useCallback(
     (group: TriadGroup, nextReorderable: NavId[]) => {
@@ -465,6 +472,7 @@ export default function DashboardPage() {
         activeGroup={activeGroup}
         onSelect={handleTriadTabClick}
         activeBadgeCount={activeBadgeCount}
+        subNavReordered={hasAnyCustomOrder}
       />
 
       {/* Profile sheet — replaces both desktop sidebar footer and mobile More sheet */}
