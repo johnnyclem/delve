@@ -5,6 +5,7 @@
   "scripts": {
     "preinstall": "rm -f package-lock.json yarn.lock",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "start": "pnpm -r --filter @workspace/dnd-manager run start",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },

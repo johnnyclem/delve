@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Sparkles } from "@/components/ui/pixel-icons";
+import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Sparkles, Loader2 } from "@/components/ui/pixel-icons";
 import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { EntityNameWithAsk } from "@/components/ask-popover";
 import { Button } from "@/components/ui/button";

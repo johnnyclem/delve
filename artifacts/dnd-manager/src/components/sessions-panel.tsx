@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning } from "@/components/ui/pixel-icons";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning, Loader2 } from "@/components/ui/pixel-icons";
 import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
