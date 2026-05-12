@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pnpm --filter @workspace/dnd-manager run build",
+  "outputDirectory": "artifacts/dnd-manager/dist/public",
+  "installCommand": "pnpm install"
+}
