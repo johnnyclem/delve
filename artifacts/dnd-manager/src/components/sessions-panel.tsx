@@ -1500,7 +1500,7 @@ function RecapStatusBadge({
   if (status === "running" || manualPending) {
     return (
       <span className="flex items-center gap-1 text-xs text-primary" data-testid="text-recap-status" data-status="running">
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <PixelD20Loader className="h-3 w-3" />
         Recap regenerating…
       </span>
     );

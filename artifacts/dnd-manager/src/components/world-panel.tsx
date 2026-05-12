@@ -275,7 +275,7 @@ function SeedSrdButton({ onSeeded }: { onSeeded: () => void }) {
       data-testid="button-seed-srd"
     >
       {seed.isPending ? (
-        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+        <PixelD20Loader className="h-4 w-4 mr-1" />
       ) : (
         <Sparkles className="h-4 w-4 mr-1" />
       )}
