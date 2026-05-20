@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ScanlineOverlay } from "@/components/ui/scanline-overlay";
+import { ScanlineOverlay } from "@workspace/ui";
 import { ClerkProvider, SignIn, SignUp, Show, useClerk, useSignIn, useUser } from "@clerk/react";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 import { Loader2, Sparkles } from "lucide-react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { setBaseUrl } from "@workspace/api-client-react";
@@ -10,8 +10,9 @@ import { dark } from "@clerk/themes";
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@workspace/ui";
+import { TooltipProvider } from "@workspace/ui";
+import { ErrorBoundary } from "@/components/error-boundary";
 import NotFound from "@/pages/not-found";
 import DashboardPage from "@/pages/dashboard";
 import MapsPage from "@/pages/maps";
@@ -225,7 +226,9 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return (
     <>
       <Show when="signed-in">
-        <Component />
+        <ErrorBoundary>
+          <Component />
+        </ErrorBoundary>
       </Show>
       <Show when="signed-out">
         <Redirect to="/sign-in" />
@@ -268,9 +271,9 @@ function ClerkProviderWithRoutes() {
         <TooltipProvider>
           <Switch>
             <Route path="/" component={HomeRedirect} />
-            <Route path="/sign-in/*?" component={SignInPage} />
-            <Route path="/sign-up/*?" component={SignUpPage} />
-            <Route path="/share/house-rules/:token" component={HouseRulesSharePage} />
+            <Route path="/sign-in/*?">{() => <ErrorBoundary><SignInPage /></ErrorBoundary>}</Route>
+            <Route path="/sign-up/*?">{() => <ErrorBoundary><SignUpPage /></ErrorBoundary>}</Route>
+            <Route path="/share/house-rules/:token">{() => <ErrorBoundary><HouseRulesSharePage /></ErrorBoundary>}</Route>
             <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPage} />}</Route>
             <Route path="/maps">{() => <ProtectedRoute component={MapsPage} />}</Route>
             <Route path="/maps/:id">{() => <ProtectedRoute component={MapEditorPage} />}</Route>

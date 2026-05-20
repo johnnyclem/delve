@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Check, ChevronsUpDown, Globe } from "@/components/ui/pixel-icons";
-import { cn } from "@/lib/utils";
+import { Check, ChevronsUpDown, Globe } from "@workspace/ui";
+import { cn } from "@workspace/ui";
 import {
   Command,
   CommandEmpty,
@@ -8,8 +8,8 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+} from "@workspace/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui";
 
 interface TimezoneComboboxProps {
   value: string;

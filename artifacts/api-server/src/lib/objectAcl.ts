@@ -1,4 +1,6 @@
 import { File } from "@google-cloud/storage";
+import { db, campaignMembersTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 
 const ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
 
@@ -10,7 +12,11 @@ const ACL_POLICY_METADATA_KEY = "custom:aclPolicy";
 // - GROUP_MEMBER: the users who are members of a specific group;
 // - SUBSCRIBER: the users who are subscribers of a specific service / content
 //   creator.
-export enum ObjectAccessGroupType {}
+export enum ObjectAccessGroupType {
+  CAMPAIGN_MEMBER = "campaign_member",
+  DM = "dm",
+  PLAYER = "player",
+}
 
 export interface ObjectAccessGroup {
   type: ObjectAccessGroupType;
@@ -55,13 +61,50 @@ abstract class BaseObjectAccessGroup implements ObjectAccessGroup {
   public abstract hasMember(userId: string): Promise<boolean>;
 }
 
+class CampaignMemberAccessGroup extends BaseObjectAccessGroup {
+  constructor(group: ObjectAccessGroup) {
+    super(group.type, group.id);
+  }
+
+  public async hasMember(userId: string): Promise<boolean> {
+    const campaignId = Number(this.id);
+    if (isNaN(campaignId)) return false;
+
+    if (this.type === ObjectAccessGroupType.CAMPAIGN_MEMBER) {
+      const [member] = await db
+        .select()
+        .from(campaignMembersTable)
+        .where(
+          and(
+            eq(campaignMembersTable.campaignId, campaignId),
+            eq(campaignMembersTable.userId, userId),
+          ),
+        );
+      return !!member;
+    }
+
+    const [member] = await db
+      .select()
+      .from(campaignMembersTable)
+      .where(
+        and(
+          eq(campaignMembersTable.campaignId, campaignId),
+          eq(campaignMembersTable.userId, userId),
+          eq(campaignMembersTable.role, this.type),
+        ),
+      );
+    return !!member;
+  }
+}
+
 function createObjectAccessGroup(
   group: ObjectAccessGroup,
 ): BaseObjectAccessGroup {
   switch (group.type) {
-    // Implement per access group type, e.g.:
-    // case "USER_LIST":
-    //   return new UserListAccessGroup(group.id);
+    case ObjectAccessGroupType.CAMPAIGN_MEMBER:
+    case ObjectAccessGroupType.DM:
+    case ObjectAccessGroupType.PLAYER:
+      return new CampaignMemberAccessGroup(group);
     default:
       throw new Error(`Unknown access group type: ${group.type}`);
   }

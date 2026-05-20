@@ -1,6 +1,8 @@
 import express, { type Express, type Request, type Response, type NextFunction, type RequestHandler } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
+import { v4 as uuidv4 } from "uuid";
 import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import {
@@ -17,6 +19,26 @@ const app: Express = express();
 // real client address. Required for express-rate-limit's per-IP keying on
 // public endpoints like /api/rsvp/:token and /api/unsubscribe.
 app.set("trust proxy", 1);
+
+// Attach a unique request ID to every request for log correlation.
+app.use((req, _res, next) => {
+  (req as Record<string, unknown>).id = uuidv4();
+  next();
+});
+
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https://img.clerk.com"],
+        connectSrc: ["'self'", "https://*.clerk.accounts.dev"],
+      },
+    },
+  }),
+);
 
 app.use(
   pinoHttp({

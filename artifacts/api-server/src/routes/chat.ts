@@ -16,6 +16,7 @@ import {
   requireCampaignMember,
   getUserId,
 } from "../middlewares/requireAuth";
+import { userRateLimit } from "../middlewares/userRateLimit";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { embedQuery } from "../lib/entityEmbeddings";
 import {
@@ -29,6 +30,8 @@ import {
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
+
+const chatRateLimit = userRateLimit(60, 60 * 1000);
 
 const CHAT_MODEL = "gpt-4o-mini";
 const MAX_MESSAGE_LEN = 2000;
@@ -306,7 +309,7 @@ async function summarizeOlderTurns(
   }
 }
 
-router.get("/chat/threads", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+router.get("/chat/threads", chatRateLimit, requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
   const rows = await db
@@ -323,7 +326,7 @@ router.get("/chat/threads", requireAuth, requireCampaignMember, async (req, res)
   res.json(rows);
 });
 
-router.get("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+router.get("/chat/threads/:id", chatRateLimit, requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
   const id = Number(req.params.id);
@@ -375,7 +378,7 @@ const updateThreadBody = z
     { message: "At least one of title or speakingAsCharacterId is required" },
   );
 
-router.patch("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+router.patch("/chat/threads/:id", chatRateLimit, requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
   const id = Number(req.params.id);
@@ -455,7 +458,7 @@ async function resolveSpeakingAsCharacter(
   return dm ? row : null;
 }
 
-router.delete("/chat/threads/:id", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+router.delete("/chat/threads/:id", chatRateLimit, requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
   const id = Number(req.params.id);
@@ -770,7 +773,7 @@ async function persistTurn(
   }
 }
 
-router.post("/chat", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+router.post("/chat", chatRateLimit, requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const parsed = chatBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -825,6 +828,7 @@ function writeSseEvent(res: Response, payload: unknown): void {
 
 router.post(
   "/chat/stream",
+  chatRateLimit,
   requireAuth,
   requireCampaignMember,
   async (req, res): Promise<void> => {

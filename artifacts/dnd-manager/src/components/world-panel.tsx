@@ -1,21 +1,21 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Sparkles, Loader2 } from "@/components/ui/pixel-icons";
-import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
+import { Globe, Plus, Eye, EyeOff, Trash2, Pencil, ChevronLeft, History, Sparkles, Loader2 } from "@workspace/ui";
+import { PixelD20Loader } from "@workspace/ui";
 import { EntityNameWithAsk } from "@/components/ask-popover";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
+import { Label } from "@workspace/ui";
+import { Skeleton } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@workspace/ui";
 import {
   useListEntities,
   useCreateEntity,
@@ -27,6 +27,7 @@ import {
   useGetMyMembership,
   useSeedWorldFromSrd,
 } from "@workspace/api-client-react";
+import { getListEntitiesQueryKey } from "@workspace/api-client-react";
 import type { CampaignEntity, EntityKind, EntityAuditEntry } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -230,7 +231,7 @@ function SeedSrdButton({ onSeeded }: { onSeeded: () => void }) {
     }
     seed.mutate(undefined, {
       onSuccess: (summary) => {
-        queryClient.invalidateQueries({ queryKey: ["/api/entities"] });
+        queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
         onSeeded();
         const addedTotal = summary.added.npc + summary.added.mob_encounter;
         const skippedTotal = summary.skipped.npc + summary.skipped.mob_encounter;
@@ -334,7 +335,7 @@ function EntityCard({
     e.stopPropagation();
     const action = entity.revealed ? unreveal : reveal;
     const willReveal = !entity.revealed;
-    const queryKey = ["/api/entities"];
+    const queryKey = getListEntitiesQueryKey();
     const previous = queryClient.getQueryData<CampaignEntity[]>(queryKey);
     queryClient.setQueryData<CampaignEntity[]>(queryKey, (old) =>
       (old ?? []).map((it) =>
@@ -442,7 +443,7 @@ function EntityDetail({
       { id: entity.id },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["/api/entities"] });
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
           refetch();
           onChanged();
           toast({ title: entity.revealed ? "Hidden from players" : "Revealed to players" });
@@ -457,7 +458,7 @@ function EntityDetail({
       { id: entity.id },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ["/api/entities"] });
+          queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
           onChanged();
           toast({ title: "Deleted" });
           onBack();
@@ -739,7 +740,7 @@ function EntityForm({ mode, initialKind, entity, onCancel, onSaved }: EntityForm
     }
 
     const onDone = () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/entities"] });
+      queryClient.invalidateQueries({ queryKey: getListEntitiesQueryKey() });
       toast({ title: mode === "create" ? "Created" : "Saved" });
       onSaved();
     };

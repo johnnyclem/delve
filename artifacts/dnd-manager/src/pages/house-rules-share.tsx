@@ -2,22 +2,8 @@ import { useEffect, useState } from "react";
 import { useRoute } from "wouter";
 import { Printer, Scroll } from "@/components/ui/pixel-icons";
 import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import { useGetPublicHouseRules, type PublicHouseRulesView } from "@workspace/api-client-react";
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function renderMd(md: string): string {
-  return escapeHtml(md)
-    .replace(/^### (.+)$/gm, '<h3 class="hr-h3">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="hr-h2">$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
-}
 
 export default function HouseRulesSharePage() {
   const [, params] = useRoute("/share/house-rules/:token");
@@ -114,9 +100,9 @@ export default function HouseRulesSharePage() {
           {view?.rules.map((rule) => (
             <section key={rule.id} className="rule" data-testid={`share-rule-${rule.id}`}>
               <h2 className="text-xl font-semibold tracking-tight mb-2">{rule.title}</h2>
-              <div
+              <SafeMarkdown
+                content={rule.bodyMd}
                 className="text-zinc-800"
-                dangerouslySetInnerHTML={{ __html: renderMd(rule.bodyMd) }}
               />
             </section>
           ))}

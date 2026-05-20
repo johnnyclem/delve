@@ -11,11 +11,11 @@ import {
   Tent,
   Home,
   Mountain,
-} from "@/components/ui/pixel-icons";
-import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+} from "@workspace/ui";
+import { PixelD20Loader } from "@workspace/ui";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 import {
   useGetMap,
   useUpdateMap,

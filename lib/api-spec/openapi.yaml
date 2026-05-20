@@ -417,6 +417,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/CampaignMember"
 
+  /members/join:
+    post:
+      operationId: joinCampaign
+      tags: [members]
+      summary: Join a campaign using an invite code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinCampaignBody"
+      responses:
+        "201":
+          description: Successfully joined the campaign
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignMember"
+        "400":
+          description: Missing invite code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Invalid or expired invite code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /characters:
     get:
       operationId: listCharacters
@@ -3379,6 +3410,14 @@ components:
         timezone:
           type: ["string", "null"]
           description: IANA timezone identifier (e.g. "America/Los_Angeles"). Pass null to clear and fall back to the campaign timezone.
+
+    JoinCampaignBody:
+      type: object
+      properties:
+        inviteCode:
+          type: string
+      required:
+        - inviteCode
 
     MapTile:
       type: object

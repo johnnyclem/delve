@@ -17,9 +17,9 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Users, UserPlus, X, Star, Plus, GripVertical } from "@/components/ui/pixel-icons";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Users, UserPlus, X, Star, Plus, GripVertical } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Button } from "@workspace/ui";
 import {
   useListCharacters,
   useListNpcs,
@@ -32,7 +32,7 @@ import type {
   SessionAttendees,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@workspace/ui";
 
 const EMPTY_ATTENDEES: SessionAttendees = { characterIds: [], npcs: [] };
 

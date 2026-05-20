@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Scroll, Plus, Pencil, Trash2, EyeOff, Share2, Copy, ExternalLink, RefreshCw, Printer } from "@/components/ui/pixel-icons";
-import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
+import { Scroll, Plus, Pencil, Trash2, EyeOff, Share2, Copy, ExternalLink, RefreshCw, Printer } from "@workspace/ui";
+import { PixelD20Loader } from "@workspace/ui";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
 import {
   useListHomebrewRules,
   useCreateHomebrewRule,
@@ -13,30 +14,14 @@ import {
   useGetMyMembership,
   useGetHouseRulesShareToken,
   useCreateHouseRulesShareToken,
+  getListHomebrewRulesQueryKey,
+  getGetHouseRulesShareTokenQueryKey,
   type HomebrewRule,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@workspace/ui";
 
-const RULES_KEY = ["/api/homebrew"] as const;
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function renderMd(md: string): string {
-  return escapeHtml(md)
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
-}
 
 interface RuleEditorProps {
   initial: { title: string; bodyMd: string };
@@ -110,9 +95,8 @@ export default function HomebrewPanel() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showShare, setShowShare] = useState(false);
 
-  const SHARE_KEY = ["/api/homebrew/share-token"] as const;
   const { data: shareData, isLoading: shareLoading } = useGetHouseRulesShareToken({
-    query: { enabled: isDm && showShare, queryKey: SHARE_KEY },
+    query: { enabled: isDm && showShare, queryKey: getGetHouseRulesShareTokenQueryKey() },
   });
   const createShareMut = useCreateHouseRulesShareToken();
   const shareToken = (shareData as { token: string | null } | undefined)?.token ?? null;
@@ -125,7 +109,7 @@ export default function HomebrewPanel() {
       { data: { rotate } },
       {
         onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: SHARE_KEY });
+          queryClient.invalidateQueries({ queryKey: getGetHouseRulesShareTokenQueryKey() });
           if (rotate) toast({ title: "Share link rotated" });
         },
         onError: (err) => toast({ title: "Failed to update share link", description: (err as Error).message, variant: "destructive" }),
@@ -143,7 +127,7 @@ export default function HomebrewPanel() {
     }
   };
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: RULES_KEY });
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListHomebrewRulesQueryKey() });
 
   const handleCreate = (vals: { title: string; bodyMd: string }) => {
     createMut.mutate(
@@ -388,11 +372,7 @@ export default function HomebrewPanel() {
                       </div>
                     )}
                   </div>
-                  <div
-                    className="prose prose-sm prose-invert max-w-none text-foreground/90 mt-2"
-                    data-testid="text-rule-body"
-                    dangerouslySetInnerHTML={{ __html: renderMd(rule.bodyMd) }}
-                  />
+                  <SafeMarkdown content={rule.bodyMd} className="prose prose-sm prose-invert max-w-none text-foreground/90 mt-2" testId="text-rule-body" />
                 </>
               )}
             </motion.div>

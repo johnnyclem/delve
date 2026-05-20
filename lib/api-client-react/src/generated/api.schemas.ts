@@ -939,6 +939,10 @@ export interface UpdateNotificationPrefsBody {
   timezone?: string | null;
 }
 
+export interface JoinCampaignBody {
+  inviteCode: string;
+}
+
 export interface MapTile {
   index: number;
   /**

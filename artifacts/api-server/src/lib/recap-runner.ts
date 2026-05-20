@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, sessionLogsTable, recapViewsTable, charactersTable, type SessionAttendees } from "@workspace/db";
 import { logger } from "./logger";
 import {
@@ -88,6 +88,15 @@ async function doGenerateRecap(sessionId: number, campaignId: number): Promise<s
     throw new Error("No raw notes to generate recap from");
   }
 
+  // Multi-instance concurrency guard: try to acquire a PG advisory lock.
+  // If another process is already generating a recap for this session,
+  // pg_try_advisory_lock returns false and we skip.
+  const [lockResult] = await db.execute<{ pg_try_advisory_lock: boolean }>(
+    sql`SELECT pg_try_advisory_lock(${sessionId})`,
+  );
+  const gotLock = lockResult?.pg_try_advisory_lock ?? false;
+  if (!gotLock) throw new Error("Recap generation already in progress for this session");
+
   // Stamp 'running' BEFORE the AI import so any pre-run failure (e.g. AI
   // service unavailable) gets the error update path below — never leaves the
   // row stuck in 'pending'.
@@ -117,7 +126,7 @@ async function doGenerateRecap(sessionId: number, campaignId: number): Promise<s
     const recap = completion.choices[0]?.message?.content ?? "";
     const notesHash = hashNotes(notes);
 
-    await db
+    const [updated] = await db
       .update(sessionLogsTable)
       .set({
         recapMd: recap,
@@ -126,12 +135,24 @@ async function doGenerateRecap(sessionId: number, campaignId: number): Promise<s
         recapStatus: "idle",
         recapError: null,
         recapNotesHash: notesHash,
+        version: sql`${sessionLogsTable.version} + 1`,
       })
-      .where(and(eq(sessionLogsTable.id, sessionId), eq(sessionLogsTable.campaignId, campaignId)));
+      .where(and(
+        eq(sessionLogsTable.id, sessionId),
+        eq(sessionLogsTable.campaignId, campaignId),
+        eq(sessionLogsTable.version, session.version),
+      ))
+      .returning();
+
+    if (!updated) {
+      throw new Error("Session was modified by another process; recap generation aborted");
+    }
 
     await db
       .delete(recapViewsTable)
       .where(eq(recapViewsTable.sessionLogId, sessionId));
+
+    await db.execute(sql`SELECT pg_advisory_unlock(${sessionId})`);
 
     return recap;
   } catch (err) {
@@ -144,6 +165,7 @@ async function doGenerateRecap(sessionId: number, campaignId: number): Promise<s
     } catch (dbErr) {
       logger.error({ err: dbErr, sessionId }, "Failed to record recap error status");
     }
+    await db.execute(sql`SELECT pg_advisory_unlock(${sessionId})`).catch(() => {});
     throw err;
   }
 }

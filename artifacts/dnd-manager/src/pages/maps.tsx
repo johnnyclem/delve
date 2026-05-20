@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { Tent, Home, Mountain, Map as MapIcon, Trash2, Plus, ChevronLeft } from "@/components/ui/pixel-icons";
-import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { Tent, Home, Mountain, Map as MapIcon, Trash2, Plus, ChevronLeft } from "@workspace/ui";
+import { PixelD20Loader } from "@workspace/ui";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 import {
   useListMaps,
   useCreateMap,
@@ -62,7 +62,6 @@ export default function MapsPage() {
       {
         onSuccess: (m) => {
           queryClient.invalidateQueries({ queryKey: getListMapsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: ["/api/maps"] });
           toast({ title: "Map created" });
           setShowCreate(false);
           setName("");
@@ -81,7 +80,6 @@ export default function MapsPage() {
       {
         onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: getListMapsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: ["/api/maps"] });
           toast({ title: "Map deleted" });
         },
         onError: () => toast({ title: "Delete failed", variant: "destructive" }),

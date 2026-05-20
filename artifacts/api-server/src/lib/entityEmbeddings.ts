@@ -3,6 +3,7 @@
 // embedding, and DB write logic lives in the shared library so the operator
 // backfill script (`scripts/src/backfill-entity-embeddings.ts`) and the live
 // API path can never drift.
+import { db, failedEmbeddingsTable } from "@workspace/db";
 import {
   syncEntityChunks as sharedSyncEntityChunks,
   embedQuery as sharedEmbedQuery,
@@ -14,12 +15,31 @@ import { logger } from "./logger";
 
 export const ENTITY_TEXT_FIELDS = SHARED_ENTITY_TEXT_FIELDS;
 
+export let embeddingFailureCount = 0;
+
+function recordFailure(err: Error, entityId: number, campaignId: number): void {
+  embeddingFailureCount++;
+  logger.error({ err, entityId, campaignId }, "[entity-embeddings] sync failed");
+  db.insert(failedEmbeddingsTable)
+    .values({
+      entityId,
+      campaignId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    .catch((dbErr) => {
+      logger.error({ err: dbErr, entityId, campaignId }, "[entity-embeddings] failed to record dead-letter entry");
+    });
+}
+
 export function syncEntityChunks(
   entityId: number,
   campaignId: number,
   fields: EntityFieldUpdate[],
 ): Promise<void> {
-  return sharedSyncEntityChunks(entityId, campaignId, fields, { logger });
+  return sharedSyncEntityChunks(entityId, campaignId, fields, {
+    logger,
+    onFailure: recordFailure,
+  });
 }
 
 export function embedQuery(query: string): Promise<number[] | null> {

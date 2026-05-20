@@ -3,19 +3,19 @@ import {
   ArrowLeft, ArrowRight, Sparkles, Plus, X, Dices, Wand2, RotateCcw, Lock,
   ChevronDown, ChevronRight, Heart, Shield, Zap, Award, Flame,
   Axe, Music, Cross, Leaf, Sword, Hand, ShieldCheck, Target, VenetianMask, Eye,
-} from "@/components/ui/pixel-icons";
+} from "@workspace/ui";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Label } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@workspace/ui";
 import {
   useCreateCharacter,
   getListCharactersQueryKey,
@@ -23,7 +23,7 @@ import {
 } from "@workspace/api-client-react";
 import type { CreateCharacterBody, CharacterSheet } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@workspace/ui";
 import {
   DND_RACES,
   DND_CLASSES,

@@ -18,12 +18,12 @@ import {
   Check,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
+import { Label } from "@workspace/ui";
+import { Skeleton } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useListNpcs,

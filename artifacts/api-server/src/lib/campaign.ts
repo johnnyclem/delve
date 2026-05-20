@@ -4,18 +4,13 @@ import { eq, and } from "drizzle-orm";
 import { seedCampaignWorldFromSrd } from "./seedWorld";
 import { logger } from "./logger";
 
-let cachedCampaignId: number | null = null;
-
 function generateInviteCode(): string {
   return crypto.randomBytes(4).toString("hex").toUpperCase();
 }
 
 export async function getOrCreateCampaign(): Promise<number> {
-  if (cachedCampaignId) return cachedCampaignId;
-
   const [existing] = await db.select().from(campaignsTable).limit(1);
   if (existing) {
-    cachedCampaignId = existing.id;
     return existing.id;
   }
 
@@ -23,8 +18,6 @@ export async function getOrCreateCampaign(): Promise<number> {
     .insert(campaignsTable)
     .values({ name: "The Campaign", dmUserId: "pending", inviteCode: generateInviteCode() })
     .returning();
-
-  cachedCampaignId = created.id;
 
   // Seed brand-new campaigns with curated SRD starter content so DMs aren't
   // staring at an empty World panel. Failures here must not break campaign

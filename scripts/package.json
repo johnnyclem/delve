@@ -14,6 +14,7 @@
     "mm:ingest": "tsx ./src/monster-manual/ingest.ts",
     "mm:dry-run": "MM_DRY_RUN=1 tsx ./src/monster-manual/ingest.ts",
     "backfill:entity-embeddings": "tsx ./src/backfill-entity-embeddings.ts",
+    "retry:failed-embeddings": "tsx ./src/retry-failed-embeddings.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

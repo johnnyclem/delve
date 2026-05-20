@@ -29,6 +29,16 @@ If the DM notes are too sparse to support a meaningful narrative (e.g., a single
 
 export type RecapAttendee = { kind: "pc" | "npc"; name: string };
 
+const MAX_NOTES_SIZE = 50 * 1024;
+
+export function sanitizeNotes(rawNotesMd: string): string {
+  let cleaned = rawNotesMd.replace(/<[^>]*>/g, "");
+  if (cleaned.length > MAX_NOTES_SIZE) {
+    cleaned = cleaned.slice(0, MAX_NOTES_SIZE) + "\n\n[Notes truncated at 50KB]";
+  }
+  return cleaned;
+}
+
 export function buildRecapUserPrompt(
   sessionNumber: number,
   title: string,
@@ -46,5 +56,5 @@ export function buildRecapUserPrompt(
       attendeesBlock = `\n\nAttendees (these names ARE part of the source of truth — you may name them in the recap, but do not invent additional NPCs or PCs):\n${lines.join("\n")}`;
     }
   }
-  return `Session ${sessionNumber}: "${title}"${attendeesBlock}\n\nDM Notes (the only source of truth — do not invent anything beyond these and the attendees above):\n${rawNotesMd}`;
+  return `Session ${sessionNumber}: "${title}"${attendeesBlock}\n\nDM Notes (the only source of truth — do not invent anything beyond these and the attendees above):\n${sanitizeNotes(rawNotesMd)}`;
 }

@@ -4,6 +4,7 @@ import { MessageSquare, Send, BookOpen, Sparkles, Lock, Scroll, Plus, Trash2, Hi
 import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import {
   useGetMyMembership,
   useListChatThreads,
@@ -25,28 +26,6 @@ interface ChatTurn {
   edition: "2014" | "2024" | null;
   error: string | null;
   loading: boolean;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function renderAnswer(md: string): string {
-  const escaped = escapeHtml(md);
-  return escaped
-    .replace(/\[([CRHM]\d+)\]/g, '<span class="inline-flex items-center rounded bg-primary/20 text-primary px-1 py-0 text-[10px] font-mono align-middle">$1</span>')
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
 }
 
 function CitationBadge({ citation, index, isDm }: { citation: ChatCitation; index: number; isDm: boolean }) {
@@ -591,15 +570,10 @@ export default function ChatPanel({ initialConversationId }: { initialConversati
                     </div>
                   )}
                   {turn.answer && (
-                    <div
-                      className="prose prose-sm prose-invert max-w-none text-foreground/90"
-                      dangerouslySetInnerHTML={{
-                        __html:
-                          renderAnswer(turn.answer) +
-                          (turn.loading
-                            ? '<span class="inline-block w-2 h-4 ml-0.5 align-middle bg-primary/70 animate-pulse" data-testid="chat-cursor"></span>'
-                            : ""),
-                      }}
+                    <SafeMarkdown
+                      content={turn.answer}
+                      loading={turn.loading}
+                      cursor={turn.loading}
                     />
                   )}
                   {turn.error && (

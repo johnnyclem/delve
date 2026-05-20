@@ -578,6 +578,13 @@ export const UpdateNotificationPrefsResponse = zod.object({
 });
 
 /**
+ * @summary Join a campaign using an invite code
+ */
+export const JoinCampaignBody = zod.object({
+  inviteCode: zod.string(),
+});
+
+/**
  * @summary List all active characters in the campaign
  */
 export const listCharactersResponseRelationshipTagsDefault = [];

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw, Anchor } from "@/components/ui/pixel-icons";
+import { Calendar as CalendarIcon, Plus, ArrowLeft, Check, X, HelpCircle, Trash2, Repeat, AlertTriangle, Mail, MailX, MailQuestion, Clock, RefreshCw, Anchor } from "@workspace/ui";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Calendar } from "@workspace/ui";
 import {
   useListEvents, useGetEvent, useCreateEvent, useUpsertRsvp, useDeleteEvent,
   useGetEventInviteLogs, useResendEventInvites, useResendEventInvite,
@@ -13,10 +13,10 @@ import {
 } from "@workspace/api-client-react";
 import { useGetMyMembership, useListMembers, useGetCampaign } from "@workspace/api-client-react";
 import type { CalendarEvent, CalendarEventWithRsvps, CampaignMember, RsvpWithMember, EventInviteLog, Campaign } from "@workspace/api-client-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AnimatedBorder } from "@/components/ui/animated-border";
+import { Skeleton } from "@workspace/ui";
+import { AnimatedBorder } from "@workspace/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@workspace/ui";
 
 type Recurrence = "none" | "weekly" | "biweekly" | "monthly";
 

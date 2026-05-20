@@ -129,6 +129,11 @@ export interface SyncOptions {
    * so they are caught and reported instead of thrown.
    */
   logger?: { error: (...args: unknown[]) => void };
+  /**
+   * Optional callback invoked on embedding failure with the error, entity ID,
+   * and campaign ID. Use for metric counters or dead-letter queues.
+   */
+  onFailure?: (err: Error, entityId: number, campaignId: number) => void;
 }
 
 /**
@@ -195,6 +200,7 @@ export async function syncEntityChunks(
     await insertChunks(entityId, campaignId, fresh, embeddings);
   } catch (err) {
     log.error({ err, entityId, campaignId }, "[entity-embeddings] sync failed");
+    options.onFailure?.(err instanceof Error ? err : new Error(String(err)), entityId, campaignId);
   }
 }
 

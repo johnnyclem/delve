@@ -53,6 +53,7 @@ import type {
   HealthStatus,
   HomebrewRule,
   HouseRulesShareToken,
+  JoinCampaignBody,
   ListBestiaryParams,
   ListEntitiesParams,
   Map,
@@ -1300,6 +1301,92 @@ export const useUpdateNotificationPrefs = <
   TContext
 > => {
   return useMutation(getUpdateNotificationPrefsMutationOptions(options));
+};
+
+/**
+ * @summary Join a campaign using an invite code
+ */
+export const getJoinCampaignUrl = () => {
+  return `/api/members/join`;
+};
+
+export const joinCampaign = async (
+  joinCampaignBody: JoinCampaignBody,
+  options?: RequestInit,
+): Promise<CampaignMember> => {
+  return customFetch<CampaignMember>(getJoinCampaignUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(joinCampaignBody),
+  });
+};
+
+export const getJoinCampaignMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof joinCampaign>>,
+    TError,
+    { data: BodyType<JoinCampaignBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof joinCampaign>>,
+  TError,
+  { data: BodyType<JoinCampaignBody> },
+  TContext
+> => {
+  const mutationKey = ["joinCampaign"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof joinCampaign>>,
+    { data: BodyType<JoinCampaignBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return joinCampaign(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type JoinCampaignMutationResult = NonNullable<
+  Awaited<ReturnType<typeof joinCampaign>>
+>;
+export type JoinCampaignMutationBody = BodyType<JoinCampaignBody>;
+export type JoinCampaignMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Join a campaign using an invite code
+ */
+export const useJoinCampaign = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof joinCampaign>>,
+    TError,
+    { data: BodyType<JoinCampaignBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof joinCampaign>>,
+  TError,
+  { data: BodyType<JoinCampaignBody> },
+  TContext
+> => {
+  return useMutation(getJoinCampaignMutationOptions(options));
 };
 
 /**

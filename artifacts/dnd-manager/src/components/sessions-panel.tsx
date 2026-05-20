@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning, Loader2 } from "@/components/ui/pixel-icons";
-import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
+import { ScrollText, Plus, Sparkles, ArrowLeft, ChevronRight, Pencil, Save, AlertTriangle, Check, X, Calendar, Clock, CheckCircle2, Bell, BellRing, ShieldAlert, Send, ChevronDown, ChevronUp, FileText, Mail, MailX, MailWarning, Loader2 } from "@workspace/ui";
+import { PixelD20Loader } from "@workspace/ui";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import { motion } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
 import {
   useListSessions, useGetSession, useCreateSession, useUpdateSession, useGenerateRecap,
   useMarkRecapViewed, useNotifyRecap,
@@ -22,11 +23,11 @@ import { SessionAttendeesPicker, SessionAttendeesStrip, emptyAttendees } from "@
 import type { SessionAttendees } from "@workspace/api-client-react";
 import { useGetMyMembership } from "@workspace/api-client-react";
 import type { SessionLog, CampaignMember, NotificationLog } from "@workspace/api-client-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AnimatedBorder } from "@/components/ui/animated-border";
+import { Skeleton } from "@workspace/ui";
+import { AnimatedBorder } from "@workspace/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
-import { ToastAction } from "@/components/ui/toast";
+import { useToast } from "@workspace/ui";
+import { ToastAction } from "@workspace/ui";
 
 export default function SessionsPanel() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -1082,7 +1083,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
               AI recap — based only on your DM notes. Skim before sharing.
             </p>
           )}
-          <div className="prose prose-sm prose-invert max-w-none text-foreground/90" dangerouslySetInnerHTML={{ __html: markdownToHtml(s.recapMd) }} />
+          <SafeMarkdown content={s.recapMd} />
         </div>
       ) : !isDm ? (
         <div className="rounded-2xl border border-dashed border-[rgba(255,255,255,0.08)] p-6 text-center" data-testid="section-recap-pending">
@@ -1241,7 +1242,7 @@ function SessionDetail({ id, onBack }: { id: number; onBack: () => void }) {
               </div>
             </div>
           ) : s.rawNotesMd ? (
-            <div className="prose prose-sm prose-invert max-w-none text-foreground/90" data-testid="text-session-notes" dangerouslySetInnerHTML={{ __html: markdownToHtml(s.rawNotesMd) }} />
+            <SafeMarkdown content={s.rawNotesMd} testId="text-session-notes" />
           ) : (
             <p className="text-sm text-muted-foreground italic" data-testid="text-session-notes">No notes yet. Click Edit to add session notes.</p>
           )}
@@ -1461,27 +1462,6 @@ function NotificationStatus({ sessionId }: { sessionId: number }) {
       </div>
     </div>
   );
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function markdownToHtml(md: string): string {
-  const escaped = escapeHtml(md);
-  return escaped
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
 }
 
 function RecapStatusBadge({

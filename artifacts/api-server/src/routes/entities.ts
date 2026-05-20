@@ -11,11 +11,15 @@ import {
 import { eq, and, asc, desc } from "drizzle-orm";
 import { z } from "zod";
 import { requireAuth, requireCampaignMember, getUserId } from "../middlewares/requireAuth";
+import { userRateLimit } from "../middlewares/userRateLimit";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { syncEntityChunks } from "../lib/entityEmbeddings";
 import { seedCampaignWorldFromSrd } from "../lib/seedWorld";
 
 const router: IRouter = Router();
+
+const entitiesRateLimit = userRateLimit(120, 60 * 1000);
+router.use(entitiesRateLimit);
 
 // ---------- Per-kind data validators ----------
 

@@ -33,7 +33,7 @@ export interface RsvpTokenPayload {
 
 export function generateRsvpToken(p: RsvpTokenPayload): string {
   const payload = base64UrlEncode(
-    Buffer.from(JSON.stringify({ c: p.campaignId, u: p.userId, e: p.eventId })),
+    Buffer.from(JSON.stringify({ c: p.campaignId, u: p.userId, e: p.eventId, p: "rsvp" })),
   );
   const sig = sign(payload);
   return `${payload}.${sig}`;
@@ -62,11 +62,13 @@ export function verifyRsvpToken(token: string): RsvpTokenPayload | null {
       c?: unknown;
       u?: unknown;
       e?: unknown;
+      p?: unknown;
     };
     if (
       typeof decoded.c !== "number" ||
       typeof decoded.u !== "string" ||
-      typeof decoded.e !== "number"
+      typeof decoded.e !== "number" ||
+      decoded.p !== "rsvp"
     ) {
       return null;
     }

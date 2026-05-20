@@ -1,13 +1,13 @@
 import { useState, useRef } from "react";
-import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check, ChevronDown, History, Sparkles, Dice5, Plus } from "@/components/ui/pixel-icons";
+import { Edit, Heart, Shield, Zap, ArrowLeft, Download, Printer, Pencil, Upload, User as UserIcon, Link as LinkIcon, TrendingUp, Trash2, X, Check, ChevronDown, History, Sparkles, Dice5, Plus } from "@workspace/ui";
 import LevelUpModal from "@/components/level-up-modal";
-import { Button } from "@/components/ui/button";
+import { Button } from "@workspace/ui";
 import { useGetCharacter, useUpdateCharacter, getListCharactersQueryKey, getGetCharacterQueryKey, useGetMyMembership, useGetCampaign } from "@workspace/api-client-react";
 import type { Character, CharacterSheet } from "@workspace/api-client-react";
 import { useUser } from "@clerk/react";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Skeleton } from "@workspace/ui";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@workspace/ui";
+import { Popover, PopoverTrigger, PopoverContent } from "@workspace/ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,21 +17,21 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+} from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Label } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+} from "@workspace/ui";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@workspace/ui";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
-import { AnimatedBorder } from "@/components/ui/animated-border";
+import { useToast } from "@workspace/ui";
+import { AnimatedBorder } from "@workspace/ui";
 import {
   DND_RACES,
   DND_CLASSES,

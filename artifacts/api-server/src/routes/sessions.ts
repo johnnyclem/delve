@@ -4,6 +4,7 @@ import { toFile } from "openai";
 import { db, sessionLogsTable, recapViewsTable, notificationLogsTable, charactersTable, npcsTable, type SessionAttendees } from "@workspace/db";
 import { eq, desc, and, isNotNull, inArray, sql } from "drizzle-orm";
 import { requireAuth, requireCampaignMember, getUserId, getCampaignMember } from "../middlewares/requireAuth";
+import { userRateLimit } from "../middlewares/userRateLimit";
 import { getOrCreateCampaign, isDm } from "../lib/campaign";
 import { CreateSessionBody, UpdateSessionBody } from "@workspace/api-zod";
 import { sendRecapNotifications, buildRecipientContext, sendRecapEmailToRecipient } from "../lib/email";
@@ -12,6 +13,8 @@ import { RECAP_MODEL } from "../lib/recap-prompt";
 import { runRecapNow, scheduleRecap, shouldScheduleRecap, cancelScheduledRecap } from "../lib/recap-runner";
 
 const router: IRouter = Router();
+
+const recapRateLimit = userRateLimit(5, 60 * 1000);
 
 const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 const ALLOWED_AUDIO_TYPES = new Set([
@@ -384,7 +387,7 @@ router.patch("/sessions/:id", requireAuth, requireCampaignMember, async (req, re
   res.json(updated);
 });
 
-router.post("/sessions/:id/generate-recap", requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
+router.post("/sessions/:id/generate-recap", recapRateLimit, requireAuth, requireCampaignMember, async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const campaignId = await getOrCreateCampaign();
 

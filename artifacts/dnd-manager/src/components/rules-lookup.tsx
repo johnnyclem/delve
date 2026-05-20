@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Search } from "@/components/ui/pixel-icons";
 import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
+import { SafeMarkdown, SanitizedHtml } from "@/components/safe-markdown";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -57,31 +58,15 @@ function useDebounced<T>(value: T, delay: number): T {
   return debounced;
 }
 
-function escapeHtml(s: string): string {
-  return s
+function renderSnippet(snippet: string): string {
+  return snippet
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function renderSnippet(snippet: string): string {
-  return escapeHtml(snippet)
+    .replace(/'/g, "&#039;")
     .replace(/«/g, '<mark class="bg-primary/30 text-foreground rounded px-0.5">')
     .replace(/»/g, "</mark>");
-}
-
-function markdownToHtml(md: string): string {
-  const escaped = escapeHtml(md);
-  return escaped
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
 }
 
 export default function RulesLookupPanel() {
@@ -240,10 +225,7 @@ export default function RulesLookupPanel() {
                             {hit.entityKind}
                           </span>
                         </div>
-                        <p
-                          className="text-sm text-muted-foreground mt-1 line-clamp-2"
-                          dangerouslySetInnerHTML={{ __html: renderSnippet(hit.snippet) }}
-                        />
+                        <SanitizedHtml html={renderSnippet(hit.snippet)} className="text-sm text-muted-foreground mt-1 line-clamp-2" />
                       </button>
                       {isExpanded && (
                         <div className="border-t border-[rgba(255,255,255,0.06)] p-4 bg-[rgba(255,255,255,0.02)]">
@@ -257,7 +239,7 @@ export default function RulesLookupPanel() {
                               {expandedEntity.chunks.map((c) => (
                                 <div key={c.id}>
                                   {c.section && <p className="text-xs uppercase tracking-wide text-muted-foreground">{c.section}</p>}
-                                  <div dangerouslySetInnerHTML={{ __html: markdownToHtml(c.bodyMd) }} />
+                                  <SafeMarkdown content={c.bodyMd} />
                                 </div>
                               ))}
                               {expandedEntity.sourceUrl && (

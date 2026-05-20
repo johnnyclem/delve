@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Dice5, Sparkles, ArrowRight, Check, AlertTriangle } from "@/components/ui/pixel-icons";
+import { Dice5, Sparkles, ArrowRight, Check, AlertTriangle } from "@workspace/ui";
 import {
   Dialog,
   DialogContent,
@@ -8,20 +8,20 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+} from "@workspace/ui";
+import { Button } from "@workspace/ui";
+import { Input } from "@workspace/ui";
+import { Label } from "@workspace/ui";
+import { Textarea } from "@workspace/ui";
+import { RadioGroup, RadioGroupItem } from "@workspace/ui";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+} from "@workspace/ui";
+import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui";
 import {
   Command,
   CommandEmpty,
@@ -29,10 +29,10 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
-import { Check as CheckIcon, ChevronsUpDown } from "@/components/ui/pixel-icons";
-import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+} from "@workspace/ui";
+import { Check as CheckIcon, ChevronsUpDown } from "@workspace/ui";
+import { cn } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useUpdateCharacter,

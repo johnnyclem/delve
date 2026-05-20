@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Cropper, { type Area } from "react-easy-crop";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@workspace/ui";
+import { Button } from "@workspace/ui";
+import { Slider } from "@workspace/ui";
+import { Label } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 
 interface PortraitCropperDialogProps {
   open: boolean;

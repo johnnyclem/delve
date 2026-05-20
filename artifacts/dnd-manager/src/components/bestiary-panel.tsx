@@ -3,6 +3,7 @@ import { Skull, Search, Loader2, ChevronLeft, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { SafeMarkdown } from "@/components/safe-markdown";
 import {
   useGetCampaign,
   useListBestiary,
@@ -94,29 +95,6 @@ function useDebounced<T>(value: T, delay: number): T {
     return () => clearTimeout(t);
   }, [value, delay]);
   return debounced;
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-// Mirrors the markdown rendering used in rules-lookup so stat blocks
-// render identically in both panels.
-function markdownToHtml(md: string): string {
-  const escaped = escapeHtml(md);
-  return escaped
-    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-semibold mt-4 mb-2">$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3 class="text-base font-semibold mt-3 mb-1">$1</h3>')
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/^- (.+)$/gm, '<li class="ml-4 list-disc">$1</li>')
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/^(?!<)(.+)$/gm, "<p>$1</p>");
 }
 
 function formatCr(cr: number | null | undefined): string {
@@ -248,7 +226,7 @@ export default function BestiaryPanel() {
                       {c.section}
                     </p>
                   )}
-                  <div dangerouslySetInnerHTML={{ __html: markdownToHtml(c.bodyMd) }} />
+                  <SafeMarkdown content={c.bodyMd} />
                 </div>
               ))}
               {detail.sourceUrl && (

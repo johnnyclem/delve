@@ -15,3 +15,4 @@ export * from "./campaign_entities";
 export * from "./campaign_entity_chunks";
 export * from "./homebrew_rules";
 export * from "./chat_threads";
+export * from "./failed_embeddings";

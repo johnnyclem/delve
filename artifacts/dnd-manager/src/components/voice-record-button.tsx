@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Mic, Square, Pause, Play, X } from "@/components/ui/pixel-icons";
-import { PixelD20Loader } from "@/components/ui/pixel-d20-loader";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/hooks/use-toast";
+import { Mic, Square, Pause, Play, X } from "@workspace/ui";
+import { PixelD20Loader } from "@workspace/ui";
+import { Button } from "@workspace/ui";
+import { useToast } from "@workspace/ui";
 import { useAudioRecorder, formatElapsed, type RecordedChunk } from "@/hooks/use-audio-recorder";
 
 interface Props {

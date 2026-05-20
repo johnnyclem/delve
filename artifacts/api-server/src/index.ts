@@ -1,7 +1,11 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { runPreflightChecks } from "./lib/preflight";
 import { startInviteRetryScheduler } from "./lib/email";
+import { startEmbeddingRetryScheduler } from "./lib/embeddingRetry";
 import { runSchemaHealthCheck } from "./lib/schemaHealthCheck";
+
+runPreflightChecks();
 
 const rawPort = process.env["PORT"];
 
@@ -32,6 +36,7 @@ async function bootstrap() {
 
     logger.info({ port }, "Server listening");
     startInviteRetryScheduler();
+    startEmbeddingRetryScheduler();
   });
 }
 

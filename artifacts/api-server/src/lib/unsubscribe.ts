@@ -37,7 +37,7 @@ export function generateUnsubscribeToken(
   userId: string,
 ): string {
   const payload = base64UrlEncode(
-    Buffer.from(JSON.stringify({ c: campaignId, u: userId })),
+    Buffer.from(JSON.stringify({ c: campaignId, u: userId, p: "unsub" })),
   );
   const sig = sign(payload);
   return `${payload}.${sig}`;
@@ -67,8 +67,9 @@ export function verifyUnsubscribeToken(
     const decoded = JSON.parse(base64UrlDecode(payload).toString("utf8")) as {
       c?: unknown;
       u?: unknown;
+      p?: unknown;
     };
-    if (typeof decoded.c !== "number" || typeof decoded.u !== "string") {
+    if (typeof decoded.c !== "number" || typeof decoded.u !== "string" || decoded.p !== "unsub") {
       return null;
     }
     return { campaignId: decoded.c, userId: decoded.u };
